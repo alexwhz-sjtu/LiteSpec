@@ -19,8 +19,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from specforge.modeling.draft.dlite import DLiteDraftModel
-from specforge.modeling.draft.dlite import sample
+from litespec.modeling.draft.dlite import DLiteDraftModel
+from litespec.modeling.draft.dlite import sample
 
 from evaluation import distributed as dist
 from evaluation.model_loading import load_dlite_benchmark_models

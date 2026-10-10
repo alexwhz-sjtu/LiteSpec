@@ -6,8 +6,8 @@ import sglang.srt.distributed.parallel_state as parallel_state
 import torch
 import torch.distributed as dist
 
-from specforge.distributed import destroy_distributed, init_disaggregated
-from specforge.modeling.target.sglang_backend.patch import (
+from litespec.distributed import destroy_distributed, init_disaggregated
+from litespec.modeling.target.sglang_backend.patch import (
     init_distributed_environment,
     initialize_model_parallel,
 )

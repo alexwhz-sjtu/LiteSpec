@@ -1,7 +1,7 @@
 # Stochastic Verification in DLite
 
 Technical reference for `match` vs `rejection` verification modes in `spec_generate`.
-Code: `specforge/modeling/draft/dlite.py`.
+Code: `litespec/modeling/draft/dlite.py`.
 
 ---
 

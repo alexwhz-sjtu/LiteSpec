@@ -14,20 +14,21 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.dlite import dlite_training
-from scripts.dlite.dlite_training import (
-    add_common_args,
-    project_cached_target_logits,
-    validate_common_args,
-)
-from specforge.core.dlite import gather_target_prefill_logits
-from specforge.data.hidden_cache import (
+from litespec.training import setup as training_data
+from litespec.training import setup as target_training
+from litespec.training.config import add_common_args
+from litespec.training.setup import project_cached_target_logits
+from litespec.training.config import validate_common_args
+from litespec.core.dlite import gather_target_prefill_logits
+from litespec.data.hidden_cache import (
     HiddenCacheError,
     RegenFullCollator,
     RegenFullDataset,
+    ShardAwareDistributedSampler,
     load_hidden_cache_manifest,
+    sample_metadata_has_valid_anchor,
 )
-from specforge.modeling.target.dlite_target_model import SGLangDLiteTargetModel
+from litespec.modeling.target.training_target_model import SGLangTrainingTargetModel
 
 PREPARE_PATH = ROOT / "scripts" / "data" / "prepare_hidden_states.py"
 SPEC = importlib.util.spec_from_file_location("prepare_hidden_states_v2", PREPARE_PATH)
@@ -66,7 +67,14 @@ def _write_cache(tmp_path, *, compress=False):
     payloads = [_payload(4, 5), _payload(8, 3, offset=10)]
     for ordinal, payload in enumerate(payloads):
         writer.add_sample(
-            payload["sample_index"], _serialized(payload), ordinal=ordinal
+            payload["sample_index"],
+            _serialized(payload),
+            ordinal=ordinal,
+            sample_metadata={
+                "sequence_length": int(payload["input_ids"].numel()),
+                "supervised_token_count": int(payload["loss_mask"].sum().item()),
+                "loss_mask_runs": [[0, int(payload["input_ids"].numel())]],
+            },
         )
     extension = ".tar.gz" if compress else ".tar"
     committed = writer.commit(
@@ -77,6 +85,7 @@ def _write_cache(tmp_path, *, compress=False):
     manifest = {
         "schema_version": 2,
         "save_mode": "regen_full",
+        "sample_index_version": 1,
         "complete": True,
         "target_model": "mock/model",
         "num_hidden_layers": 3,
@@ -91,6 +100,7 @@ def _write_cache(tmp_path, *, compress=False):
                 "path": str(committed.path.relative_to(root)),
                 "sample_count": 2,
                 "source_indices": [4, 8],
+                "sample_metadata": committed.metadata["sample_metadata"],
                 "success_start": 0,
                 "success_end": 1,
                 "sha256": checksum,
@@ -116,10 +126,25 @@ def test_sample_payload_saves_final_norm_once():
     assert set(payload["hidden_states"]) == {0}
     assert torch.equal(payload["final_hidden_state"], final[0])
     assert payload["schema_version"] == 2
+    assert prepare.sample_index_metadata(output, 0) == {
+        "sequence_length": 3,
+        "supervised_token_count": 3,
+        "loss_mask_runs": [[0, 3]],
+    }
+
+
+def test_sample_index_filter_is_exact_after_truncation():
+    metadata = {
+        "sequence_length": 12,
+        "supervised_token_count": 8,
+        "loss_mask_runs": [[0, 2], [6, 12]],
+    }
+    assert sample_metadata_has_valid_anchor(metadata, block_size=4, max_length=12)
+    assert not sample_metadata_has_valid_anchor(metadata, block_size=4, max_length=8)
 
 
 def test_sglang_final_only_capture_has_no_duplicate_aux_layer():
-    aux, final = SGLangDLiteTargetModel._split_aux_and_last_capture_ids(
+    aux, final = SGLangTrainingTargetModel._split_aux_and_last_capture_ids(
         [2], num_aux_layers=0, num_transformer_layers=3, has_last_hidden=True
     )
     assert aux == []
@@ -139,6 +164,14 @@ def test_regen_full_dataset_and_collator(compress, tmp_path):
     )
     dataset = RegenFullDataset(root, manifest, required_layer_ids={0, 2}, max_length=6)
 
+    def fail_if_sample_is_loaded(_):
+        raise AssertionError("eligibility filtering must not load sample tensors")
+
+    original_loader = dataset._load_payload
+    dataset._load_payload = fail_if_sample_is_loaded
+    assert dataset.eligible_indices(block_size=2) == [0]
+    dataset._load_payload = original_loader
+
     first, second = dataset[0], dataset[1]
     assert set(first["hidden_states"]) == {0, 2}
     assert (
@@ -147,7 +180,8 @@ def test_regen_full_dataset_and_collator(compress, tmp_path):
     batch = RegenFullCollator(pad_token_id=99)([first, second])
     assert batch["input_ids"].shape == (2, 5)
     assert batch["hidden_states"][0].shape == (2, 5, 4)
-    assert batch["final_hidden_state"].shape == (2, 5, 4)
+    assert batch["hidden_states"][2].shape == (2, 5, 4)
+    assert "final_hidden_state" not in batch
     assert batch["input_ids"][1, 3:].tolist() == [99, 99]
 
     dataset.close()
@@ -162,6 +196,92 @@ def test_regen_full_dataset_and_collator(compress, tmp_path):
         )
     )
     assert worker_batch["sample_index"].tolist() == [4, 8]
+
+
+def test_shard_aware_sampler_partitions_contiguous_shard_groups():
+    dataset = SimpleNamespace(shard_key=lambda index: f"shard-{index // 4}")
+    rank_zero = ShardAwareDistributedSampler(
+        dataset, list(range(12)), num_replicas=2, rank=0, shuffle=False
+    )
+    rank_one = ShardAwareDistributedSampler(
+        dataset, list(range(12)), num_replicas=2, rank=1, shuffle=False
+    )
+
+    first = list(rank_zero)
+    second = list(rank_one)
+    assert first == list(range(6))
+    assert second == list(range(6, 12))
+    assert sorted(first + second) == list(range(12))
+
+
+def test_offline_loader_uses_metadata_pin_memory_and_persistent_workers(monkeypatch):
+    captured = {}
+
+    class FakeDataset:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def eligible_indices(self, *, block_size):
+            captured["filtered_from_metadata"] = block_size
+            return [0, 1]
+
+        def shard_key(self, index):
+            return "shard"
+
+    class FakeLoader:
+        def __init__(self, dataset, **kwargs):
+            captured.update(kwargs)
+
+        def __len__(self):
+            return 1
+
+    monkeypatch.setattr(
+        training_data,
+        "load_text_model_config",
+        lambda *args, **kwargs: SimpleNamespace(num_hidden_layers=3, hidden_size=4),
+    )
+    monkeypatch.setattr(
+        training_data, "load_hidden_cache_manifest", lambda *a, **k: {}
+    )
+    monkeypatch.setattr(training_data, "RegenFullDataset", FakeDataset)
+    monkeypatch.setattr(training_data, "DataLoader", FakeLoader)
+    monkeypatch.setattr(training_data, "get_dp_group", lambda: None)
+    monkeypatch.setattr(training_data.dist, "is_initialized", lambda: False)
+    monkeypatch.setattr(training_data.dist, "get_world_size", lambda group=None: 1)
+    monkeypatch.setattr(training_data.dist, "get_rank", lambda group=None: 0)
+    args = SimpleNamespace(
+        target_model_path="mock/model",
+        trust_remote_code=False,
+        train_hidden_states_path="cache",
+        max_length=8,
+        block_size=2,
+        seed=7,
+        dataloader_num_workers=2,
+        batch_size=1,
+        pad_to_max_length=False,
+    )
+
+    training_data.build_hidden_cache_dataloader(
+        args, SimpleNamespace(pad_token_id=0), required_layer_ids={0, 2}
+    )
+
+    assert captured["filtered_from_metadata"] == 2
+    assert captured["pin_memory"] is True
+    assert captured["persistent_workers"] is True
+    assert captured["prefetch_factor"] == 2
+
+
+def test_hidden_state_copy_requests_non_blocking_cuda():
+    calls = []
+
+    class FakeTensor:
+        def cuda(self, *, non_blocking):
+            calls.append(non_blocking)
+            return self
+
+    value = FakeTensor()
+    assert training_data.hidden_states_to_cuda({0: value}) == {0: value}
+    assert calls == [True]
 
 
 def test_manifest_rejects_missing_required_layer_and_checksum(tmp_path):
@@ -252,13 +372,13 @@ def test_offline_resource_build_skips_target_transformer(monkeypatch):
         observed["standalone"] = standalone_components
         return "tokenizer", "components", 7
 
-    monkeypatch.setattr(dlite_training, "build_target_model", fail_if_called)
+    monkeypatch.setattr(target_training, "build_target_model", fail_if_called)
     monkeypatch.setattr(
-        dlite_training, "resolve_tokenizer_and_components", fake_components
+        target_training, "resolve_tokenizer_and_components", fake_components
     )
     args = SimpleNamespace(train_hidden_states_path="cache")
 
-    target, tokenizer, components, mask_id = dlite_training.build_target_and_components(
+    target, tokenizer, components, mask_id = target_training.build_target_and_components(
         args, [object()]
     )
 

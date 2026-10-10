@@ -3,21 +3,20 @@ import argparse
 import pytest
 import torch
 
-from scripts.dlite.dlite_disaggregate import (
-    _select_packet_layers,
-    aligned_anchor_count,
-    topology_identity,
-    validate_resume_model,
-    validate_resume_topology,
-)
-from scripts.dlite.dlite_training import add_common_args, validate_common_args
-from specforge.disaggregate import (
+from litespec.training.recipes.dlite import _select_packet_layers
+from litespec.training.recipes.dlite import aligned_anchor_count
+from litespec.training.setup import topology_identity
+from litespec.training.recipes.dlite import validate_resume_model
+from litespec.training.setup import validate_resume_topology
+from litespec.training.config import add_common_args
+from litespec.training.config import validate_common_args
+from litespec.distributed.transport import (
     DraftBatchPacket,
     DraftPacketSpec,
     build_node_routes,
     copy_packet_slice,
 )
-from specforge.distributed import disaggregated_group_plan
+from litespec.distributed import disaggregated_group_plan
 
 
 def test_three_tp2_ep2_targets_and_two_drafts_group_plan():
@@ -185,14 +184,14 @@ def test_resume_model_identity_rejects_layer_mismatch():
         "Draft",
         (),
         {
-            "architecture_version": "dlite_v2",
+            "architecture_version": "dlite_v1",
             "model_role": "pivot_q_student",
             "target_layer_ids": [0, 3, 7],
             "config": type("Config", (), {"num_target_layers": 8, "hidden_size": 16})(),
         },
     )()
     state = {
-        "architecture_version": "dlite_v2",
+        "architecture_version": "dlite_v1",
         "model_role": "pivot_q_student",
         "target_layer_ids": [0, 7],
         "num_target_layers": 8,

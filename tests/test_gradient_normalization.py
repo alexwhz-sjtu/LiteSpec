@@ -6,7 +6,7 @@ try:
 except (ImportError, OSError) as exc:
     raise unittest.SkipTest(f"PyTorch runtime is unavailable: {exc}") from exc
 
-from scripts.dlite.dlite_training import normalize_accumulated_gradients
+from litespec.training.optimizer import normalize_accumulated_gradients
 
 
 class _RecordingOptimizer:

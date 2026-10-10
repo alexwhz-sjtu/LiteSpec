@@ -6,7 +6,7 @@ try:
 except (ImportError, OSError) as exc:
     raise unittest.SkipTest(f"PyTorch runtime is unavailable: {exc}") from exc
 
-from specforge.core.dlite import compute_stage1_distillation_loss
+from litespec.core.dlite import compute_stage1_distillation_loss
 
 
 class Stage1LossTest(unittest.TestCase):

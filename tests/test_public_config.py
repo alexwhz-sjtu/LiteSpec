@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 try:
     import torch
@@ -7,8 +8,8 @@ try:
 except (ImportError, OSError) as exc:
     raise unittest.SkipTest(f"Transformers runtime is unavailable: {exc}") from exc
 
-from specforge.modeling.draft.dlite import DLiteDraftModel, build_target_layer_ids
-from specforge.core.dlite import OnlineDLiteModel
+from litespec.core.dlite import OnlineDLiteModel
+from litespec.modeling.draft.dlite import DLiteDraftModel, build_target_layer_ids
 
 
 class PublicConfigTest(unittest.TestCase):
@@ -70,7 +71,39 @@ class PublicConfigTest(unittest.TestCase):
             embed_tokens(torch.tensor([31, 31, 31])),
         )
         self.assertEqual(prepared.token_position_ids.tolist(), [[[2]]])
-        self.assertIsNone(prepared.initial_prev_token_ids)
+        training_output = online.compute_supervised_loss(
+            torch.randn(1, 1, 3, config.hidden_size),
+            prepared,
+            torch.randn(1, 1, 3, config.vocab_size),
+        )
+        expected_terms = training_output.ratio_metrics["expected_accept_len"]
+        expected_value = expected_terms.numerator / expected_terms.denominator
+        self.assertGreaterEqual(expected_value.item(), 1.0)
+        self.assertLessEqual(expected_value.item(), config.block_size)
+        zero_anchor, zero_keep = online.sample_anchor_positions(
+            input_ids.size(1), torch.tensor([[1, 1, 0, 0, 0, 0]])
+        )
+        self.assertEqual(zero_anchor.tolist(), [[0]])
+        self.assertEqual(zero_keep.tolist(), [[True]])
+
+        with mock.patch("litespec.core.dlite.flex_kernel_options", return_value={}):
+            flash_online = OnlineDLiteModel(
+                draft_model=model,
+                target_lm_head=online.lm_head,
+                target_embed_tokens=embed_tokens,
+                mask_token_id=31,
+                block_size=config.block_size,
+                flex_attention_backend="FLASH",
+            )
+        flash_prepared = flash_online.prepare_batch(
+            input_ids,
+            hidden_states,
+            torch.ones_like(input_ids),
+            anchor_positions=torch.tensor([[2]]),
+            block_keep_mask=torch.tensor([[True]]),
+        )
+        self.assertEqual(flash_prepared.anchor_positions.shape, (1, 64))
+        self.assertEqual(int(flash_prepared.block_keep_mask.sum()), 1)
         inference_query = model.build_inference_query_embeddings(
             embed_tokens,
             torch.tensor([[6, 31, 31, 31]]),
@@ -78,7 +111,7 @@ class PublicConfigTest(unittest.TestCase):
         self.assertEqual(inference_query.shape, (1, 4, 16))
         torch.testing.assert_close(inference_query[0, 0], embed_tokens.weight[6])
 
-    def test_v2_adds_predecessor_query_and_rnn_seed(self):
+    def test_v2_checkpoint_is_rejected(self):
         config = Qwen3Config(
             vocab_size=32,
             hidden_size=16,
@@ -99,90 +132,8 @@ class PublicConfigTest(unittest.TestCase):
             "sequential_rank": 8,
             "mask_token_id": 31,
         }
-        model = DLiteDraftModel(config)
-        self.assertEqual(model.draft_query_length, config.block_size + 1)
-        self.assertTrue(model.uses_predecessor_query)
-        self.assertTrue(model.seed_rnn_from_predecessor)
-
-        embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-        online = OnlineDLiteModel(
-            draft_model=model,
-            target_lm_head=nn.Linear(config.hidden_size, config.vocab_size),
-            target_embed_tokens=embed_tokens,
-            mask_token_id=31,
-            block_size=config.block_size,
-        )
-        input_ids = torch.tensor([[4, 5, 6, 7, 8, 9]])
-        hidden_states = {
-            layer_id: torch.randn(1, input_ids.size(1), config.hidden_size)
-            for layer_id in model.target_layer_ids
-        }
-        prepared = online.prepare_batch(
-            input_ids,
-            hidden_states,
-            torch.ones_like(input_ids),
-            anchor_positions=torch.tensor([[2]]),
-            block_keep_mask=torch.tensor([[True]]),
-        )
-        self.assertEqual(prepared.query_embeddings.shape, (1, 1, 5, 16))
-        torch.testing.assert_close(
-            prepared.query_embeddings[0, 0, :2],
-            embed_tokens(input_ids[0, 1:3]),
-        )
-        torch.testing.assert_close(
-            prepared.query_embeddings[0, 0, 2:],
-            embed_tokens(torch.tensor([31, 31, 31])),
-        )
-        self.assertEqual(prepared.token_position_ids.tolist(), [[[1, 2]]])
-        self.assertEqual(prepared.initial_prev_token_ids.tolist(), [[5]])
-        context_pos, draft_pos = model.build_block_position_ids(
-            prepared.anchor_positions,
-            prepared.token_position_ids,
-            prepared.token_keep_mask,
-        )
-        self.assertEqual(context_pos.tolist(), [[0, 0]])
-        self.assertEqual(draft_pos.tolist(), [[0, 1, 2, 3, 4]])
-        inference_query = model.build_inference_query_embeddings(
-            embed_tokens,
-            torch.tensor([[6, 31, 31, 31]]),
-            predecessor_token_ids=torch.tensor([[5]]),
-        )
-        self.assertEqual(inference_query.shape, (1, 5, 16))
-        torch.testing.assert_close(
-            inference_query[0, :2], embed_tokens(torch.tensor([5, 6]))
-        )
-
-    def test_v2_teacher_predecessor_and_chs_share_anchor_minus_one_position(self):
-        config = Qwen3Config(
-            vocab_size=32,
-            hidden_size=16,
-            intermediate_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            head_dim=4,
-        )
-        config.num_target_layers = 4
-        config.block_size = 4
-        config.dlite_config = {
-            "architecture_version": "dlite_v2",
-            "model_role": "swa_teacher",
-            "swa_window_size": 1,
-            "chs_num_layers": 2,
-            "target_layer_ids": build_target_layer_ids(4, 2),
-            "history_layer_ids": [0, 2, 3],
-            "sequential_head": "rnn",
-            "sequential_rank": 8,
-            "mask_token_id": 31,
-        }
-        model = DLiteDraftModel(config)
-        context_pos, draft_pos = model.build_block_position_ids(
-            anchor_positions=torch.tensor([[5]]),
-            token_position_ids=torch.tensor([[[4, 5]]]),
-            token_keep_mask=torch.tensor([[[True, True]]]),
-        )
-        self.assertEqual(context_pos.tolist(), [[4, 4]])
-        self.assertEqual(draft_pos.tolist(), [[4, 5, 6, 7, 8]])
+        with self.assertRaisesRegex(ValueError, "dlite_v1"):
+            DLiteDraftModel(config)
 
 
 if __name__ == "__main__":

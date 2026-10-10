@@ -9,8 +9,8 @@ from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import MixedPrecision, ShardingStrategy
 from transformers import Qwen3Config
 
-from specforge.core.dflash_family import OnlineDFlashModel
-from specforge.modeling.draft.dflash2 import DFlash2DraftModel
+from litespec.core.dflash2 import OnlineDFlash2Model
+from litespec.modeling.draft.dflash2 import DFlash2DraftModel
 
 
 def main():
@@ -40,13 +40,13 @@ def main():
         vocab_size=32,
         block_size=4,
         layer_types=["full_attention"],
-        dflash_config=method,
+        dflash2_config=method,
     )
     config._attn_implementation = "flex_attention"
     draft = DFlash2DraftModel(config).cuda().to(torch.bfloat16)
     embed = nn.Embedding(32, 64, device="cuda", dtype=torch.bfloat16)
     head = nn.Linear(64, 32, bias=False, device="cuda", dtype=torch.bfloat16)
-    online = OnlineDFlashModel(
+    online = OnlineDFlash2Model(
         draft,
         head,
         embed,
@@ -70,13 +70,14 @@ def main():
     ids = torch.randint(0, 32, (1, 16), device="cuda")
     hidden = torch.randn(1, 16, 64, device="cuda", dtype=torch.bfloat16)
     loss_mask = torch.ones(1, 16, device="cuda")
-    _, _, metrics = wrapped(
+    output = wrapped(
         input_ids=ids,
         hidden_states=hidden,
         loss_mask=loss_mask,
         collect_detailed_metrics=False,
     )
-    numerator, denominator = metrics["loss_terms"]
+    numerator = output.loss_terms.numerator
+    denominator = output.loss_terms.denominator
     (numerator / denominator.clamp_min(1)).backward()
     grad_count = torch.tensor(
         sum(parameter.grad is not None for parameter in draft.parameters()),

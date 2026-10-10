@@ -7,10 +7,10 @@ from types import SimpleNamespace
 
 import torch
 
-from scripts.dlite.dlite_training import build_draft_config
-from specforge.modeling.config_utils import load_text_model_config
-from specforge.modeling.draft.dlite import DLiteDraftModel
-from specforge.modeling.target.target_utils import TargetEmbeddingsAndHead
+from litespec.training.recipes.dlite import build_draft_config
+from litespec.modeling.config_utils import load_text_model_config
+from litespec.modeling.draft.dlite import DLiteDraftModel
+from litespec.modeling.target.target_utils import TargetEmbeddingsAndHead
 
 
 def _write_qwen35_config(path: Path) -> None:
@@ -43,7 +43,7 @@ class Qwen35CompatibilityTest(unittest.TestCase):
             config = load_text_model_config(tmpdir)
 
         self.assertEqual(config.model_type, "qwen3")
-        self.assertEqual(config.dlite_source_model_type, "qwen3_5")
+        self.assertEqual(config.target_source_model_type, "qwen3_5")
         self.assertEqual(config.num_hidden_layers, 32)
         self.assertEqual(config.layer_types, ["full_attention"] * 32)
 
@@ -53,11 +53,11 @@ class Qwen35CompatibilityTest(unittest.TestCase):
             args = Namespace(
                 target_model_path=tmpdir,
                 trust_remote_code=False,
+                attention_backend="flex_attention",
                 num_draft_layers=2,
                 block_size=4,
                 target_layer_ids="0,1,3,7,11,15,19,23,27,29,30,31",
                 chs_num_layers=7,
-                dlite_version="dlite_v2",
                 sequential_head="rnn",
                 sequential_rank=8,
                 mask_token_id=63,
@@ -91,7 +91,7 @@ class Qwen35CompatibilityTest(unittest.TestCase):
             config = load_text_model_config(tmpdir)
 
         self.assertEqual(config.intermediate_size, 24)
-        self.assertEqual(config.dlite_source_model_type, "qwen3_5_moe")
+        self.assertEqual(config.target_source_model_type, "qwen3_5_moe")
 
     def test_target_components_use_nested_text_dimensions(self):
         config = SimpleNamespace(

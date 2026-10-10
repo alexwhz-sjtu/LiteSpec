@@ -1,8 +1,8 @@
 .github @FrankLeeeee
-/specforge/core @FrankLeeeee
-/specforge/data @zyksir @sleepcoo @shuaills
-/specforge/layers @FrankLeeeee @FlamingoPg @sleepcoo @shuaills
-/specforge/modeling @FlamingoPg @sleepcoo @shuaills @FrankLeeeee
+/litespec/core @FrankLeeeee
+/litespec/data @zyksir @sleepcoo @shuaills
+/litespec/layers @FrankLeeeee @FlamingoPg @sleepcoo @shuaills
+/litespec/modeling @FlamingoPg @sleepcoo @shuaills @FrankLeeeee
 /tests @FrankLeeeee
 /assets @FrankLeeeee @zhyncs
 /examples @shuaills @sleepcoo @FlamingoPg

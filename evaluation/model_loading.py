@@ -9,7 +9,7 @@ import torch
 from loguru import logger
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from specforge.modeling.draft.dlite import DLiteDraftModel
+from litespec.modeling.draft.dlite import DLiteDraftModel
 
 
 def resolve_mask_token_id(
@@ -23,10 +23,6 @@ def resolve_mask_token_id(
         return int(cli_mask_token_id)
 
     mask_token_id = draft_model.mask_token_id
-    if mask_token_id is None:
-        fcfg = getattr(draft_model.config, "dlite_config", None) or {}
-        mask_token_id = fcfg.get("mask_token_id")
-
     if mask_token_id is not None:
         return int(mask_token_id)
 
@@ -43,26 +39,19 @@ def resolve_mask_token_id(
 
 
 def dlite_config_summary(draft_model: DLiteDraftModel) -> dict[str, Any]:
-    fcfg = getattr(draft_model.config, "dlite_config", None) or {}
     return {
-        "architecture_version": fcfg.get("architecture_version"),
+        "architecture_version": draft_model.architecture_version,
         "model_role": draft_model.model_role,
         "swa_window_size": draft_model.swa_window_size,
         "fuse_slot_count": draft_model.fuse_slot_count,
         "chs_num_layers": draft_model.chs_num_layers,
         "condition_slots": draft_model.condition_slot_count,
-        "target_layer_ids": getattr(draft_model, "target_layer_ids", None),
-        "history_layer_ids": getattr(draft_model, "history_layer_ids", None),
-        "block_size": int(
-            getattr(draft_model, "block_size", fcfg.get("block_size", 0))
-        ),
+        "target_layer_ids": draft_model.target_layer_ids,
+        "history_layer_ids": draft_model.history_layer_ids,
+        "block_size": int(draft_model.block_size),
         "sequential_head": draft_model.sequential_head_type,
-        "sequential_rank": getattr(
-            draft_model, "sequential_rank", fcfg.get("sequential_rank", 0)
-        ),
-        "mask_token_id": getattr(
-            draft_model, "mask_token_id", fcfg.get("mask_token_id")
-        ),
+        "sequential_rank": draft_model.sequential_rank,
+        "mask_token_id": draft_model.mask_token_id,
     }
 
 
@@ -93,16 +82,8 @@ def validate_decode_config(draft_model: DLiteDraftModel) -> None:
     """Log serial-head inference settings from the loaded checkpoint."""
     summary = dlite_config_summary(draft_model)
     sequential_head = str(summary["sequential_head"])
-    query_layout = (
-        "Q=[embed(a-1), embed(a), MASK...]"
-        if draft_model.uses_predecessor_query
-        else "Q=[embed(a), MASK...]"
-    )
-    rnn_init = (
-        "RNN seeded from a-1"
-        if draft_model.seed_rnn_from_predecessor
-        else "RNN zero-initialized"
-    )
+    query_layout = "Q=[embed(a), MASK...]"
+    rnn_init = "RNN zero-initialized"
     if draft_model.is_student:
         logger.info(
             "PivotQ student: {}, local RoPE; CHS is context KV; {}. "

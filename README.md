@@ -1,16 +1,18 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="DLite logo" width="520">
+  <img src="assets/logo.svg" alt="LiteSpec logo" width="560">
 </p>
 
-# DLite
+# LiteSpec
 
-The repository also trains and benchmarks the DFlash family (`dflash`,
-`dflash2`, and `dspark`) through independent launchers under `scripts/` and
-`evaluation/`. See [the training guide](docs/TRAINING.md#dflash-family-training)
-for online, offline, and disaggregated examples.
+LiteSpec is a unified training framework for four independent speculative
+decoding algorithms: **DFlash, DFlash2, DSpark, and DLite**. They share training,
+data, distributed execution, metrics, and checkpoint infrastructure while
+retaining their own model configurations, architectures, and inference logic.
+The installation and Python package name is `litespec`. See
+[the training guide](docs/TRAINING.md) for online, offline, and disaggregated examples.
 
-DLite is a Qwen3 speculative-decoding project with teacher training, two-stage
-student training, and standalone evaluation. The student predicts a block in
+DLite supports SFT, teacher training, two-stage student training, and standalone
+evaluation. The student predicts a block in
 parallel and uses a lightweight `rnn` sequential head to restore token-to-token
 dependence inside the block.
 
@@ -19,23 +21,44 @@ repository is the smaller inference-only release.
 
 ```bash
 uv sync --frozen
-source .venv/bin/activate
+uv run pytest -q tests
 ```
 
 ## Environment
 
-Python 3.11, a CUDA 12 toolchain, a C++ compiler, and
-[uv](https://docs.astral.sh/uv/) are required. Install the exact locked
-environment with:
+The supported environment is Linux with:
+
+- CPython 3.11 (the repository pins it in `.python-version`);
+- an NVIDIA GPU with BF16 support and a driver compatible with CUDA 12.8;
+- a CUDA 12.x toolkit when CUDA extensions must be built from source;
+- a C/C++ compiler and Git;
+- [uv](https://docs.astral.sh/uv/) 0.11 or newer.
+
+PyTorch 2.9.1 and its CUDA 12.8 runtime libraries are installed from the lock
+file. The system CUDA toolkit is only used to compile extensions, but its major
+version must match the PyTorch CUDA build. Check the environment before
+installing:
+
+```bash
+python3 --version
+nvidia-smi
+nvcc --version
+uv --version
+```
+
+Create the complete development and training environment from the checked-in
+lock file:
 
 ```bash
 uv sync --frozen
 source .venv/bin/activate
+python -m pytest -q tests
 ```
 
 `uv` builds `causal-conv1d` against the lockfile's exact PyTorch ABI, which is
 required by Qwen3.5's hybrid linear-attention layers. Activate `.venv` before
-running project commands.
+running project commands. The lock file uses the public PyPI registry; a mirror
+can be selected locally with `UV_DEFAULT_INDEX` without changing project files.
 
 FlashAttention is optional. Install the regular dependencies first so PyTorch
 is available while FlashAttention is built:
@@ -50,36 +73,24 @@ SDPA when it is unavailable.
 
 ## Train
 
-Teacher training:
+All training entrypoints use their matching YAML by default:
 
 ```bash
-TARGET_MODEL=/path/to/Qwen3-8B \
-TRAIN_DATA_PATH=/path/to/train.jsonl \
-OUTPUT_DIR=/path/to/teacher \
-bash scripts/dlite/run_training_dlite_teacher.sh --dt h100
+bash scripts/dflash/run_training_dflash.sh
+bash scripts/dflash2/run_training_dflash2.sh
+bash scripts/dspark/run_training_dspark.sh
+bash scripts/dlite/run_training_dlite_sft.sh
+bash scripts/dlite/run_training_dlite_teacher.sh
+bash scripts/dlite/run_training_dlite_two_stage.sh
 ```
 
-For Qwen3.5-4B, the launcher automatically selects the SGLang target backend
-and FA3. `TARGET_LAYER_IDS` takes precedence over `CHS_NUM_LAYERS`:
+Edit the corresponding file under `scripts/config/`, or provide another YAML.
+Training CLI arguments after the optional YAML override its `arguments` values:
 
 ```bash
-TARGET_MODEL=/path/to/Qwen3.5-4B \
-TRAIN_DATA_PATH=/path/to/train.jsonl \
-CHAT_TEMPLATE=qwen3.5 \
-TARGET_LAYER_IDS="0,1,3,7,11,15,19,23,27,29,30,31" \
-bash scripts/dlite/run_training_dlite_teacher.sh --dt h100
-```
-
-Two-stage student training:
-
-```bash
-TARGET_MODEL=/path/to/Qwen3-8B \
-TEACHER_DRAFT_PATH=/path/to/teacher/final \
-TRAIN_DATA_PATH=/path/to/train.jsonl \
-OUTPUT_DIR=/path/to/student \
-STAGE1_EPOCHS=1 STAGE2_EPOCHS=5 \
-LEARNING_RATE=5e-4 STAGE1_KL_WEIGHT=1.0 \
-bash scripts/dlite/run_training_dlite_two_stage.sh --dt h100
+bash scripts/dlite/run_training_dlite_teacher.sh \
+  scripts/config/dlite_teacher.yaml \
+  --batch-size 2 --tp-size 2 --shard-draft-by-tp
 ```
 
 Both stages consume the same `TRAIN_DATA_PATH`. The student backbone always
@@ -87,31 +98,24 @@ starts from random initialization. Stage 1 trains only with weighted KL
 distillation; Stage 2 uses the configured CE/TV objectives. The teacher's
 sequential head is copied to the student and frozen during Stage 1.
 
-All three launchers also support offline `regen_full` training. Replace
-`TRAIN_DATA_PATH` with `TRAIN_HIDDEN_STATES_PATH=/path/to/regen_full/cache`,
-and set `TP_SIZE=1` plus `SHARD_DRAFT_BY_TP=0`. The two data variables are
-mutually exclusive. Offline mode skips target-transformer prefill and computes
+All six launchers also support offline `regen_full` training. In YAML, replace
+`launcher.train_data` with `launcher.train_hidden_states`, and set `tp_size: 1`
+plus `shard_draft_by_tp: false`. The two data keys are mutually exclusive.
+Offline mode skips target-transformer prefill and computes
 target logits from cached final-norm hidden states with the frozen LM head.
+Newly generated caches include a lightweight per-sample supervision index, so
+startup filtering does not deserialize token or hidden-state tensors. Offline
+loading is shard-aware and uses persistent workers, pinned batches, and
+non-blocking device copies. Regenerate older caches that lack this index.
 
 Online training can instead disaggregate target prefill from draft training.
-For the 8-GPU TP2/EP2 topology (three target replicas and two draft ranks):
+Configure the shared `disaggregate` block in YAML. For an 8-GPU TP2/EP2
+topology, use six target ranks, two draft ranks, and `sglang_ep_size: 2`.
+It is online-only and cannot be combined with `shard_draft_by_tp: true`.
 
 ```bash
-DISAGGREGATE=1 NPROC_PER_NODE=8 \
-RANK_TARGET_PER_NODE=6 RANK_DRAFT_PER_NODE=2 \
-TARGET_TP_SIZE=2 SGLANG_EP_SIZE=2 \
-NODE_BATCH_SIZE=6 DRAFT_MICRO_BATCH_SIZE=3 PIPELINE_DEPTH=2 \
-TARGET_MODEL_BACKEND=sglang TARGET_MODEL=/path/to/target \
-TRAIN_DATA_PATH=/path/to/train.jsonl OUTPUT_DIR=/path/to/output \
-bash scripts/dlite/run_training_dlite_teacher.sh --dt h100
+bash scripts/dlite/run_training_dlite_teacher.sh --disaggregate
 ```
-
-The same variables work with the SFT and two-stage launchers. Target ranks run
-the TP/EP-sharded SGLang transformer and send selected hidden states only.
-Draft ranks run draft FSDP and hold a frozen full target embedding/LM head, so
-vocabulary logits never cross the target-to-draft bridge. Disaggregation is
-online-only and cannot be combined with `TRAIN_HIDDEN_STATES_PATH` or
-`SHARD_DRAFT_BY_TP=1`.
 
 See [docs/TRAINING.md](docs/TRAINING.md) for configuration details.
 
@@ -125,9 +129,8 @@ bash evaluation/run_benchmark_dlite.sh
 ```
 
 Checkpoint model settings live under `dlite_config`. The public architecture is
-`DLiteDraftModel`; the only sequential-head type is `rnn`. New training uses
-`dlite_v2`, while inference remains compatible with both `dlite_v1` and
-`dlite_v2` checkpoints.
+`DLiteDraftModel`; the only supported architecture is `dlite_v1` and the only
+sequential-head type is `rnn`. `dlite_v2` checkpoints are rejected explicitly.
 
 ## License
 

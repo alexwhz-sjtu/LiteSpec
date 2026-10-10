@@ -24,6 +24,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 SCHEMA_VERSION = 2
+SAMPLE_INDEX_VERSION = 1
 METADATA_MEMBER = "_metadata.json"
 
 
@@ -197,6 +198,9 @@ def read_shard_metadata(path: Path) -> dict[str, Any]:
         raise HiddenStateError(f"sample count mismatch in {path}")
     if len(metadata.get("source_indices", [])) != len(sample_members):
         raise HiddenStateError(f"source index count mismatch in {path}")
+    sample_metadata = metadata.get("sample_metadata")
+    if sample_metadata is not None and len(sample_metadata) != len(sample_members):
+        raise HiddenStateError(f"sample metadata count mismatch in {path}")
     return metadata
 
 
@@ -225,6 +229,7 @@ class TarShardWriter:
         self.sequence = sequence
         self.input_identity = input_identity
         self.source_indices: list[int] = []
+        self.sample_metadata: list[dict[str, Any] | None] = []
         self.failures: list[dict[str, Any]] = []
         self.consumed_start: int | None = None
         self.consumed_end: int | None = None
@@ -239,12 +244,17 @@ class TarShardWriter:
         self.consumed_end = source_index
 
     def add_sample(
-        self, source_index: int, payload: bytes, ordinal: int | None = None
+        self,
+        source_index: int,
+        payload: bytes,
+        ordinal: int | None = None,
+        sample_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.mark_consumed(source_index)
         member_index = source_index if ordinal is None else ordinal
         add_bytes(self.archive, f"samples/{member_index:012d}.pt", payload)
         self.source_indices.append(source_index)
+        self.sample_metadata.append(sample_metadata)
 
     def add_failure(self, failure: dict[str, Any]) -> None:
         source_index = int(failure["source_index"])
@@ -271,6 +281,7 @@ class TarShardWriter:
             "sequence": self.sequence,
             "sample_count": self.sample_count,
             "source_indices": self.source_indices,
+            "sample_metadata": self.sample_metadata,
             "consumed_start": self.consumed_start,
             "consumed_end": self.consumed_end,
             "failures": self.failures,
@@ -297,7 +308,9 @@ class TarShardWriter:
         return CommittedShard(final_path, metadata)
 
 
-def iter_shard_samples(path: Path) -> Iterator[tuple[int, bytes]]:
+def iter_shard_samples(
+    path: Path,
+) -> Iterator[tuple[int, bytes, dict[str, Any] | None]]:
     metadata = read_shard_metadata(path)
     with tarfile.open(path, "r:*") as archive:
         members = sorted(
@@ -310,11 +323,16 @@ def iter_shard_samples(path: Path) -> Iterator[tuple[int, bytes]]:
         )
         if len(members) != len(metadata["source_indices"]):
             raise HiddenStateError(f"member/index mismatch in {path}")
-        for source_index, member in zip(metadata["source_indices"], members):
+        sample_metadata = metadata.get("sample_metadata") or [None] * len(members)
+        if len(sample_metadata) != len(members):
+            raise HiddenStateError(f"sample metadata count mismatch in {path}")
+        for source_index, member, index_metadata in zip(
+            metadata["source_indices"], members, sample_metadata
+        ):
             handle = archive.extractfile(member)
             if handle is None:
                 raise HiddenStateError(f"cannot read {member.name} in {path}")
-            yield int(source_index), handle.read()
+            yield int(source_index), handle.read(), index_metadata
 
 
 def discover_staging(
@@ -475,6 +493,16 @@ def finalize_staging(
         key=lambda item: (int(item.metadata["consumed_start"]), item.path.name)
     )
     final_shards = valid_final_shards(output_root, shard_size, input_identity)
+    if run_metadata.get("sample_index_version") == SAMPLE_INDEX_VERSION:
+        for item in final_shards:
+            metadata = item.metadata.get("sample_metadata")
+            if not isinstance(metadata, list) or any(
+                value is None for value in metadata
+            ):
+                raise HiddenStateError(
+                    f"final shard lacks lightweight sample metadata: {item.path}; "
+                    "regenerate the cache"
+                )
     consumed_source_indices = {
         int(source_index)
         for item in final_shards
@@ -490,9 +518,17 @@ def finalize_staging(
             pending_stage_deletions.pop(0).unlink(missing_ok=True)
 
     for stage in staging:
-        for source_index, payload in iter_shard_samples(stage.path):
+        for source_index, payload, sample_metadata in iter_shard_samples(stage.path):
             if source_index in consumed_source_indices:
                 continue
+            if (
+                run_metadata.get("sample_index_version") == SAMPLE_INDEX_VERSION
+                and sample_metadata is None
+            ):
+                raise HiddenStateError(
+                    f"staging shard lacks lightweight sample metadata: {stage.path}; "
+                    "regenerate the cache"
+                )
             if writer is None:
                 writer = TarShardWriter(
                     output_root / "shards",
@@ -502,7 +538,12 @@ def finalize_staging(
                     "final",
                     input_identity,
                 )
-            writer.add_sample(source_index, payload, ordinal=success_ordinal)
+            writer.add_sample(
+                source_index,
+                payload,
+                ordinal=success_ordinal,
+                sample_metadata=sample_metadata,
+            )
             success_ordinal += 1
             if writer.sample_count == shard_size:
                 success_start = success_ordinal - shard_size
@@ -565,6 +606,7 @@ def finalize_staging(
                 "path": str(item.path.relative_to(output_root)),
                 "sample_count": item.metadata["sample_count"],
                 "source_indices": item.metadata["source_indices"],
+                "sample_metadata": item.metadata["sample_metadata"],
                 "success_start": item.metadata["success_start"],
                 "success_end": item.metadata["success_end"],
                 "sha256": sha256_file(item.path),
@@ -650,6 +692,34 @@ def sample_payload(
     return buffer.getvalue()
 
 
+def sample_index_metadata(output: Any, batch_index: int) -> dict[str, Any]:
+    """Build an exact, compact loss-mask index without serializing sample tensors."""
+    import torch
+
+    attention = output.attention_mask[batch_index].reshape(-1)
+    length = int(attention.sum().item())
+    if length <= 0:
+        raise HiddenStateError("sample has no attended tokens")
+    active = output.loss_mask[batch_index, :length].detach().reshape(-1).gt(0.5).cpu()
+    if active.numel() != length:
+        raise HiddenStateError("loss mask length does not match attended tokens")
+    padded = torch.cat(
+        (
+            torch.zeros(1, dtype=torch.int8),
+            active.to(torch.int8),
+            torch.zeros(1, dtype=torch.int8),
+        )
+    )
+    transitions = padded[1:] - padded[:-1]
+    starts = torch.nonzero(transitions == 1, as_tuple=False).reshape(-1).tolist()
+    ends = torch.nonzero(transitions == -1, as_tuple=False).reshape(-1).tolist()
+    return {
+        "sequence_length": length,
+        "supervised_token_count": int(active.sum().item()),
+        "loss_mask_runs": [[int(start), int(end)] for start, end in zip(starts, ends)],
+    }
+
+
 def collate_records(records: list[dict[str, Any]], pad_token_id: int):
     from torch.nn.utils.rnn import pad_sequence
 
@@ -677,7 +747,7 @@ def generate_with_retries(model, batch, max_retries: int):
     last_error = None
     for _ in range(max_retries + 1):
         try:
-            return model.generate_dlite_data(**batch, return_logits=False)
+            return model.generate_training_data(**batch, return_logits=False)
         except Exception as exc:
             last_error = exc
     raise last_error
@@ -711,16 +781,16 @@ def run_generation(args: argparse.Namespace) -> dict[str, Any] | None:
     from transformers import AutoConfig, AutoTokenizer
 
     from datasets import load_dataset
-    from specforge.args import SGLangBackendArgs
-    from specforge.data import build_training_dataset
-    from specforge.distributed import (
+    from litespec.args import SGLangBackendArgs
+    from litespec.data import build_training_dataset
+    from litespec.distributed import (
         destroy_distributed,
         get_dp_group,
         get_tp_group,
         init_distributed,
         is_tp_rank_0,
     )
-    from specforge.modeling.target import get_dlite_target_model
+    from litespec.modeling.target import get_training_target_model
 
     input_path = Path(args.data_path)
     if not input_path.is_file():
@@ -746,9 +816,17 @@ def run_generation(args: argparse.Namespace) -> dict[str, Any] | None:
                 raise HiddenStateError(
                     f"existing manifest belongs to another input: {manifest_path}"
                 )
+            if manifest.get("sample_index_version") != SAMPLE_INDEX_VERSION:
+                raise HiddenStateError(
+                    "existing cache has no lightweight sample index; regenerate it"
+                )
             if args.resume and manifest.get("complete") and not args.retry_failures:
                 if dist.get_rank() == 0:
-                    print(json.dumps(manifest, ensure_ascii=False, indent=2))
+                    print(
+                        f"manifest already complete: {manifest_path} "
+                        f"successful={manifest.get('successful_samples')} "
+                        f"failed={manifest.get('failed_samples')}"
+                    )
                 return manifest if dist.get_rank() == 0 else None
         if not args.resume and any(output_root.iterdir()):
             raise HiddenStateError(
@@ -785,7 +863,7 @@ def run_generation(args: argparse.Namespace) -> dict[str, Any] | None:
         target_kwargs = {"trust_remote_code": args.trust_remote_code}
         if args.target_model_backend == "sglang":
             target_kwargs.update(SGLangBackendArgs.from_args(args).to_kwargs())
-        target = get_dlite_target_model(
+        target = get_training_target_model(
             args.target_model_path,
             backend=args.target_model_backend,
             torch_dtype=getattr(config, "dtype", getattr(config, "torch_dtype", None)),
@@ -973,8 +1051,13 @@ def run_generation(args: argparse.Namespace) -> dict[str, Any] | None:
                             stored_layer_ids,
                             final_norm_layer_id,
                         )
+                        index_metadata = sample_index_metadata(output, batch_index)
                         if is_tp_rank_0():
-                            writer.add_sample(record["source_index"], payload)
+                            writer.add_sample(
+                                record["source_index"],
+                                payload,
+                                sample_metadata=index_metadata,
+                            )
                         shard_successes += 1
                         if shard_successes == args.shard_size:
                             commit_writer()
@@ -1028,6 +1111,7 @@ def run_generation(args: argparse.Namespace) -> dict[str, Any] | None:
         if dist.get_rank() == 0:
             run_metadata = {
                 "save_mode": "regen_full",
+                "sample_index_version": SAMPLE_INDEX_VERSION,
                 "target_model": args.target_model_path,
                 "target_backend": args.target_model_backend,
                 "chat_template": args.chat_template,
@@ -1046,7 +1130,11 @@ def run_generation(args: argparse.Namespace) -> dict[str, Any] | None:
             manifest = finalize_staging(
                 output_root, identity, args.shard_size, args.compress, run_metadata
             )
-            print(json.dumps(manifest, ensure_ascii=False, indent=2))
+            print(
+                f"wrote manifest: {output_root / 'manifest.json'} "
+                f"successful={manifest.get('successful_samples')} "
+                f"failed={manifest.get('failed_samples')}"
+            )
         dist.barrier()
         return manifest
     finally:

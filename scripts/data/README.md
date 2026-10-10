@@ -67,7 +67,7 @@ the only component that knows the source dataset's original fields.
 
 ```bash
 python scripts/data/regenerate_train_data.py \
-  --model /path/to/model \
+  --model /data/wanghanzhen/models/Qwen/Qwen3-4B \
   --input-file-path /path/to/prompts.jsonl \
   --server-address localhost:30000
 ```
@@ -86,10 +86,21 @@ outputs so the downstream four-field contract remains stable.
 ## 3. Save tokens and hidden states
 
 ```bash
-python scripts/data/prepare_hidden_states.py \
-  --target-model-path /path/to/model \
-  --data-path ./cache/data/regen_token_only/regenerated.jsonl \
+cd /data/wanghanzhen/projects/SpecDecoding/LiteSpec
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
+.venv/bin/torchrun --nproc-per-node=8 \
+scripts/data/prepare_hidden_states.py \
+  --target-model-path /data/wanghanzhen/models/Qwen3-4B \
+  --target-model-backend sglang \
+  --data-path /data/wanghanzhen/projects/SpecDecoding/LiteSpec/cache/data/regen_token_only/wildchat_chinese_turns_le2_qwen3_4b_temp0.7_topk15_max4096.jsonl \
+  --output-path /data/wanghanzhen/projects/SpecDecoding/LiteSpec/cache/data/regen_full/wildchat_chinese_qwen3_4b \
+  --target-layer-ids 0,8,16,24,31 \
+  --max-length 4096 \
+  --tp-size 1 \
+  --sglang-ep-size 1 \
+  --batch-size 1 \
   --shard-size 512
+
 ```
 
 Each saved sample contains `input_ids`, `attention_mask`, `loss_mask`, and the
@@ -108,13 +119,15 @@ The two names describe save granularity for the same regenerated dataset:
 - `regen_token_only`: regenerated answers in JSONL, without hidden states.
 - `regen_full`: token IDs, masks, and hidden states in training shards.
 
+
+
 ## 4. Train from regen_full
 
 All DLite training entrypoints accept either online JSONL or an offline cache.
 Use exactly one of `--train-data-path` and `--train-hidden-states-path`:
 
 ```bash
-torchrun --nproc-per-node=8 -m scripts.dlite.train_dlite_sft \
+torchrun --nproc-per-node=8 -m scripts.dlite.train_sft \
   --target-model-path /path/to/model \
   --train-hidden-states-path ./cache/data/regen_full/dataset_model \
   --tp-size 1 \

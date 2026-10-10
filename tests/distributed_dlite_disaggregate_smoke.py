@@ -5,13 +5,13 @@ import argparse
 import torch
 import torch.distributed as dist
 
-from specforge.disaggregate import (
+from litespec.distributed.transport import (
     DraftBatchPacket,
     DraftPacketSpec,
     NodePacketTransport,
     build_node_routes,
 )
-from specforge.distributed import destroy_distributed, init_disaggregated
+from litespec.distributed import destroy_distributed, init_disaggregated
 
 
 def main():

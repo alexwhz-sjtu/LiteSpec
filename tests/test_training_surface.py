@@ -1,7 +1,6 @@
 import pathlib
 import unittest
 
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
@@ -10,13 +9,13 @@ class TrainingSurfaceTest(unittest.TestCase):
         sources = "\n".join(
             (ROOT / path).read_text(encoding="utf-8")
             for path in (
-                "scripts/dlite/dlite_training.py",
-                "scripts/dlite/train_dlite_teacher.py",
+                "litespec/training/config.py",
+                "litespec/training/recipes/dlite.py",
                 "scripts/dlite/run_training_dlite_teacher.sh",
-                "scripts/dlite/train_dlite_two_stage.py",
+                "litespec/training/recipes/dlite.py",
                 "scripts/dlite/run_training_dlite_two_stage.sh",
-                "specforge/core/dlite.py",
-                "specforge/modeling/draft/sequential_head.py",
+                "litespec/core/dlite.py",
+                "litespec/modeling/draft/dlite.py",
             )
         )
         for legacy in (

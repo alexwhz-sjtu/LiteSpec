@@ -1,19 +1,28 @@
+import argparse
 from types import SimpleNamespace
 
 import torch
 from torch import nn
 from transformers import Qwen3Config
 
-from scripts.dflash_family.dflash_family_training import (
+from litespec.training.recipes._dflash_common import (
+    add_family_args,
     build_family_config,
     selector_alpha,
+    validate_family_args,
 )
-from specforge.modeling.config_utils import _qwen35_text_dict_to_qwen3_config
-from specforge.core.dflash_family import OnlineDSparkModel
-from specforge.disaggregate import FamilyBatchPacket, FamilyPacketSpec
-from specforge.modeling.draft.dflash import DFlashDraftModel
-from specforge.modeling.draft.dflash2 import DFlash2DraftModel, DFlashGroupedConv
-from specforge.modeling.draft.dspark import (
+from litespec.training.setup import select_tp_rank_batch
+from litespec.core.dflash import OnlineDFlashModel
+from litespec.core.dspark import OnlineDSparkModel
+from litespec.core._dflash_common import _DFlashSelectorDiagnostics
+from litespec.core._dflash_common import _DFlashUnaryDiagnostics
+from litespec.distributed.transport import FamilyBatchPacket, FamilyPacketSpec
+from litespec.modeling.config_utils import _qwen35_text_dict_to_qwen3_config
+from litespec.modeling.draft import dflash as dflash_module
+from litespec.modeling.draft import dlite as dlite_module
+from litespec.modeling.draft.dflash import DFlashDraftModel
+from litespec.modeling.draft.dflash2 import DFlash2DraftModel, DFlashGroupedConv
+from litespec.modeling.draft.dspark import (
     DSparkDraftModel,
     GatedMarkovHead,
     RNNMarkovHead,
@@ -42,8 +51,43 @@ def tiny_config(architecture="DFlashDraftModel", **method_overrides):
         vocab_size=32,
         block_size=4,
         layer_types=["full_attention"],
-        dflash_config=method,
+        **{({"DFlashDraftModel": "dflash_config", "DFlash2DraftModel": "dflash2_config", "DSparkDraftModel": "dspark_config"}[architecture]): method},
     )
+
+
+def test_dflash_and_dlite_share_flex_attention_runtime():
+    assert (
+        dflash_module.compile_friendly_flex_attention
+        is dlite_module.compile_friendly_flex_attention
+    )
+
+
+def test_family_algorithms_accept_tp_draft_sharding():
+    for algorithm in ("dflash", "dflash2", "dspark"):
+        parser = argparse.ArgumentParser()
+        add_family_args(parser, algorithm)
+        args = parser.parse_args(
+            [
+                "--target-model-path",
+                "target",
+                "--target-model-backend",
+                "sglang",
+                "--train-data-path",
+                "train.jsonl",
+                "--output-dir",
+                "out",
+                "--tp-size",
+                "2",
+                "--batch-size",
+                "2",
+                "--shard-draft-by-tp",
+            ]
+        )
+        validate_family_args(parser, args, algorithm)
+        assert args.shard_draft_by_tp is True
+
+    batch = torch.arange(12).view(3, 4)
+    torch.testing.assert_close(select_tp_rank_batch(batch, 1), batch[1:2])
 
 
 def test_dflash_and_dflash2_build_expected_modules():
@@ -149,8 +193,54 @@ def test_dspark_decay_starts_at_first_supervised_slot():
     )
     torch.testing.assert_close(
         weights,
-        torch.tensor([[[0.0, 1.0, torch.exp(torch.tensor(-1.0)), torch.exp(torch.tensor(-2.0))]]]),
+        torch.tensor(
+            [
+                [
+                    [
+                        0.0,
+                        1.0,
+                        torch.exp(torch.tensor(-1.0)),
+                        torch.exp(torch.tensor(-2.0)),
+                    ]
+                ]
+            ]
+        ),
     )
+
+
+def test_dflash2_expected_accept_len_uses_selector_distribution():
+    wrapper = object.__new__(OnlineDFlashModel)
+    nn.Module.__init__(wrapper)
+    wrapper.lm_head = nn.Identity()
+    target_probs = torch.tensor([0.5, 0.3, 0.2])
+    target_logits = target_probs.log().view(1, 1, 1, 3).expand(1, 1, 3, 3)
+    unary = _DFlashUnaryDiagnostics(
+        probabilities=target_probs.view(1, 1, 1, 3).expand(1, 1, 3, 3),
+        hard_label_probability=torch.zeros(1, 1, 3),
+        predicted_ids=torch.zeros(1, 1, 3, dtype=torch.long),
+        topk_logits=torch.zeros(1, 1, 3, 2),
+        candidate_ids=torch.tensor([0, 1]).view(1, 1, 1, 2).expand(1, 1, 3, 2),
+        target_is_candidate=torch.ones(1, 1, 3, dtype=torch.bool),
+    )
+    selector = _DFlashSelectorDiagnostics(
+        selected_ids=torch.zeros(1, 1, 3, dtype=torch.long),
+        covered_mask=torch.ones(1, 1, 3),
+        logits=torch.tensor([0.625, 0.375]).log().view(1, 1, 1, 2).expand(1, 1, 3, 2),
+    )
+    terms = wrapper._dflash_teacher_terms(
+        unary=unary,
+        selector=selector,
+        greedy_ids=None,
+        aligned_target_hidden=target_logits,
+        weight_mask=torch.tensor([[[0.0, 1.0, 1.0]]]),
+        position_den=torch.tensor([0.0, 1.0, 1.0]),
+    )
+    # Sparse selector overlap is 0.8 per slot: 1 + 0.8 + 0.8^2.
+    torch.testing.assert_close(
+        terms.final_expected_accepted_length_num, torch.tensor(2.44)
+    )
+    # Unary q equals target p, proving the final metric did not use unary q.
+    torch.testing.assert_close(terms.expected_accepted_length_num, torch.tensor(3.0))
 
 
 def test_family_packet_has_no_logits_and_optional_last_hidden():
@@ -160,6 +250,30 @@ def test_family_packet_has_no_logits_and_optional_last_hidden():
     assert packet.target_last_hidden.shape == (2, 8, 16)
     assert all(tensor.shape[0] == 2 for tensor in packet.tensors())
     assert not hasattr(packet, "logits")
+
+
+def test_ratio_family_only_builds_top16_recall_per_position():
+    metrics = {}
+    numerators = torch.tensor([0.0, 1.0, 2.0])
+    denominators = torch.tensor([0.0, 2.0, 4.0])
+
+    OnlineDFlashModel._add_ratio_family(
+        metrics,
+        "dflash/hard_label/unary_top1_accuracy",
+        numerators,
+        denominators,
+    )
+    OnlineDFlashModel._add_ratio_family(
+        metrics,
+        "dflash/hard_label/unary_top16_recall",
+        numerators,
+        denominators,
+    )
+
+    assert {name for name in metrics if name.startswith("position_")} == {
+        "position_1/hard_label/unary_top16_recall",
+        "position_2/hard_label/unary_top16_recall",
+    }
 
 
 def test_generated_defaults_and_selector_schedule():
@@ -192,8 +306,8 @@ def test_generated_defaults_and_selector_schedule():
     )
     config = build_family_config(args, "dflash2", source_config=source)
     assert config.architectures == ["DFlash2DraftModel"]
-    assert config.dflash_config["selector_rank"] == 256
-    assert len(config.dflash_config["target_layer_ids"]) == 5
+    assert config.dflash2_config["selector_rank"] == 256
+    assert len(config.dflash2_config["target_layer_ids"]) == 5
     assert selector_alpha(args, 0, 10) == 0
     assert selector_alpha(args, 2, 10) == 1 / 3
     assert selector_alpha(args, 5, 10) == 1
@@ -238,5 +352,5 @@ def test_qwen35_normalized_config_builds_dflash_draft():
         backbone_conv=False,
     )
     config = build_family_config(args, "dflash", source_config=normalized)
-    assert config.dlite_source_model_type == "qwen3_5"
+    assert config.target_source_model_type == "qwen3_5"
     assert isinstance(DFlashDraftModel(config), DFlashDraftModel)
