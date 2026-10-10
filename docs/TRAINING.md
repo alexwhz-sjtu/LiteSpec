@@ -205,6 +205,84 @@ single-batch transition uses equal loss weights in ordinary training and only
 the stage-1 weight in disaggregated training; teacher `max_steps` shortens the
 disaggregated scheduler, but not the ordinary scheduler.
 
+## Optional FSDP1 Muon + AdamW
+
+All six training YAMLs expose `arguments.use_muon` (default `false`). Enable it
+with `use_muon: true` or append `--use-muon` to an existing launch command. No
+model/config architecture change or extra optimizer dependency is needed.
+
+```yaml
+use_muon: true
+muon_lr: 0.02
+muon_momentum: 0.95
+muon_weight_decay: 0.1
+muon_nesterov: true
+muon_ns_steps: 5
+muon_ns_coefficients: [3.4445, -4.775, 2.0315]
+muon_eps: 0.0000001
+muon_adjust_lr_fn: original
+muon_matrices_per_rank: 1
+muon_adamw_lr: 0.0004
+muon_adamw_betas: [0.9, 0.999]
+muon_adamw_weight_decay: 0.1
+```
+
+When enabled, `muon_lr` and `muon_adamw_lr` replace `learning_rate` for their
+respective optimizers. Both follow the existing warmup/cosine schedule. When
+disabled, all `muon_*` settings are ignored and the original AdamW behavior,
+including its zero weight decay and `learning_rate`, is unchanged. CLI flags use
+hyphens instead of underscores; CLI overrides appended to the launcher override
+the YAML (including `--no-use-muon`).
+
+Muon owns Attention/MLP/fc 2-D linear weights, convolution
+`kernel_projection.weight`, and DLite teacher `history_fuse.weight`. AdamW owns
+norms, biases, `base_kernel`, trainable embeddings, and **all** parameters under
+selector, DSpark `markov_head`/`confidence_head`, and DLite `sequential_head`.
+These module exceptions take precedence over tensor dimensionality. Norms and
+biases use the configured AdamW weight decay too; there is no implicit no-decay
+group. Unknown or conflicting ownership is an error.
+
+After the accumulation window is normalized, one global norm clips both groups
+together (`max_grad_norm`, default 1.0). Master weights and Muon momentum remain
+FP32 local shards. Muon batches same-shape matrices, exchanges BF16 update
+directions with two all-to-alls, orthogonalizes full matrices on assigned ranks,
+and returns the updates to their original shards. Each matrix has its own norm
+and Newton–Schulz iterations. LR scaling uses the **full** shape, while decoupled
+weight decay uses the base LR. The math follows PyTorch 2.9.1's implementation.
+
+`muon_matrices_per_rank: 1` already batches up to one matrix per rank in parallel;
+larger values allow more matrices per compute rank and consume more temporary
+memory. Up to two batches are in flight to overlap collection with computation.
+The draft FSDP process group, not target ranks, participates in these exchanges.
+The initial adapter supports the pinned PyTorch 2.9.1 FSDP1 configuration:
+`use_orig_params=True`, `SHARD_GRAD_OP`, no CPU offload (single-rank `NO_SHARD`
+is also accepted). Replicated trainable parameters outside FSDP are rejected.
+
+`train/learning_rate` retains the AdamW LR; hybrid runs additionally log
+`train/adamw_learning_rate` and `train/muon_learning_rate`. Frozen/no-gradient
+parameters skip both optimizer state updates and weight decay. DLite two-stage
+registration includes future-unfrozen parameters from the beginning.
+
+Hybrid checkpoints retain rank-local master weights, both optimizers, both
+schedulers, parameter ownership and shard layouts. Resume requires the same
+topology and optimizer configuration. Switching between AdamW-only and hybrid
+mode is **not** an exact resume and is rejected; start a new run using the
+workflow's model initialization path instead. Existing AdamW-only checkpoints
+remain supported with `use_muon: false`.
+
+Validation/benchmark commands (run from the repository root):
+
+```bash
+PYTHONPATH=. .venv/bin/python -m torch.distributed.run --standalone --nproc-per-node=2 tests/distributed_muon_smoke.py
+PYTHONPATH=. .venv/bin/python -m torch.distributed.run --standalone --nproc-per-node=3 tests/distributed_muon_smoke.py --subgroup
+PYTHONPATH=. .venv/bin/python -m torch.distributed.run --standalone --nproc-per-node=2 tests/benchmark_fsdp_muon.py
+```
+
+The benchmark uses identical gradients and optimizer settings for serial-matrix
+and batched routing, warms up and synchronizes GPUs, then reports per-step time,
+peak allocated memory and matrix exchange calls. It is an optimizer-only
+microbenchmark, not an end-to-end training speed claim.
+
 ## Disaggregated target/draft execution
 
 Set `disaggregate: true` for online JSONL training in any algorithm YAML. The

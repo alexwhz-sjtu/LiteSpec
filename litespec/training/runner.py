@@ -164,6 +164,13 @@ def log_window(session, window, grad_norm):
         detail_metrics=details,
         detail_prefix=prefix,
     )
+    if getattr(session.optimizer, "use_muon", False):
+        payload.update(
+            {
+                f"train/{name}_learning_rate": value
+                for name, value in session.optimizer.get_learning_rates().items()
+            }
+        )
     session.tracker.log(payload, step=session.state.optimizer_step)
     if not dist.is_initialized() or dist.get_rank() == session.coordinator_rank:
         print(

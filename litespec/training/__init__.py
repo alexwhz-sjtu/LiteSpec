@@ -5,7 +5,7 @@ def run_training(algorithm, *, mode=None):
     from .runner import configure_rank_caches
 
     configure_rank_caches()
-    from .registry import get_training_adapter
+    from .algorithms import get_training_adapter
 
     adapter = get_training_adapter(algorithm)
     args = adapter.parse_args(mode)

@@ -58,11 +58,17 @@ def session_metadata(session):
         "scheduler_learning_rate": float(session.args.learning_rate),
         "scheduler_warmup_ratio": float(session.args.warmup_ratio),
         "train_data_identity": training_data_identity(session.args),
-        "train_data_mode": "regen_full"
-        if session.args.train_hidden_states_path
-        else "online",
+        "train_data_mode": (
+            "regen_full" if session.args.train_hidden_states_path else "online"
+        ),
         **session.adapter.training_metadata(session),
     }
+    if getattr(session.args, "use_muon", False):
+        from .muon import muon_config_from_args
+
+        metadata["optimizer_kind"] = "muon_adamw_v1"
+        metadata["muon_config"] = muon_config_from_args(session.args)
+        metadata["scheduler_learning_rate"] = metadata["muon_config"]["adamw_lr"]
     if session.topology is not None:
         metadata.update(topology_identity(session.args, session.topology))
     return metadata
@@ -72,6 +78,10 @@ def validate_session_resume(session):
     if session.resume is None:
         return
     expected = session_metadata(session)
+    if session.resume.get("optimizer_kind", "adamw") != expected.get(
+        "optimizer_kind", "adamw"
+    ):
+        raise ValueError("Cannot resume across AdamW-only and Muon/AdamW modes")
     # These describe a particular update, not the immutable training contract.
     progress_keys = {
         "cursor",
@@ -81,9 +91,9 @@ def validate_session_resume(session):
         "selector_effective_alpha",
     }
     for key, value in expected.items():
-        if key not in progress_keys and session.resume[key] != value:
+        if key not in progress_keys and session.resume.get(key) != value:
             raise ValueError(
-                f"Resume mismatch for {key}: saved={session.resume[key]!r}, requested={value!r}"
+                f"Resume mismatch for {key}: saved={session.resume.get(key)!r}, requested={value!r}"
             )
     from .algorithms import RunState
 
@@ -401,9 +411,9 @@ def training_identity(args):
         "accumulation_steps": int(args.accumulation_steps),
         "batch_size": int(args.batch_size),
         "node_batch_size": args.node_batch_size if args.disaggregate else None,
-        "draft_micro_batch_size": args.draft_micro_batch_size
-        if args.disaggregate
-        else None,
+        "draft_micro_batch_size": (
+            args.draft_micro_batch_size if args.disaggregate else None
+        ),
         "target_model_path": os.path.realpath(args.target_model_path),
     }
 

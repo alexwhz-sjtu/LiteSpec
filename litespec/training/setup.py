@@ -230,7 +230,7 @@ def training_data_identity(args) -> str:
 
 
 def required_hidden_layer_ids(draft_models) -> set[int]:
-    from .registry import get_training_adapter
+    from .algorithms import get_training_adapter
 
     required: set[int] = set()
     for draft in draft_models:
@@ -693,8 +693,14 @@ def build_training_session(args, adapter):
         reserve_output_dir,
         validate_session_resume,
     )
+    from .fsdp_layout import build_fsdp_layouts
     from .logging import create_tracker
-    from .optimizer import BF16Optimizer, optimizer_step_count
+    from .muon import muon_config_from_args
+    from .optimizer import (
+        BF16Optimizer,
+        optimizer_step_count,
+        register_optimizer_parameters,
+    )
 
     session = TrainingSession(args, adapter, adapter.phases(args))
     if args.disaggregate:
@@ -774,17 +780,34 @@ def build_training_session(args, adapter):
     if session.total_steps <= 0:
         raise ValueError("The training schedule has no optimizer steps")
     session.online = adapter.make_online(session)
+    muon_config = muon_config_from_args(args)
+    parameters = specs = layouts = None
+    if muon_config is not None:
+        parameters, specs = register_optimizer_parameters(
+            session.draft, adapter.optimizer_parameters(session)
+        )
     session.fsdp = wrap_training_model(
         session.online, session.components, process_group=session.process_group
     )
+    if muon_config is not None:
+        layouts = build_fsdp_layouts(
+            session.fsdp, parameters, specs, session.process_group
+        )
     session.optimizer = BF16Optimizer(
         session.draft,
-        parameters=adapter.optimizer_parameters(session),
+        parameters=(
+            parameters
+            if muon_config is not None
+            else adapter.optimizer_parameters(session)
+        ),
         lr=args.learning_rate,
         max_grad_norm=args.max_grad_norm,
         warmup_ratio=args.warmup_ratio,
         total_steps=session.total_steps,
         process_group=session.process_group,
+        muon_config=muon_config,
+        parameter_specs=specs,
+        parameter_layouts=layouts,
     )
     validate_session_resume(session)
     if session.resume is not None:

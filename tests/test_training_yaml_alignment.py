@@ -46,6 +46,19 @@ COMMON_ARGUMENT_KEYS = (
     "learning_rate",
     "warmup_ratio",
     "max_grad_norm",
+    "use_muon",
+    "muon_lr",
+    "muon_momentum",
+    "muon_weight_decay",
+    "muon_nesterov",
+    "muon_ns_steps",
+    "muon_ns_coefficients",
+    "muon_eps",
+    "muon_adjust_lr_fn",
+    "muon_matrices_per_rank",
+    "muon_adamw_lr",
+    "muon_adamw_betas",
+    "muon_adamw_weight_decay",
     "seed",
     "cache_dir",
     "build_dataset_num_proc",
@@ -121,6 +134,37 @@ def test_algorithm_specific_yaml_fields_stay_scoped():
     assert configs["dspark"]["arguments"]["backbone_conv"] is False
     assert "conv_kernel_size" in configs["dspark"]["arguments"]
     assert "conv_group_size" in configs["dspark"]["arguments"]
+
+
+@pytest.mark.parametrize("name", CONFIGS)
+def test_muon_yaml_roundtrip_and_cli_override(name):
+    from litespec.training.algorithms import get_training_adapter
+    from litespec.training.muon import MUON_DEFAULTS, muon_config_from_args
+    from scripts.config.training_launcher import arguments_to_cli
+
+    config = _config(name)
+    args = config["arguments"]
+    assert args["use_muon"] is False
+    for key, value in MUON_DEFAULTS.items():
+        assert args[f"muon_{key}"] == (
+            list(value) if isinstance(value, tuple) else value
+        )
+    mode = name.removeprefix("dlite_") if name.startswith("dlite_") else None
+    adapter = get_training_adapter("dlite" if mode else name)
+    base = [
+        "--target-model-path",
+        "target",
+        "--train-data-path",
+        "train.jsonl",
+        "--output-dir",
+        "out",
+    ]
+    if mode == "two_stage":
+        base += ["--teacher-draft-path", "teacher"]
+    parsed = adapter.parse_args(
+        mode, argv=base + arguments_to_cli(args) + ["--use-muon", "--muon-lr", "0.03"]
+    )
+    assert muon_config_from_args(parsed)["lr"] == 0.03
 
 
 @pytest.mark.parametrize(("name", "script"), SCRIPTS.items())

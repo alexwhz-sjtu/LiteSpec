@@ -110,7 +110,13 @@ class ToyRecipe:
 
 
 def make_session(
-    algorithm="dflash", mode=None, *, disaggregate=False, micro=1, random=False
+    algorithm="dflash",
+    mode=None,
+    *,
+    disaggregate=False,
+    micro=1,
+    random=False,
+    use_muon=False,
 ):
     base = get_training_adapter(algorithm)
     args = SimpleNamespace(
@@ -141,6 +147,7 @@ def make_session(
         target_ranks_per_node=1,
         target_tp_size=1,
         sglang_ep_size=1,
+        use_muon=use_muon,
     )
     session = TrainingSession(args, ToyRecipe(base, random=random), base.phases(args))
     session.draft = ToyDraft()
@@ -159,6 +166,7 @@ def make_session(
         total_steps=session.total_steps,
         warmup_ratio=0,
         max_grad_norm=100,
+        muon_config={} if use_muon else None,
     )
     session.tracker = Tracker()
     return session
@@ -187,8 +195,11 @@ def record_save(events):
 
 @pytest.mark.parametrize("algorithm,mode", WORKFLOWS)
 @pytest.mark.parametrize("disaggregate", [False, True])
-def test_all_workflows_execute_one_shared_loop(algorithm, mode, disaggregate):
-    session = make_session(algorithm, mode, disaggregate=disaggregate)
+@pytest.mark.parametrize("use_muon", [False, True])
+def test_all_workflows_execute_one_shared_loop(algorithm, mode, disaggregate, use_muon):
+    session = make_session(
+        algorithm, mode, disaggregate=disaggregate, use_muon=use_muon
+    )
     saves = []
     run_draft(session, batch_source=source, save=record_save(saves))
     assert session.state.optimizer_step == session.total_steps
@@ -275,10 +286,13 @@ def test_max_steps_tail_and_no_final_save():
     "at",
     ["stage1/epoch_1_step_4", "stage1/final", "transition", "stage2/epoch_0_step_2"],
 )
-def test_resume_preserves_random_stream_and_continuous_optimizer(tmp_path, at):
+@pytest.mark.parametrize("use_muon", [False, True])
+def test_resume_preserves_random_stream_and_continuous_optimizer(
+    tmp_path, at, use_muon
+):
     # Capture both within-stage updates and transition boundary checkpoints.
     def make():
-        s = make_session("dlite", "two_stage", random=True)
+        s = make_session("dlite", "two_stage", random=True, use_muon=use_muon)
         s.args.save_interval = 1
         s.args.accumulation_steps = 2
         s.total_steps = sum(math.ceil(p.batch_count(3) / 2) for p in s.phases)
@@ -289,6 +303,7 @@ def test_resume_preserves_random_stream_and_continuous_optimizer(tmp_path, at):
             total_steps=s.total_steps,
             warmup_ratio=0,
             max_grad_norm=100,
+            muon_config={} if use_muon else None,
         )
         return s
 
