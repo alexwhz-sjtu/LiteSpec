@@ -96,26 +96,12 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     train.add_argument("--muon-momentum", type=float, default=0.95)
     train.add_argument("--muon-weight-decay", type=float, default=0.1)
     train.add_argument(
-        "--muon-nesterov", action=argparse.BooleanOptionalAction, default=True
-    )
-    train.add_argument("--muon-ns-steps", type=int, default=5)
-    train.add_argument(
-        "--muon-ns-coefficients", type=float, nargs=3, default=(3.4445, -4.775, 2.0315)
-    )
-    train.add_argument("--muon-eps", type=float, default=1e-7)
-    train.add_argument(
-        "--muon-adjust-lr-fn",
-        choices=("original", "match_rms_adamw"),
-        default="original",
-    )
-    train.add_argument(
         "--muon-matrices-per-rank",
         type=int,
         default=1,
         help="Maximum same-shape matrices per compute rank in each Muon batch.",
     )
     train.add_argument("--muon-adamw-lr", type=float, default=0.0004)
-    train.add_argument("--muon-adamw-betas", type=float, nargs=2, default=(0.9, 0.999))
     train.add_argument("--muon-adamw-weight-decay", type=float, default=0.1)
     train.add_argument("--seed", type=int, default=42)
     train.add_argument("--tp-size", type=int, default=1)
@@ -239,16 +225,16 @@ def validate_common_args(parser: argparse.ArgumentParser, args) -> None:
                 parser.error(
                     "disaggregate target/draft rank total must equal nproc_per_node"
                 )
-        required = (
+        required_arg_names = (
             "target_ranks_per_node",
             "draft_ranks_per_node",
             "node_batch_size",
         )
-        missing = [name for name in required if getattr(args, name) is None]
-        if missing:
+        missing_arg_names = [name for name in required_arg_names if getattr(args, name) is None]
+        if missing_arg_names:
             parser.error(
                 "--disaggregate requires "
-                + ", ".join(f"--{name.replace('_', '-')}" for name in missing)
+                + ", ".join(f"--{name.replace('_', '-')}" for name in missing_arg_names)
             )
         if args.train_hidden_states_path:
             parser.error("--disaggregate supports --train-data-path only")

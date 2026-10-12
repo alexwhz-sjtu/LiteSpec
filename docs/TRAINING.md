@@ -216,16 +216,13 @@ use_muon: true
 muon_lr: 0.02
 muon_momentum: 0.95
 muon_weight_decay: 0.1
-muon_nesterov: true
-muon_ns_steps: 5
-muon_ns_coefficients: [3.4445, -4.775, 2.0315]
-muon_eps: 0.0000001
-muon_adjust_lr_fn: original
 muon_matrices_per_rank: 1
 muon_adamw_lr: 0.0004
-muon_adamw_betas: [0.9, 0.999]
 muon_adamw_weight_decay: 0.1
 ```
+
+Newton–Schulz steps/coefficients, Nesterov, `eps`, the shape-LR rule, and
+AdamW betas are fixed internals (`MUON_DEFAULTS`); they are not YAML/CLI options.
 
 When enabled, `muon_lr` and `muon_adamw_lr` replace `learning_rate` for their
 respective optimizers. Both follow the existing warmup/cosine schedule. When

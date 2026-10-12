@@ -78,23 +78,23 @@ class DFlashGroupedConv(nn.Module):
         *,
         side: int,
     ) -> torch.Tensor:
-        batch_size, sequence_length, hidden_size = hidden_states.shape
-        if sequence_length % self.block_size:
+        bsz, seq_len, hidden_size = hidden_states.shape
+        if seq_len % self.block_size:
             raise ValueError(
                 "DFlash2 convolution sequence length must be divisible by "
-                f"block_size={self.block_size}, got {sequence_length}"
+                f"block_size={self.block_size}, got {seq_len}"
             )
 
-        num_blocks = sequence_length // self.block_size
+        num_blocks = seq_len // self.block_size
         blocks = hidden_states.reshape(
-            batch_size,
+            bsz,
             num_blocks,
             self.block_size,
             self.num_groups,
             self.group_size,
         )
         dynamic = delta.reshape(
-            batch_size,
+            bsz,
             num_blocks,
             self.block_size,
             self.taps,
@@ -117,7 +117,7 @@ class DFlashGroupedConv(nn.Module):
                 (0, 0, 0, 0, tap, 0),
             )
             output = output + coefficients[:, :, :, tap] * shifted
-        return output.reshape(batch_size, sequence_length, hidden_size)
+        return output.reshape(bsz, seq_len, hidden_size)
 
     def prepare(self, hidden_states: torch.Tensor):
         coefficients = self.kernel_projection(hidden_states).reshape(
@@ -446,8 +446,8 @@ class DFlash2DraftModel(DFlashDraftModel):
     ) -> tuple[torch.LongTensor, Optional[torch.Tensor], torch.LongTensor]:
         """Return the official sparse selector proposal for verification."""
 
-        hidden = draft_hidden[:, -self.block_size + 1 :, :]
-        unary_logits = self.transform_unary_logits(target_lm_head(target)(hidden))
+        draft_prediction_hidden = draft_hidden[:, -self.block_size + 1 :, :]
+        unary_logits = self.transform_unary_logits(target_lm_head(target)(draft_prediction_hidden))
         unary_topk, candidate_ids = unary_logits.topk(
             self.candidate_selector.top_k,
             dim=-1,
@@ -455,7 +455,7 @@ class DFlash2DraftModel(DFlashDraftModel):
         token_ids, probabilities = self.candidate_selector.select_path(
             candidate_ids=candidate_ids,
             unary_logits=unary_topk,
-            hidden_states=hidden,
+            hidden_states=draft_prediction_hidden,
             anchor_token_ids=block_output_ids[:, 0],
             temperature=temperature,
         )

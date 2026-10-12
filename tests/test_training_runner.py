@@ -25,6 +25,7 @@ from litespec.training.checkpoint import (
     validate_training_identity,
 )
 from litespec.training.optimizer import BF16Optimizer
+from litespec.training.muon import MUON_CLI_KEYS, MUON_DEFAULTS, muon_config_from_args
 from litespec.training.recipes.dlite import _cosine_transition_scales
 from litespec.training.runner import run_draft
 
@@ -78,18 +79,20 @@ class ToyRecipe:
             )
         )
 
-    def compute_step(self, session, data, *, begin, end, detailed):
+    def compute_step(
+        self, session, data, *, microbatch_start, microbatch_end, collect_detailed_metrics
+    ):
         self.calls.append(
             (
                 session.phase.name,
                 session.state.global_step,
                 session.state.optimizer_step,
-                begin,
-                end,
-                detailed,
+                microbatch_start,
+                microbatch_end,
+                collect_detailed_metrics,
             )
         )
-        x, y, weight = data[begin:end].T
+        x, y, weight = data[microbatch_start:microbatch_end].T
         if self.random:
             x = x + torch.rand_like(x)
         values = session.draft(x[:, None]).flatten()
@@ -148,6 +151,7 @@ def make_session(
         target_tp_size=1,
         sglang_ep_size=1,
         use_muon=use_muon,
+        **{f"muon_{key}": MUON_DEFAULTS[key] for key in MUON_CLI_KEYS},
     )
     session = TrainingSession(args, ToyRecipe(base, random=random), base.phases(args))
     session.draft = ToyDraft()
@@ -166,7 +170,7 @@ def make_session(
         total_steps=session.total_steps,
         warmup_ratio=0,
         max_grad_norm=100,
-        muon_config={} if use_muon else None,
+        muon_config=muon_config_from_args(args),
     )
     session.tracker = Tracker()
     return session
@@ -263,7 +267,7 @@ def test_actual_epoch_source_resumes_and_does_not_flush_at_epoch_boundary():
         def __iter__(self):
             return iter([values(i) for i in range(3)])
 
-    session.loader = Loader()
+    session.dataloader = Loader()
     run_draft(session, save=lambda *a: None)
     assert epochs == [0, 1]
     assert [call[2] for call in session.adapter.calls] == [0, 0, 0, 0, 1, 1]
@@ -303,7 +307,7 @@ def test_resume_preserves_random_stream_and_continuous_optimizer(
             total_steps=s.total_steps,
             warmup_ratio=0,
             max_grad_norm=100,
-            muon_config={} if use_muon else None,
+            muon_config=muon_config_from_args(s.args),
         )
         return s
 
@@ -329,10 +333,10 @@ def test_resume_preserves_random_stream_and_continuous_optimizer(
     expected = copy.deepcopy(session.draft.state_dict())
     restore_rng_state(initial_rng)
     resumed = make()
-    resumed.resume = load_distributed_training_state(str(tmp_path))
-    validate_training_identity(resumed.resume, resumed.args)
+    resumed.resume_state = load_distributed_training_state(str(tmp_path))
+    validate_training_identity(resumed.resume_state, resumed.args)
     validate_session_resume(resumed)
-    resumed.optimizer.load_state_dict(resumed.resume)
+    resumed.optimizer.load_state_dict(resumed.resume_state)
     torch.rand(19)  # setup/replay must not perturb the restored training stream
     run_draft(resumed, batch_source=source, save=lambda *a: None)
     assert resumed.state == session.state
@@ -400,7 +404,7 @@ def test_v1_is_rejected_and_cursor_contract_is_strict():
         state = {**training_identity(session.args), key: value}
         with pytest.raises(ValueError, match=key):
             validate_training_identity(state, session.args)
-    session.resume = {
+    session.resume_state = {
         **session_metadata(session),
         "cursor": asdict(RunState(next_batch=1, phase_step=1, global_step=1)),
     }
@@ -449,7 +453,7 @@ def test_target_lifecycle_drains_schemas_and_skips_consumed_packets(
     session.args.pipeline_depth = 2
     session.topology.is_target_leader = True
     session.topology.rank = 0
-    session.resume = {"cursor": {"global_step": 2}}
+    session.resume_state = {"cursor": {"global_step": 2}}
     events = []
 
     class Loader:
@@ -482,7 +486,7 @@ def test_target_lifecycle_drains_schemas_and_skips_consumed_packets(
             ("produce", current)
         ),
     )
-    session.loader = Loader()
+    session.dataloader = Loader()
     monkeypatch.setattr(transport, "NodePacketTransport", Transport)
     monkeypatch.setattr(setup, "_broadcast_input", lambda *a: a[-1])
     monkeypatch.setattr(
@@ -513,7 +517,7 @@ def test_real_dlite_recipe_objectives_on_cpu(monkeypatch, phase_name, disaggrega
         prepare_history_hidden_states,
         prepare_target_hidden,
     )
-    from litespec.distributed.transport import DraftBatchPacket
+    from litespec.distributed.transport import DLiteBatchPacket
     from litespec.modeling.draft.dlite import DLiteDraftModel
     from litespec.training.recipes import dlite
 
@@ -579,8 +583,8 @@ def test_real_dlite_recipe_objectives_on_cpu(monkeypatch, phase_name, disaggrega
     session.components = components
     if disaggregate:
         session.topology = SimpleNamespace(draft_group=None)
-    session.online = base.make_online(session)
-    session.fsdp = session.online
+    session.draft_online = base.make_online(session)
+    session.fsdp_model = session.draft_online
     base.enter_phase(session, session.phase)
     anchors = torch.tensor([[0, 4]])
     keep = torch.ones_like(anchors, dtype=torch.bool)
@@ -619,7 +623,7 @@ def test_real_dlite_recipe_objectives_on_cpu(monkeypatch, phase_name, disaggrega
             if session.phase.need_prediction_hidden
             else None
         )
-        batch = DraftBatchPacket(
+        batch = DLiteBatchPacket(
             ids,
             torch.ones_like(ids),
             anchors,
@@ -630,7 +634,7 @@ def test_real_dlite_recipe_objectives_on_cpu(monkeypatch, phase_name, disaggrega
             history,
             prediction,
         )
-        output = base.compute_step(session, batch, begin=0, end=1)
+        output = base.compute_step(session, batch, microbatch_start=0, microbatch_end=1)
     else:
         output = base.compute_step(
             session,
@@ -652,10 +656,10 @@ def test_real_dlite_recipe_objectives_on_cpu(monkeypatch, phase_name, disaggrega
 
 
 @pytest.mark.parametrize("algorithm", ["dflash", "dflash2", "dspark"])
-def test_real_family_recipe_online_offline_and_packet_match(monkeypatch, algorithm):
+def test_real_dflash_family_recipe_online_offline_and_packet_match(monkeypatch, algorithm):
     from refactor_baseline import capture
 
-    from litespec.distributed.transport import FamilyBatchPacket
+    from litespec.distributed.transport import DFlashFamilyBatchPacket
 
     monkeypatch.setattr(torch.Tensor, "cuda", lambda tensor, **kwargs: tensor)
     base = get_training_adapter(algorithm)
@@ -686,8 +690,8 @@ def test_real_family_recipe_online_offline_and_packet_match(monkeypatch, algorit
     )
     session.components.lm_head.requires_grad_(False)
     session.components.embed_tokens.requires_grad_(False)
-    session.online = base.make_online(session)
-    session.fsdp = session.online
+    session.draft_online = base.make_online(session)
+    session.fsdp_model = session.draft_online
     session.total_steps = 10
     hidden = {i: torch.randn(1, 12, 16) for i in range(4)}
     data = dict(
@@ -704,16 +708,22 @@ def test_real_family_recipe_online_offline_and_packet_match(monkeypatch, algorit
         torch.manual_seed(7)
         session.draft.zero_grad(set_to_none=True)
         if route == "online":
-            output = base.compute_step(session, data, detailed=True)
+            output = base.compute_step(session, data, collect_detailed_metrics=True)
         elif route == "offline":
             session.target = None
-            output = base.compute_step(session, data, detailed=True)
+            output = base.compute_step(session, data, collect_detailed_metrics=True)
         else:
             session.topology = SimpleNamespace(draft_group=None)
-            packet = FamilyBatchPacket(
+            packet = DFlashFamilyBatchPacket(
                 data["input_ids"], data["loss_mask"], hidden[1], hidden[3]
             )
-            output = base.compute_step(session, packet, begin=0, end=1, detailed=True)
+            output = base.compute_step(
+                session,
+                packet,
+                microbatch_start=0,
+                microbatch_end=1,
+                collect_detailed_metrics=True,
+            )
         output.loss_terms.numerator.backward()
         results.append(
             (

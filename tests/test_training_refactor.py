@@ -249,7 +249,7 @@ def test_dlite_config_builder_replaces_target_architecture(monkeypatch):
         mask_token_id=31,
         attention_backend="eager",
     )
-    config = common.build_draft_config(args, model_role="pivot_q_student")
+    config = common.build_draft_config(args, model_role="student")
     assert config.architectures == ["DLiteDraftModel"]
     assert DLiteDraftModel(config).block_size == 4
 

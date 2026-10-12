@@ -83,9 +83,9 @@ def load_yaml_config(
     unknown = sorted(set(launcher) - allowed)
     if unknown:
         raise ConfigError(f"unknown launcher keys: {unknown}")
-    missing = [key for key in ("target_model", "output_dir") if not launcher.get(key)]
-    if missing:
-        raise ConfigError(f"missing launcher keys: {missing}")
+    missing_field_names = [key for key in ("target_model", "output_dir") if not launcher.get(key)]
+    if missing_field_names:
+        raise ConfigError(f"missing launcher keys: {missing_field_names}")
     if bool(launcher.get("train_data")) == bool(launcher.get("train_hidden_states")):
         raise ConfigError(
             "set exactly one of launcher.train_data and launcher.train_hidden_states"
@@ -129,12 +129,12 @@ def validate_common_settings(
         return
     if offline:
         raise ConfigError("disaggregate supports train_data only")
-    required = ("target_ranks_per_node", "draft_ranks_per_node", "node_batch_size")
-    missing = [name for name in required if arguments.get(name) is None]
-    if missing:
+    required_arg_names = ("target_ranks_per_node", "draft_ranks_per_node", "node_batch_size")
+    missing_arg_names = [name for name in required_arg_names if arguments.get(name) is None]
+    if missing_arg_names:
         raise ConfigError(
             "disaggregate requires "
-            + ", ".join(f"arguments.{name}" for name in missing)
+            + ", ".join(f"arguments.{name}" for name in missing_arg_names)
         )
     target_ranks = _positive_int(
         arguments["target_ranks_per_node"], "arguments.target_ranks_per_node"

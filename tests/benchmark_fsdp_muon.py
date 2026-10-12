@@ -49,12 +49,12 @@ def main():
         torch.manual_seed(101)
         model = MatrixBank(args.matrices, args.rows, args.cols).cuda().bfloat16()
         parameters, specs = register_optimizer_parameters(model)
-        fsdp = FSDP(
+        fsdp_model = FSDP(
             model,
             use_orig_params=True,
             sharding_strategy=ShardingStrategy.SHARD_GRAD_OP,
         )
-        layouts = build_fsdp_layouts(fsdp, parameters, specs)
+        layouts = build_fsdp_layouts(fsdp_model, parameters, specs)
         opt = BF16Optimizer(
             model,
             lr=0.1,

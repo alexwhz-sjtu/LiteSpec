@@ -6,8 +6,8 @@ import torch
 import torch.distributed as dist
 
 from litespec.distributed.transport import (
-    DraftBatchPacket,
-    DraftPacketSpec,
+    DLiteBatchPacket,
+    DLitePacketSpec,
     NodePacketTransport,
     build_node_routes,
 )
@@ -42,13 +42,13 @@ def main():
         dist.barrier()
         destroy_distributed()
         return
-    local_batch = (
+    local_batch_size = (
         args.node_batch // topology.target_replicas_per_node
         if topology.is_target
         else args.node_batch // topology.draft_ranks_per_node
     )
-    spec = DraftPacketSpec(local_batch, 4, 2, 2, 4, 2)
-    packet = DraftBatchPacket.empty(spec, device="cuda")
+    spec = DLitePacketSpec(local_batch_size, 4, 2, 2, 4, 2)
+    packet = DLiteBatchPacket.empty(spec, device="cuda")
     transport = NodePacketTransport(topology=topology, routes=routes)
     if topology.is_target_leader:
         for index, tensor in enumerate(packet.tensors()):

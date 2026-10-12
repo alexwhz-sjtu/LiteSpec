@@ -17,7 +17,7 @@ def test_independent_training_and_benchmark_entrypoints_exist():
         assert f'run_training("{algorithm}")' in trainer.read_text(encoding="utf-8")
 
 
-def test_family_training_excludes_removed_objectives():
+def test_dflash_family_training_excludes_removed_objectives():
     source = (
         ROOT / "litespec/training/recipes/_dflash_common.py"
     ).read_text(encoding="utf-8")

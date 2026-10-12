@@ -11,8 +11,8 @@ from litespec.training.setup import validate_resume_topology
 from litespec.training.config import add_common_args
 from litespec.training.config import validate_common_args
 from litespec.distributed.transport import (
-    DraftBatchPacket,
-    DraftPacketSpec,
+    DLiteBatchPacket,
+    DLitePacketSpec,
     build_node_routes,
     copy_packet_slice,
 )
@@ -46,7 +46,7 @@ def test_three_producers_route_six_samples_to_two_drafts():
 
 
 def test_packet_contains_history_and_prediction_hidden_but_no_logits():
-    spec = DraftPacketSpec(
+    spec = DLitePacketSpec(
         batch_size=2,
         max_length=8,
         num_anchors=4,
@@ -56,8 +56,8 @@ def test_packet_contains_history_and_prediction_hidden_but_no_logits():
         num_history_layers=3,
         include_target_prediction_hidden=True,
     )
-    source = DraftBatchPacket.empty(spec, device="cpu")
-    destination = DraftBatchPacket.empty(spec, device="cpu")
+    source = DLiteBatchPacket.empty(spec, device="cpu")
+    destination = DLiteBatchPacket.empty(spec, device="cpu")
     source.target_history_hidden.fill_(5)
     source.target_prediction_hidden.fill_(7)
     copy_packet_slice(
@@ -76,8 +76,8 @@ def test_packet_contains_history_and_prediction_hidden_but_no_logits():
 
 
 def test_packet_layer_union_is_reordered_for_each_draft():
-    spec = DraftPacketSpec(1, 4, 2, 3, 1, 2)
-    packet = DraftBatchPacket.empty(spec, device="cpu")
+    spec = DLitePacketSpec(1, 4, 2, 3, 1, 2)
+    packet = DLiteBatchPacket.empty(spec, device="cpu")
     packet.target_hidden[..., 0, :].fill_(2)
     packet.target_hidden[..., 1, :].fill_(7)
     packet.target_hidden[..., 2, :].fill_(11)
@@ -185,14 +185,14 @@ def test_resume_model_identity_rejects_layer_mismatch():
         (),
         {
             "architecture_version": "dlite_v1",
-            "model_role": "pivot_q_student",
+            "model_role": "student",
             "target_layer_ids": [0, 3, 7],
             "config": type("Config", (), {"num_target_layers": 8, "hidden_size": 16})(),
         },
     )()
     state = {
         "architecture_version": "dlite_v1",
-        "model_role": "pivot_q_student",
+        "model_role": "student",
         "target_layer_ids": [0, 7],
         "num_target_layers": 8,
         "target_hidden_size": 16,

@@ -7,7 +7,8 @@ input streams differ; a packet's microbatches never change accumulation counts.
 import os
 from pathlib import Path
 
-
+# Isolate each rank's Triton/Inductor/TVM compile cache so concurrent
+# torchrun processes do not corrupt a shared kernel-build directory.
 def configure_rank_caches():
     root = Path(__file__).resolve().parents[2]
     rank = os.environ.get("RANK", "0")
@@ -19,7 +20,7 @@ def configure_rank_caches():
         value = (
             os.environ.get(name.removesuffix("_DIR") + "_ROOT")
             or os.environ.get(name)
-            or str(root / "cache" / directory)
+            or str(root / ".cache" / directory)
         )
         os.environ[name] = str(Path(value) / f"rank_{rank}")
 
@@ -122,7 +123,7 @@ def iter_logical_batches(session, phase):
     for epoch in range(state.epoch, phase.epochs):
         start = state.next_batch if epoch == state.epoch else 0
         for _, data in iter_epoch(
-            session.loader,
+            session.dataloader,
             epoch,
             start_batch=start,
             description=f"{phase.name} epoch {epoch}",
@@ -133,13 +134,14 @@ def iter_logical_batches(session, phase):
 
 
 def iter_microbatch_slices(session):
+    """Yield sample-axis (start, exclusive end) bounds; (None, None) uses the full batch."""
     if session.topology is None:
         yield None, None
     else:
-        size = session.args.node_batch_size // session.args.draft_ranks_per_node
-        micro = session.args.draft_micro_batch_size
-        for begin in range(0, size, micro):
-            yield begin, begin + micro
+        local_batch_size = session.args.node_batch_size // session.args.draft_ranks_per_node
+        micro_batch_size = session.args.draft_micro_batch_size
+        for microbatch_start in range(0, local_batch_size, micro_batch_size):
+            yield microbatch_start, microbatch_start + micro_batch_size
 
 
 def log_window(session, window, grad_norm):
@@ -147,7 +149,7 @@ def log_window(session, window, grad_norm):
 
     from .logging import build_training_log_payload
 
-    reduced = session.adapter.log_metrics(
+    reduced_metrics = session.adapter.log_metrics(
         session, window.metrics.reduce(session.process_group)
     )
     details = {
@@ -159,7 +161,7 @@ def log_window(session, window, grad_norm):
     if session.adapter.modes:
         prefix += "/" + session.phase.name
     payload = build_training_log_payload(
-        reduced,
+        reduced_metrics,
         session.optimizer.get_learning_rate(),
         detail_metrics=details,
         detail_prefix=prefix,
@@ -175,7 +177,8 @@ def log_window(session, window, grad_norm):
     if not dist.is_initialized() or dist.get_rank() == session.coordinator_rank:
         print(
             f"{prefix} optimizer_step={session.state.optimizer_step} "
-            f"micro_step={session.state.global_step} loss={float(reduced['objective/loss']):.4f}",
+            f"micro_step={session.state.global_step} "
+            f"loss={float(reduced_metrics['objective/loss']):.4f}",
             flush=True,
         )
 
@@ -197,19 +200,20 @@ def run_draft(session, *, batch_source=iter_logical_batches, save=None, log=log_
     window = OptimizerWindow(
         session.optimizer, args.accumulation_steps, session.process_group
     )
-    pending_rng = session.resume["rng_state"] if session.resume is not None else None
+    # Restore RNG state from checkpoint
+    pending_rng = session.resume_state["rng_state"] if session.resume_state is not None else None
     accumulated = 0
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
 
+    # Perform a model parameter update after each gradient accumulation step.
     def update(*, tail=False):
         nonlocal accumulated
         grad_norm = window.step()
         state.optimizer_step += 1
         accumulated = 0
         if (
-            tail
-            or state.optimizer_step % args.log_interval == 0
+            tail or state.optimizer_step % args.log_interval == 0
             or (
                 session.phase.log_at_schedule_end
                 and state.optimizer_step == session.total_steps
@@ -223,38 +227,47 @@ def run_draft(session, *, batch_source=iter_logical_batches, save=None, log=log_
         for _ in range(state.phase_index):
             dist.barrier()
     while state.phase_index < len(session.phases):
-        phase = session.phase
-        phase_metrics = session.adapter.enter_phase(session, phase)
+        cur_phase = session.phase
+        phase_metrics = session.adapter.enter_phase(session, cur_phase)
         if phase_metrics:
             session.tracker.log(phase_metrics, step=state.optimizer_step)
-        if phase.start_checkpoint and state.phase_step == 0:
+        if cur_phase.start_checkpoint and state.phase_step == 0:
             # A resumed boundary already has this checkpoint; do not duplicate it.
             if (
-                session.resume is None
-                or state.phase_index != session.resume["cursor"]["phase_index"]
+                session.resume_state is None
+                or state.phase_index != session.resume_state["cursor"]["phase_index"]
             ):
-                save(session, phase.start_checkpoint)
-        remaining = phase.batch_count(session.steps_per_epoch) - state.phase_step
-        stream = iter(batch_source(session, phase))
-        for _ in range(remaining):
+                save(session, cur_phase.start_checkpoint)
+        remaining_batches = (
+            cur_phase.batch_count(session.steps_per_epoch) - state.phase_step
+        )
+        batch_iterator = iter(batch_source(session, cur_phase))
+        for _ in range(remaining_batches):
             try:
-                data = next(stream)
+                data = next(batch_iterator)
             except StopIteration as exc:
                 raise RuntimeError(
-                    f"{phase.name} input ended before the declared phase length"
+                    f"{cur_phase.name} input ended before the declared phase length"
                 ) from exc
             # Skip/rebuild the input iterator first, then restore anchor/dropout RNG.
             if pending_rng is not None:
                 restore_rng_state(pending_rng)
                 pending_rng = None
             epoch = state.epoch
-            detailed = (state.optimizer_step + 1) % args.log_interval == 0 or (
-                phase.log_at_schedule_end
-                and state.optimizer_step + 1 == session.total_steps
+            collect_detailed_metrics = (
+                (state.optimizer_step + 1) % args.log_interval == 0
+                or (
+                    cur_phase.log_at_schedule_end
+                    and state.optimizer_step + 1 == session.total_steps
+                )
             )
-            for begin, end in iter_microbatch_slices(session):
+            for start, end in iter_microbatch_slices(session):
                 output = session.adapter.compute_step(
-                    session, data, begin=begin, end=end, detailed=detailed
+                    session,
+                    data,
+                    microbatch_start=start,
+                    microbatch_end=end,
+                    collect_detailed_metrics=collect_detailed_metrics,
                 )
                 window.backward(output)
                 del output
@@ -272,21 +285,21 @@ def run_draft(session, *, batch_source=iter_logical_batches, save=None, log=log_
                     if session.topology is not None
                     else f"epoch_{epoch}_step_{state.phase_step}"
                 )
-                save(session, phase.checkpoint_prefix + suffix)
+                save(session, cur_phase.checkpoint_prefix + suffix)
         # Resume the source once to release its last receive slot and collect profile data.
         try:
-            next(stream)
+            next(batch_iterator)
         except StopIteration:
             pass
         else:
-            raise RuntimeError(f"{phase.name} input exceeded the declared phase length")
+            raise RuntimeError(f"{cur_phase.name} input exceeded the declared phase length")
         if accumulated:
             update(tail=True)
         if session.topology is None:
             prefix = session.adapter.algorithm
             if session.adapter.modes:
-                prefix += "/" + phase.name
-            memory = log_cuda_peak(phase.name)
+                prefix += "/" + cur_phase.name
+            memory = log_cuda_peak(cur_phase.name)
             session.tracker.log(
                 {
                     f"detail/{prefix}/cuda_peak_{key}": value
@@ -298,7 +311,7 @@ def run_draft(session, *, batch_source=iter_logical_batches, save=None, log=log_
         state.phase_index += 1
         state.epoch = state.next_batch = state.phase_step = 0
         if getattr(args, "final_save", True):
-            save(session, phase.final_checkpoint)
+            save(session, cur_phase.final_checkpoint)
         if session.topology is not None and session.adapter.phase_barrier:
             dist.barrier()
 
@@ -319,14 +332,14 @@ def run_target(session):
         if topology.is_target_leader
         else None
     )
-    start_id = session.resume["cursor"]["global_step"] if session.resume else 0
+    start_id = session.resume_state["cursor"]["global_step"] if session.resume_state else 0
     batch_id = 0
     for phase in session.phases:
         spec = session.adapter.packet_spec(session, phase)
         batch_id, bridge_ms = run_target_phase(
             args=args,
             topology=topology,
-            loader=session.loader,
+            dataloader=session.dataloader,
             steps=session.steps_per_epoch,
             epochs=phase.epochs,
             epoch_offset=session.adapter.target_epoch_offset(phase),
@@ -350,17 +363,17 @@ def run_target(session):
         if session.adapter.phase_barrier:
             dist.barrier()
 
-
+"""Build the training session, run draft or target, then tear down process groups.
+- args: parsed CLI/YAML namespace from adapter.parse_args (data, topology, hyperparameter, …).
+- adapter: algorithm plugin (TrainingAdapter) for phases, models, and compute_step.
+"""
 def run_training(args, adapter):
     import logging
     import traceback
-
     import torch.distributed as dist
-    from accelerate.utils import set_seed
-
-    from litespec.distributed import destroy_distributed
-
     from .setup import build_training_session
+    from accelerate.utils import set_seed
+    from litespec.distributed import destroy_distributed
 
     logging.basicConfig(level=logging.INFO)
     if args.disaggregate and os.environ.get("LITESPEC_DISAGG_DEBUG") == "1":
@@ -395,7 +408,7 @@ def run_target_phase(
     *,
     args,
     topology,
-    loader,
+    dataloader,
     steps,
     epochs,
     epoch_offset,
@@ -414,8 +427,8 @@ def run_target_phase(
     progress, wait_ms = 0, 0.0
     for epoch in range(epochs):
         if topology.is_target_leader:
-            loader.sampler.set_epoch(epoch_offset + epoch)
-            iterator = iter(loader)
+            dataloader.sampler.set_epoch(epoch_offset + epoch)
+            iterator = iter(dataloader)
         for _ in range(steps):
             if progress >= limit:
                 break

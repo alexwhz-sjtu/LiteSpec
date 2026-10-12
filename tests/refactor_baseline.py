@@ -38,7 +38,7 @@ def capture(package="litespec", *, models_only=False, config_keys=None):
         if algorithm == "dlite":
             method = dict(
                 architecture_version="dlite_v1",
-                model_role="pivot_q_student",
+                model_role="student",
                 chs_num_layers=1,
                 target_layer_ids=[1],
                 sequential_head="rnn",

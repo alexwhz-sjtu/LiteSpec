@@ -27,6 +27,15 @@ MUON_DEFAULTS = dict(
     adamw_betas=(0.9, 0.999),
     adamw_weight_decay=0.1,
 )
+# Newton-Schulz / nesterov / shape-LR internals stay at MUON_DEFAULTS.
+MUON_CLI_KEYS = (
+    "lr",
+    "momentum",
+    "weight_decay",
+    "matrices_per_rank",
+    "adamw_lr",
+    "adamw_weight_decay",
+)
 
 
 def validate_muon_config(config):
@@ -72,10 +81,7 @@ def muon_config_from_args(args):
     if not getattr(args, "use_muon", False):
         return None
     return validate_muon_config(
-        {
-            key: getattr(args, f"muon_{key}", value)
-            for key, value in MUON_DEFAULTS.items()
-        }
+        {key: getattr(args, f"muon_{key}") for key in MUON_CLI_KEYS}
     )
 
 
@@ -262,8 +268,8 @@ class ShardedMuon(torch.optim.Optimizer):
         matrices = {}
         if owned:
             shape = self.layouts[owned[0]].spec.shape
-            full = collected.receive.new_empty((len(owned), *shape))
-            matrices = dict(zip(owned, full.unbind()))
+            full_matrices = collected.receive.new_empty((len(owned), *shape))
+            matrices = dict(zip(owned, full_matrices.unbind()))
             cursor = 0
             for peer in range(self.world):
                 for i in owned:
@@ -273,10 +279,10 @@ class ShardedMuon(torch.optim.Optimizer):
                     )
                     cursor += length
             group = self.param_groups[0]
-            result = newton_schulz(
-                full, group["ns_coefficients"], group["ns_steps"], group["eps"]
+            orthogonalized_matrices = newton_schulz(
+                full_matrices, group["ns_coefficients"], group["ns_steps"], group["eps"]
             )
-            matrices = dict(zip(owned, result.unbind()))
+            matrices = dict(zip(owned, orthogonalized_matrices.unbind()))
         parts = []
         for peer in range(self.world):
             for i in owned:

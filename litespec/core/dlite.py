@@ -187,21 +187,21 @@ class OnlineDLiteModel(nn.Module):
         self, seq_len: int, loss_mask: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         max_anchor = max(seq_len - self.block_size, 0)
-        valid = loss_mask[:, : max_anchor + 1] > 0.5
-        valid = valid & (loss_mask[:, 1 : max_anchor + 2] > 0.5)
-        counts = valid.sum(dim=1)
-        num_valid = min(self.num_anchors, int(counts.max().item()))
-        if num_valid <= 0:
+        valid_anchor_mask = loss_mask[:, : max_anchor + 1] > 0.5
+        valid_anchor_mask = valid_anchor_mask & (loss_mask[:, 1 : max_anchor + 2] > 0.5)
+        counts = valid_anchor_mask.sum(dim=1)
+        sampled_width = min(self.num_anchors, int(counts.max().item()))
+        if sampled_width <= 0:
             raise ValueError("No valid anchor positions in this batch.")
         query_len = int(self.draft_model.draft_query_length)
         chs_slots = int(self.draft_model.chs_num_layers)
         output_width = (
-            flash_padded_block_width(num_valid, query_len, chs_slots)
+            flash_padded_block_width(sampled_width, query_len, chs_slots)
             if self.flex_attention_backend == "FLASH"
-            else num_valid
+            else sampled_width
         )
         return sample_sorted_anchors(
-            valid,
+            valid_anchor_mask,
             self.num_anchors,
             output_width=output_width,
             max_valid_anchors=int(counts.max().item()),
@@ -216,18 +216,18 @@ class OnlineDLiteModel(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         seq_len = input_ids.size(1)
         offsets = torch.arange(self.block_size, device=input_ids.device).view(1, 1, -1)
-        positions = anchor_positions.unsqueeze(-1) + offsets
-        valid = positions < seq_len
-        safe = positions.clamp(max=seq_len - 1)
+        block_positions = anchor_positions.unsqueeze(-1) + offsets
+        valid = block_positions < seq_len
+        gather_positions = block_positions.clamp(max=seq_len - 1)
         target_ids = torch.gather(
             input_ids.unsqueeze(1).expand(-1, anchor_positions.size(1), -1),
             2,
-            safe,
+            gather_positions,
         )
         gathered_loss_mask = torch.gather(
             loss_mask.unsqueeze(1).expand(-1, anchor_positions.size(1), -1),
             2,
-            safe,
+            gather_positions,
         )
         weights = (
             block_keep_mask.unsqueeze(-1).float() * valid.float() * gathered_loss_mask
@@ -378,20 +378,20 @@ class OnlineDLiteModel(nn.Module):
                 device=query_embeddings.device,
                 flex_backend=self.flex_attention_backend,
             )
-            shared_pos = (
+            shared_pos_ids = (
                 torch.arange(mask_seq_len, device=query_embeddings.device)
                 .view(1, -1)
                 .expand(bsz, -1)
             )
             # The logical per-block context is [W-1 fuse, S CHS], but the fuse
             # sequence is physically stored once and selected per anchor by the
-            # flex mask. Its RoPE ids are therefore ``shared_pos`` exactly once.
+            # flex mask. Its RoPE ids are therefore ``shared_pos_ids`` exactly once.
             logical_context = context_pos.view(
                 bsz, num_blocks, self.draft_model.chs_len_per_block
             )
-            chs_pos = logical_context[:, :, -self.draft_model.chs_num_layers :]
+            chs_pos_ids = logical_context[:, :, -self.draft_model.chs_num_layers :]
             rotary = torch.cat(
-                [shared_pos, chs_pos.reshape(bsz, -1), draft_pos], dim=-1
+                [shared_pos_ids, chs_pos_ids.reshape(bsz, -1), draft_pos], dim=-1
             )
             output = self.draft_model(
                 position_ids=draft_pos,

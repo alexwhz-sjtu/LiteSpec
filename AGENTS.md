@@ -1,15 +1,26 @@
-对于debug，测试和测评的脚本和文件，都存入/tests中
+Store debugging, testing, and evaluation scripts and files in the repository's
+`tests/` directory.
 
-开始处理任务前，必须显式检查仓库内的 `.agents/skills/*/SKILL.md`（注意
-`.agents` 是隐藏目录，不能依赖会忽略隐藏文件的默认搜索结果）。如果任务与某个
-仓库 skill 的 description 匹配，必须先完整读取该 `SKILL.md` 及其要求的 reference，
-再执行任务，并严格遵循其中的确认步骤，不得用自行假设代替用户确认。
+Before starting a task, explicitly inspect `.agents/skills/*/SKILL.md` in this
+repository. The `.agents` directory is hidden; do not rely on default search
+results that exclude hidden files. If a task matches a repository skill's
+description, read its entire `SKILL.md` and any required references before
+proceeding. Follow its confirmation steps and use autonomous fallbacks only
+where explicitly allowed.
 
-涉及新数据集的下载、检查、prompt 提取或转换时，必须使用
-`.agents/skills/prepare-spec-decoding-dataset/SKILL.md`。在创建 adapter 或执行完整
-转换之前，必须先检查 5 条样本，并向用户确认以下两项：
+For downloading, inspecting, extracting prompts from, or converting a new
+dataset, use `.agents/skills/prepare-spec-decoding-dataset/SKILL.md`. Before
+creating an adapter or running the full conversion, inspect five records.
+When interaction is available, confirm both of the following with the user:
 
-1. 使用哪个字段或路径提取 prompt；
-2. 使用 `multi` 保留所有 user 轮次，还是使用 `first` 只保留首个 user 轮次。
+1. Which field or path to use for prompt extraction.
+2. Whether to use `multi` to retain all user turns or `first` to retain only the
+   first user turn.
 
-在用户明确回答这两项之前，不得自行选择，不得开始完整转换。
+When interaction is available, wait for explicit answers to both questions
+before creating an adapter or running the full conversion. If interaction is
+unavailable, choose the highest-confidence non-empty prompt candidate from the
+inspected records and default to `multi`, unless the user has already specified
+these choices. Report the selected field or path and turn mode, then proceed
+with adapter creation, sample validation, and full conversion. Stop if no
+credible prompt candidate exists.

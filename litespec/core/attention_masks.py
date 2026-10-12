@@ -42,29 +42,44 @@ def flash_kv_padding(kv_len: int) -> int:
     return (FLASH_KV_TILE - int(kv_len) % FLASH_KV_TILE) % FLASH_KV_TILE
 
 
+# Q:  [block_0 .. block_{N-1}], each block has B tokens (anchor + MASK*)
+# KV: [target 0..S-1 | draft_0 | ... | draft_{N-1}]
+#
+# Query in block i, offset o, anchor a:
+#   target:  kv < a  (and kv < S)
+#   draft:   only own block
+#   other blocks / target[a:]: invisible
+#   block_keep_mask=False: see nothing
+#
+# If sliding_window=W:
+#   target further restricted to [a + o - (W-1), a)
+#   draft becomes causal: draft_offset <= o
+# Without W, intra-block draft is full (not causal).
 def create_dflash_sdpa_mask(
     anchor_positions, block_keep_mask, S, block_size, device, sliding_window=None
 ):
     if sliding_window is not None and sliding_window <= 0:
         raise ValueError("sliding_window must be > 0")
-    batch, blocks = anchor_positions.shape
-    q_len, kv_len = blocks * block_size, S + blocks * block_size
+    bsz, num_blocks = anchor_positions.shape
+    q_len, kv_len = num_blocks * block_size, S + num_blocks * block_size
     q = torch.arange(q_len, device=device).view(1, 1, -1, 1)
     kv = torch.arange(kv_len, device=device).view(1, 1, 1, -1)
     q_block, q_offset = q // block_size, q % block_size
-    anchors = anchor_positions.view(batch, 1, blocks, 1).repeat_interleave(
+    anchors = anchor_positions.view(bsz, 1, num_blocks, 1).repeat_interleave(
         block_size, 2
     )
-    context = (kv < S) & (kv < anchors)
+    context_mask = (kv < S) & (kv < anchors)
     if sliding_window is not None:
-        context &= kv >= anchors + q_offset - (sliding_window - 1)
-    draft = (kv >= S) & (q_block == (kv - S) // block_size)
+        context_mask &= kv >= anchors + q_offset - (sliding_window - 1)
+    draft_mask = (kv >= S) & (q_block == (kv - S) // block_size)
     if sliding_window is not None:
-        draft &= (kv - S) % block_size <= q_offset
-    valid = block_keep_mask.view(batch, 1, blocks, 1).repeat_interleave(block_size, 2)
-    return (context | draft) & valid
+        draft_mask &= (kv - S) % block_size <= q_offset
+    valid = block_keep_mask.view(bsz, 1, num_blocks, 1).repeat_interleave(block_size, 2)
+    return (context_mask | draft_mask) & valid
 
 
+# Same visibility as create_dflash_sdpa_mask.
+# Q_LEN = N*B, KV_LEN = S + N*B.
 def create_dflash_flex_mask(
     anchor_positions,
     block_keep_mask,
@@ -78,31 +93,46 @@ def create_dflash_flex_mask(
         raise RuntimeError("flex_attention is not available")
     if sliding_window is not None and sliding_window <= 0:
         raise ValueError("sliding_window must be > 0")
-    batch, blocks = anchor_positions.shape
+    bsz, num_blocks = anchor_positions.shape
 
     def mask_mod(b, h, q_idx, kv_idx):
         qb, qo = q_idx // block_size, q_idx % block_size
-        safe = qb.clamp(max=blocks - 1)
-        anchor = anchor_positions[b, safe]
-        context = (kv_idx < S) & (kv_idx < anchor)
+        safe_block_indices = qb.clamp(max=num_blocks - 1)
+        anchor = anchor_positions[b, safe_block_indices]
+        context_mask = (kv_idx < S) & (kv_idx < anchor)
         if sliding_window is not None:
-            context &= kv_idx >= anchor + qo - (sliding_window - 1)
-        draft = (kv_idx >= S) & (qb == (kv_idx - S) // block_size)
+            context_mask &= kv_idx >= anchor + qo - (sliding_window - 1)
+        draft_mask = (kv_idx >= S) & (qb == (kv_idx - S) // block_size)
         if sliding_window is not None:
-            draft &= (kv_idx - S) % block_size <= qo
-        return (context | draft) & block_keep_mask[b, safe] & (qb < blocks)
+            draft_mask &= (kv_idx - S) % block_size <= qo
+        return (
+            (context_mask | draft_mask)
+            & block_keep_mask[b, safe_block_indices]
+            & (qb < num_blocks)
+        )
 
     return create_flex_block_mask(
         mask_mod,
-        B=batch,
+        B=bsz,
         H=None,
-        Q_LEN=blocks * block_size,
-        KV_LEN=S + blocks * block_size,
+        Q_LEN=num_blocks * block_size,
+        KV_LEN=S + num_blocks * block_size,
         device=device,
         backend=flex_backend,
     )
 
 
+# Q:  [Q_0 .. Q_{N-1}], each block has query_len = 1 anchor + (B-1) MASK
+# teacher KV: [shared history 0..S-1 | CHS_0..CHS_{N-1} | Q_0..Q_{N-1}]
+# student KV: [CHS_0..CHS_{N-1} | Q_0..Q_{N-1}]   # prefix=0, no history
+#
+# Query in block i, anchor a:
+#   history (teacher only): [a-W, a-2]   # W-1 fused tokens; a-1 is CHS
+#   CHS: own-block slots only
+#   query: own-block, non-padded tokens (full, not causal)
+#   other blocks: invisible
+#
+# Padded block (block_keep_mask=False): own CHS only, so the row is not empty.
 def create_dlite_flex_mask(
     *,
     model_role,

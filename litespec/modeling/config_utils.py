@@ -47,7 +47,7 @@ def _qwen35_text_dict_to_qwen3_config(
     if intermediate_size is None:
         intermediate_size = text_config.get("moe_intermediate_size")
 
-    required = (
+    required_field_names = (
         "vocab_size",
         "hidden_size",
         "num_hidden_layers",
@@ -55,15 +55,15 @@ def _qwen35_text_dict_to_qwen3_config(
         "num_key_value_heads",
         "head_dim",
     )
-    missing = [name for name in required if text_config.get(name) is None]
+    missing_field_names = [name for name in required_field_names if text_config.get(name) is None]
     if intermediate_size is None:
-        missing.append(
+        missing_field_names.append(
             "intermediate_size/shared_expert_intermediate_size/" "moe_intermediate_size"
         )
-    if missing:
+    if missing_field_names:
         raise ValueError(
             "Qwen3.5 text_config is missing required DLite fields: "
-            + ", ".join(missing)
+            + ", ".join(missing_field_names)
         )
 
     rope_parameters = text_config.get("rope_parameters") or {}

@@ -22,7 +22,7 @@ arguments:
   chat_template: qwen
   max_length: 4096
   batch_size: 1
-  accumulation_steps: 2
+  accumulation_steps: 1
   tp_size: 1
   shard_draft_by_tp: false
   dist_timeout: 1200
@@ -40,19 +40,13 @@ arguments:
   warmup_ratio: 0.04
   max_grad_norm: 1.0
   # Optional FSDP1 Muon + AdamW; these settings are ignored when disabled.
-  use_muon: false
+  use_muon: true
   muon_lr: 0.02
   muon_momentum: 0.95
   muon_weight_decay: 0.1
-  muon_nesterov: true
-  muon_ns_steps: 5
-  muon_ns_coefficients: [3.4445, -4.775, 2.0315]
-  muon_eps: 0.0000001
-  muon_adjust_lr_fn: original
   # Each batch handles up to world_size * this many same-shape matrices.
   muon_matrices_per_rank: 1
   muon_adamw_lr: 0.0004
-  muon_adamw_betas: [0.9, 0.999]
   muon_adamw_weight_decay: 0.1
   seed: 42
   selector_loss_alpha: 1.0

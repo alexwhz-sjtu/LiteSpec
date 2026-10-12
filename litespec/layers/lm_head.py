@@ -95,10 +95,10 @@ class ParallelLMHead(nn.Module):
             # all-gather shards along vocab dim
             chunks = [torch.empty_like(local_logits) for _ in range(self.tp_size)]
             dist.all_gather(chunks, local_logits, group=self.tp_group)
-            full = torch.cat(chunks, dim=-1)[
+            full_logits = torch.cat(chunks, dim=-1)[
                 :, : self.out_features
             ]  # trim padding from ceil-div
-            return full.view(*orig_shape[:-1], self.out_features).contiguous()
+            return full_logits.view(*orig_shape[:-1], self.out_features).contiguous()
 
     def reset_parameters(self):
         nn.init.xavier_normal_(self.weight)

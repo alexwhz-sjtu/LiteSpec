@@ -87,15 +87,15 @@ def load_hidden_cache_manifest(
     final_layer_id = int(manifest.get("final_norm_layer_id", -1))
     if final_layer_id != int(num_hidden_layers) - 1:
         raise HiddenCacheError("regen_full final-norm layer ID is invalid")
-    stored = {int(value) for value in manifest.get("stored_hidden_layer_ids", [])}
-    missing = sorted(set(required_layer_ids) - stored)
-    if final_layer_id not in stored:
-        missing = sorted(set(missing) | {final_layer_id})
-    if missing:
-        needed = sorted(set(required_layer_ids) | {final_layer_id})
+    stored_layer_ids = {int(value) for value in manifest.get("stored_hidden_layer_ids", [])}
+    missing_layer_ids = sorted(set(required_layer_ids) - stored_layer_ids)
+    if final_layer_id not in stored_layer_ids:
+        missing_layer_ids = sorted(set(missing_layer_ids) | {final_layer_id})
+    if missing_layer_ids:
+        needed_layer_ids = sorted(set(required_layer_ids) | {final_layer_id})
         raise HiddenCacheError(
-            f"regen_full is missing required hidden layers {missing}; "
-            f"regenerate with --target-layer-ids {','.join(map(str, needed))}"
+            f"regen_full is missing required hidden layers {missing_layer_ids}; "
+            f"regenerate with --target-layer-ids {','.join(map(str, needed_layer_ids))}"
         )
 
     shards = manifest.get("shards")
@@ -412,11 +412,11 @@ class RegenFullCollator:
     def __call__(self, features: list[dict[str, Any]]) -> dict[str, Any]:
         if not features:
             raise HiddenCacheError("cannot collate an empty regen_full batch")
-        sequence_length = max(item["input_ids"].numel() for item in features)
+        seq_len = max(item["input_ids"].numel() for item in features)
         if self.pad_to_length is not None:
-            if sequence_length > self.pad_to_length:
+            if seq_len > self.pad_to_length:
                 raise HiddenCacheError("cached sequence exceeds fixed padding length")
-            sequence_length = self.pad_to_length
+            seq_len = self.pad_to_length
 
         def pad_vectors(key: str, padding_value: int) -> torch.Tensor:
             value = pad_sequence(
@@ -424,7 +424,7 @@ class RegenFullCollator:
                 batch_first=True,
                 padding_value=padding_value,
             )
-            return self._pad_to(value, sequence_length)
+            return self._pad_to(value, seq_len)
 
         layer_ids = sorted(features[0]["hidden_states"])
         if any(sorted(item["hidden_states"]) != layer_ids for item in features):
@@ -439,7 +439,7 @@ class RegenFullCollator:
                 batch_first=True,
                 padding_value=0.0,
             )
-            hidden_states[layer_id] = self._pad_to(value, sequence_length)
+            hidden_states[layer_id] = self._pad_to(value, seq_len)
         return {
             "sample_index": torch.tensor(
                 [item["sample_index"] for item in features], dtype=torch.long

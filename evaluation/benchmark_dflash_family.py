@@ -14,6 +14,7 @@ from tqdm import tqdm
 from evaluation import distributed as dist
 from evaluation.benchmark import load_benchmark_dataset, select_max_samples, target_generate
 from evaluation.dflash_model_loading import load_dflash_benchmark_models
+from litespec.modeling.kv_cache import make_target_cache
 
 
 def parse_args():
@@ -46,6 +47,11 @@ def main():
     torch.cuda.set_device(dist.local_rank())
     device = torch.device(f"cuda:{dist.local_rank()}")
     target, draft, tokenizer = load_dflash_benchmark_models(args, device)
+    if dist.is_main():
+        print(
+            "Target KV cache: preallocated for baseline and draft verification; "
+            "allocation during prefill, outside decode timing; draft KV: dynamic"
+        )
     stop_ids = [value for value in (tokenizer.eos_token_id,) if value is not None]
     dataset = select_max_samples(load_benchmark_dataset(args.dataset), args.max_samples)
     responses = []
@@ -75,6 +81,9 @@ def main():
                 temperature=args.temperature,
                 top_p=args.top_p,
                 top_k=args.top_k,
+                target_cache=make_target_cache(
+                    target, input_ids.shape[1] + args.max_new_tokens + draft.block_size
+                ),
             )
             stats = draft.get_last_decode_stats()
             generated = output_ids[0, input_ids.shape[1] :]

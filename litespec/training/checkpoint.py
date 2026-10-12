@@ -75,10 +75,10 @@ def session_metadata(session):
 
 
 def validate_session_resume(session):
-    if session.resume is None:
+    if session.resume_state is None:
         return
     expected = session_metadata(session)
-    if session.resume.get("optimizer_kind", "adamw") != expected.get(
+    if session.resume_state.get("optimizer_kind", "adamw") != expected.get(
         "optimizer_kind", "adamw"
     ):
         raise ValueError("Cannot resume across AdamW-only and Muon/AdamW modes")
@@ -91,13 +91,14 @@ def validate_session_resume(session):
         "selector_effective_alpha",
     }
     for key, value in expected.items():
-        if key not in progress_keys and session.resume.get(key) != value:
+        if key not in progress_keys and session.resume_state.get(key) != value:
             raise ValueError(
-                f"Resume mismatch for {key}: saved={session.resume.get(key)!r}, requested={value!r}"
+                f"Resume mismatch for {key}: saved={session.resume_state.get(key)!r}, "
+                f"requested={value!r}"
             )
     from .algorithms import RunState
 
-    cursor = RunState(**session.resume["cursor"])
+    cursor = RunState(**session.resume_state["cursor"])
     counts = [phase.batch_count(session.steps_per_epoch) for phase in session.phases]
     if not 0 <= cursor.phase_index <= len(counts):
         raise ValueError("Invalid checkpoint phase index")
@@ -136,7 +137,7 @@ def validate_session_resume(session):
     expected_updates += cursor.phase_step // accumulation
     if (
         cursor.optimizer_step != expected_updates
-        or session.resume["optimizer_step"] != expected_updates
+        or session.resume_state["optimizer_step"] != expected_updates
     ):
         raise ValueError("Checkpoint optimizer step disagrees with the data cursor")
     session.state = cursor
@@ -146,7 +147,7 @@ def save_session(session, name):
     return save_checkpoint(
         output_dir=session.args.output_dir,
         name=name,
-        fsdp_model=session.fsdp,
+        fsdp_model=session.fsdp_model,
         draft_model=session.draft,
         optimizer=session.optimizer,
         metadata=session_metadata(session),
@@ -265,10 +266,11 @@ def load_distributed_training_state(
             f"Optimizer state for global rank {rank} is missing. Expected {ranked_path}."
         )
     for other_rank in range(world_size):
-        required = ranked_training_state_path(checkpoint_dir, other_rank)
-        if not os.path.isfile(required):
+        required_state_path = ranked_training_state_path(checkpoint_dir, other_rank)
+        if not os.path.isfile(required_state_path):
             raise FileNotFoundError(
-                f"Optimizer state for global rank {other_rank} is missing. Expected {required}."
+                f"Optimizer state for global rank {other_rank} is missing. "
+                f"Expected {required_state_path}."
             )
     common = torch.load(common_path, map_location="cpu", weights_only=False)
     common_metadata = common.get(_DISTRIBUTED_STATE_KEY, {})

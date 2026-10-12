@@ -26,7 +26,8 @@ def register_optimizer_parameters(model, parameters=None):
     )
     names = {id(p): name for name, p in model.named_parameters()}
     policies = {id(p): set() for p in selected}
-    exceptions = {
+    # Muon exceptions for optimizer ownership
+    muon_exceptions = {
         "selector",
         "candidate_selector",
         "markov_head",
@@ -38,7 +39,7 @@ def register_optimizer_parameters(model, parameters=None):
             if id(p) not in policies:
                 continue
             if (
-                exceptions.intersection(path.split("."))
+                muon_exceptions.intersection(path.split("."))
                 or isinstance(module, torch.nn.Embedding)
                 or "norm" in type(module).__name__.lower()
                 or name in ("bias", "base_kernel")

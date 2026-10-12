@@ -9,14 +9,14 @@ from litespec.core.block_training import (
 
 def test_sampler_keeps_anchor_zero_and_appends_physical_padding():
     torch.manual_seed(0)
-    anchors, keep = sample_sorted_anchors(
+    anchor_positions, block_keep_mask = sample_sorted_anchors(
         torch.tensor([[True, False, True]]),
         2,
         output_width=4,
         max_valid_anchors=2,
     )
-    assert anchors.tolist() == [[0, 2, 0, 0]]
-    assert keep.tolist() == [[True, True, False, False]]
+    assert anchor_positions.tolist() == [[0, 2, 0, 0]]
+    assert block_keep_mask.tolist() == [[True, True, False, False]]
 
 
 def test_gather_blocks_reports_bounds():

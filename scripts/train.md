@@ -4,7 +4,7 @@ The three DLite training modes now have YAML configurations. Edit the matching
 file, then launch it through its existing shell entrypoint:
 
 ```bash
-bash scripts/dlite/run_training_dlite_sft.sh scripts/config/dlite_sft.yaml
+bash scripts/dflash2/run_training_dflash2.sh scripts/config/dflash2.yaml
 bash scripts/dlite/run_training_dlite_teacher.sh scripts/config/dlite_teacher.yaml
 bash scripts/dlite/run_training_dlite_two_stage.sh scripts/config/dlite_two_stage.yaml
 ```

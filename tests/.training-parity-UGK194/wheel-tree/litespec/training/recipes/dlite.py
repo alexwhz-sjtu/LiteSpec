@@ -166,7 +166,7 @@ def parse_sft_args(argv=None):
         "--local-position",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Use the pivot_q_student local-position layout (required).",
+        help="Use the student local-position layout (required).",
     )
     parser.add_argument(
         "--init-from",
@@ -444,10 +444,10 @@ def _initialize_drafts(args, mode: str, common_state: Optional[dict]):
                 attn_implementation="flex_attention",
             ).cuda()
             if source
-            else build_draft_model(args, model_role="pivot_q_student")
+            else build_draft_model(args, model_role="student")
         )
         if not draft.is_student:
-            raise ValueError("SFT requires a pivot_q_student draft")
+            raise ValueError("SFT requires a student draft")
         _sync_args_from_draft(args, draft)
         return draft, None, resume_stage
 
@@ -458,7 +458,7 @@ def _initialize_drafts(args, mode: str, common_state: Optional[dict]):
             attn_implementation="flex_attention",
         ).cuda()
         if not student.is_student:
-            raise ValueError("two-stage resume requires a pivot_q_student checkpoint")
+            raise ValueError("two-stage resume requires a student checkpoint")
     else:
         teacher = (
             DLiteDraftModel.from_pretrained(
@@ -475,7 +475,7 @@ def _initialize_drafts(args, mode: str, common_state: Optional[dict]):
         _sync_args_from_draft(args, teacher)
         student = build_draft_model(
             args,
-            model_role="pivot_q_student",
+            model_role="student",
             source_config=copy.deepcopy(teacher.config),
         )
         _copy_serial_head(teacher, student)

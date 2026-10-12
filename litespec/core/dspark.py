@@ -126,9 +126,9 @@ class OnlineDSparkModel(DFlashTrainingBase):
         """Gather the target state that predicts each DSpark label token."""
 
         target_pred_indices = (safe_label_indices - 1).clamp(min=0)
-        batch_size = target_last_hidden_states.shape[0]
+        bsz = target_last_hidden_states.shape[0]
         hidden_size = target_last_hidden_states.shape[-1]
-        gather_indices = target_pred_indices.reshape(batch_size, -1, 1).expand(
+        gather_indices = target_pred_indices.reshape(bsz, -1, 1).expand(
             -1, -1, hidden_size
         )
         return torch.gather(
@@ -139,7 +139,7 @@ class OnlineDSparkModel(DFlashTrainingBase):
 
     def _dspark_objective_chunk_terms(
         self,
-        hidden: torch.Tensor,
+        draft_block_hidden_states: torch.Tensor,
         prev_token_ids: torch.Tensor,
         target_ids: torch.Tensor,
         loss_weights: torch.Tensor,
@@ -148,14 +148,14 @@ class OnlineDSparkModel(DFlashTrainingBase):
     ) -> Tuple[torch.Tensor, ...]:
         """Return additive loss and telemetry numerators for one block slice."""
 
-        batch_size, num_blocks, block_size, hidden_size = hidden.shape
+        bsz, num_blocks, block_size, hidden_size = draft_block_hidden_states.shape
         base_logits = self.lm_head(
-            hidden.reshape(batch_size, num_blocks * block_size, hidden_size)
-        ).reshape(batch_size, num_blocks, block_size, -1)
+            draft_block_hidden_states.reshape(bsz, num_blocks * block_size, hidden_size)
+        ).reshape(bsz, num_blocks, block_size, -1)
         draft_logits = self.draft_model.apply_logits_head(
             base_logits,
             prev_token_ids=prev_token_ids,
-            hidden_states=hidden,
+            hidden_states=draft_block_hidden_states,
         )
         vocab_size = draft_logits.shape[-1]
         cross_entropy = F.cross_entropy(
@@ -182,7 +182,7 @@ class OnlineDSparkModel(DFlashTrainingBase):
             with torch.no_grad():
                 target_logits = self.lm_head(
                     aligned_target_hidden.reshape(
-                        batch_size,
+                        bsz,
                         num_blocks * block_size,
                         hidden_size,
                     )
@@ -198,7 +198,7 @@ class OnlineDSparkModel(DFlashTrainingBase):
                 l1_num = (l1_per_token * loss_weights).sum()
 
         confidence_pred = self.draft_model.predict_confidence(
-            hidden,
+            draft_block_hidden_states,
             prev_token_ids=prev_token_ids,
         )
         if confidence_pred is not None and self.dspark_confidence_head_alpha > 0:
@@ -264,7 +264,7 @@ class OnlineDSparkModel(DFlashTrainingBase):
     def _compute_dspark_loss(
         self,
         *,
-        output_hidden: torch.Tensor,
+        draft_hidden_states: torch.Tensor,
         target_ids: torch.Tensor,
         eval_mask: torch.Tensor,
         prev_token_ids: torch.Tensor,
@@ -275,9 +275,9 @@ class OnlineDSparkModel(DFlashTrainingBase):
     ) -> TrainingOutput:
         """Token-pooled DSpark objective with bounded vocab-logit memory."""
 
-        batch_size, num_blocks, block_size = target_ids.shape
-        hidden_4d = output_hidden.reshape(
-            batch_size,
+        bsz, num_blocks, block_size = target_ids.shape
+        draft_block_hidden_states = draft_hidden_states.reshape(
+            bsz,
             num_blocks,
             block_size,
             -1,
@@ -295,7 +295,7 @@ class OnlineDSparkModel(DFlashTrainingBase):
 
         totals = checkpointed_chunk_reduce(
             self._dspark_objective_chunk_terms,
-            hidden_4d,
+            draft_block_hidden_states,
             prev_token_ids,
             target_ids,
             loss_weights,
@@ -391,9 +391,9 @@ class OnlineDSparkModel(DFlashTrainingBase):
             raise ValueError(
                 "flex_attention is not available on this device; use sdpa/eager."
             )
-        anchor_positions, block_keep_mask, output_hidden = self._forward_draft_blocks(
+        anchor_positions, block_keep_mask, draft_hidden_states = self._forward_draft_blocks(
             input_ids=input_ids,
-            hidden_states=hidden_states,
+            target_context_hidden=hidden_states,
             loss_mask=loss_mask,
             max_valid_anchors=max_valid_anchors,
         )
@@ -414,7 +414,7 @@ class OnlineDSparkModel(DFlashTrainingBase):
             dim=-1,
         )
         output = self._compute_dspark_loss(
-            output_hidden=output_hidden,
+            draft_hidden_states=draft_hidden_states,
             target_ids=target_ids,
             eval_mask=eval_mask,
             prev_token_ids=prev_token_ids,

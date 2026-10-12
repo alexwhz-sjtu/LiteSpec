@@ -13,7 +13,7 @@ import numpy as np
 import torch
 from rich import print
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -21,6 +21,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from litespec.modeling.draft.dlite import DLiteDraftModel
 from litespec.modeling.draft.dlite import sample
+from litespec.modeling.kv_cache import make_target_cache
 
 from evaluation import distributed as dist
 from evaluation.model_loading import load_dlite_benchmark_models
@@ -114,13 +115,13 @@ def format_multifieldqa_en_mixup_prompt(data: dict) -> str:
         raise ValueError("Missing 'context' field in multifieldqa_en_mixup item")
     if "input" not in data:
         raise ValueError("Missing 'input' field in multifieldqa_en_mixup item")
-    ctx = data["context"]
-    inp = data["input"]
-    if not isinstance(ctx, str):
-        ctx = str(ctx)
-    if not isinstance(inp, str):
-        inp = str(inp)
-    return f"{ctx}\n\n{inp}"
+    context = data["context"]
+    instruction = data["input"]
+    if not isinstance(context, str):
+        context = str(context)
+    if not isinstance(instruction, str):
+        instruction = str(instruction)
+    return f"{context}\n\n{instruction}"
 
 
 def should_load_as_multifieldqa_en_mixup(
@@ -293,12 +294,12 @@ def expand_specbench_turn_string(turn: str) -> list[str]:
 
 
 def flatten_specbench_turns(turns: list) -> list[str]:
-    out: list[str] = []
-    for t in turns:
-        if not isinstance(t, str):
-            t = str(t)
-        out.extend(expand_specbench_turn_string(t))
-    return out
+    expanded_turns: list[str] = []
+    for turn in turns:
+        if not isinstance(turn, str):
+            turn = str(turn)
+        expanded_turns.extend(expand_specbench_turn_string(turn))
+    return expanded_turns
 
 
 def load_specbench_question_jsonl(
@@ -626,7 +627,7 @@ def target_generate(
         .unsqueeze(0)
         .expand(batch_size_dim, -1)
     )
-    past_key_values_target = DynamicCache()
+    past_key_values_target = make_target_cache(target, max_length)
     stop_tensor = (
         torch.tensor(stop_token_ids, device=input_ids.device, dtype=torch.long)
         if stop_token_ids
@@ -715,6 +716,9 @@ def dlite_generate(
     stochastic_verification_mode: str = "match",
     compile_serial_head: bool = False,
 ) -> SimpleNamespace:
+    target_cache = make_target_cache(
+        target, input_ids.shape[1] + max_new_tokens + verify_block_size
+    )
     output_ids = model.spec_generate(
         target=target,
         input_ids=input_ids,
@@ -725,6 +729,7 @@ def dlite_generate(
         verify_block_size=verify_block_size,
         stochastic_verification_mode=stochastic_verification_mode,
         compile_serial_head=compile_serial_head,
+        target_cache=target_cache,
     )
 
     stats = model.get_last_decode_stats()
@@ -817,6 +822,10 @@ def main() -> None:
 
     target, draft_model, tokenizer, draft_summary = load_dlite_benchmark_models(
         args, device
+    )
+    logger.info(
+        "Target KV cache: preallocated for baseline and DLite; "
+        "allocation during prefill, outside decode timing"
     )
 
     config_block_size = draft_model.block_size

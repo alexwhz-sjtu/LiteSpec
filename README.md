@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="assets/logo.svg" alt="LiteSpec logo" width="560">
-</p>
+![LiteSpec logo](assets/logo.svg)
 
 # LiteSpec
 
@@ -23,6 +21,8 @@ repository is the smaller inference-only release.
 uv sync --frozen
 uv run pytest -q tests
 ```
+
+
 
 ## Environment
 
@@ -131,6 +131,16 @@ bash evaluation/run_benchmark_dlite.sh
 Checkpoint model settings live under `dlite_config`. The public architecture is
 `DLiteDraftModel`; the only supported architecture is `dlite_v1` and the only
 sequential-head type is `rnn`. `dlite_v2` checkpoints are rejected explicitly.
+
+## Roadmap
+
+- [x] Support the Muon optimizer
+- [ ] Support more target models (Qwen3.8, Gemma, ...)
+- [ ] Support more draft architectures and let them be mixed freely
+  - Attention: MLA, DSA, KDA, ...
+  - Modules: convolution, selector, sequential head, ...
+
+
 
 ## License
 

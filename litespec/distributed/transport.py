@@ -33,23 +33,24 @@ def build_node_routes(
         raise ValueError("node_batch_size must be divisible by target producers")
     if node_batch_size % drafts:
         raise ValueError("node_batch_size must be divisible by draft ranks")
-    producer_batch = node_batch_size // producers
-    draft_batch = node_batch_size // drafts
+    producer_batch_size = node_batch_size // producers
+    draft_batch_size = node_batch_size // drafts
     routes: list[RouteFragment] = []
     for producer in range(producers):
-        p0, p1 = producer * producer_batch, (producer + 1) * producer_batch
+        producer_start = producer * producer_batch_size
+        producer_end = (producer + 1) * producer_batch_size
         for draft in range(drafts):
-            d0, d1 = draft * draft_batch, (draft + 1) * draft_batch
-            start, end = max(p0, d0), min(p1, d1)
+            draft_start, draft_end = draft * draft_batch_size, (draft + 1) * draft_batch_size
+            start, end = max(producer_start, draft_start), min(producer_end, draft_end)
             if start < end:
                 routes.append(
                     RouteFragment(
                         producer,
                         draft,
-                        start - p0,
-                        end - p0,
-                        start - d0,
-                        end - d0,
+                        start - producer_start,
+                        end - producer_start,
+                        start - draft_start,
+                        end - draft_start,
                     )
                 )
     if sum(route.size for route in routes) != node_batch_size:
@@ -58,7 +59,7 @@ def build_node_routes(
 
 
 @dataclass(frozen=True)
-class DraftPacketSpec:
+class DLitePacketSpec:
     batch_size: int
     max_length: int
     num_anchors: int
@@ -78,7 +79,7 @@ class DraftPacketSpec:
 
 
 @dataclass
-class DraftBatchPacket:
+class DLiteBatchPacket:
     """Fixed-shape GPU payload. Full-vocabulary logits are never transported."""
 
     input_ids: torch.Tensor
@@ -91,21 +92,29 @@ class DraftBatchPacket:
 
     @classmethod
     def empty(
-        cls, spec: DraftPacketSpec, *, device: torch.device | str
-    ) -> "DraftBatchPacket":
-        b, length, n = spec.batch_size, spec.max_length, spec.num_anchors
-        h, c, k = spec.hidden_size, spec.num_target_layers, spec.prediction_length
+        cls, spec: DLitePacketSpec, *, device: torch.device | str
+    ) -> "DLiteBatchPacket":
+        bsz, seq_len, num_anchors = spec.batch_size, spec.max_length, spec.num_anchors
+        hidden_size = spec.hidden_size
+        num_target_layers = spec.num_target_layers
+        prediction_length = spec.prediction_length
         return cls(
-            input_ids=torch.empty((b, length), dtype=torch.long, device=device),
-            loss_mask=torch.empty((b, length), dtype=torch.float32, device=device),
-            anchor_positions=torch.empty((b, n), dtype=torch.long, device=device),
-            block_keep_mask=torch.empty((b, n), dtype=torch.bool, device=device),
+            input_ids=torch.empty((bsz, seq_len), dtype=torch.long, device=device),
+            loss_mask=torch.empty((bsz, seq_len), dtype=torch.float32, device=device),
+            anchor_positions=torch.empty(
+                (bsz, num_anchors), dtype=torch.long, device=device
+            ),
+            block_keep_mask=torch.empty(
+                (bsz, num_anchors), dtype=torch.bool, device=device
+            ),
             target_hidden=torch.empty(
-                (b, n, c, h), dtype=torch.bfloat16, device=device
+                (bsz, num_anchors, num_target_layers, hidden_size),
+                dtype=torch.bfloat16,
+                device=device,
             ),
             target_history_hidden=(
                 torch.empty(
-                    (b, length, spec.num_history_layers, h),
+                    (bsz, seq_len, spec.num_history_layers, hidden_size),
                     dtype=torch.bfloat16,
                     device=device,
                 )
@@ -113,7 +122,11 @@ class DraftBatchPacket:
                 else None
             ),
             target_prediction_hidden=(
-                torch.empty((b, n, k, h), dtype=torch.bfloat16, device=device)
+                torch.empty(
+                    (bsz, num_anchors, prediction_length, hidden_size),
+                    dtype=torch.bfloat16,
+                    device=device,
+                )
                 if spec.include_target_prediction_hidden
                 else None
             ),
@@ -130,7 +143,7 @@ class DraftBatchPacket:
 
 
 @dataclass(frozen=True)
-class FamilyPacketSpec:
+class DFlashFamilyPacketSpec:
     """Fixed full-context schema for DFlash-family training."""
 
     batch_size: int
@@ -145,7 +158,7 @@ class FamilyPacketSpec:
 
 
 @dataclass
-class FamilyBatchPacket:
+class DFlashFamilyBatchPacket:
     """DFlash-family features; never contains full-vocabulary logits."""
 
     input_ids: torch.Tensor
@@ -155,20 +168,20 @@ class FamilyBatchPacket:
 
     @classmethod
     def empty(
-        cls, spec: FamilyPacketSpec, *, device: torch.device | str
-    ) -> "FamilyBatchPacket":
-        b, length = spec.batch_size, spec.max_length
+        cls, spec: DFlashFamilyPacketSpec, *, device: torch.device | str
+    ) -> "DFlashFamilyBatchPacket":
+        bsz, seq_len = spec.batch_size, spec.max_length
         return cls(
-            input_ids=torch.empty((b, length), dtype=torch.long, device=device),
-            loss_mask=torch.empty((b, length), dtype=torch.float32, device=device),
+            input_ids=torch.empty((bsz, seq_len), dtype=torch.long, device=device),
+            loss_mask=torch.empty((bsz, seq_len), dtype=torch.float32, device=device),
             target_context_hidden=torch.empty(
-                (b, length, spec.context_width),
+                (bsz, seq_len, spec.context_width),
                 dtype=torch.bfloat16,
                 device=device,
             ),
             target_last_hidden=(
                 torch.empty(
-                    (b, length, spec.hidden_size),
+                    (bsz, seq_len, spec.hidden_size),
                     dtype=torch.bfloat16,
                     device=device,
                 )
@@ -188,8 +201,8 @@ class FamilyBatchPacket:
 
 
 def copy_packet_slice(
-    source: DraftBatchPacket,
-    destination: DraftBatchPacket,
+    source: DLiteBatchPacket | DFlashFamilyBatchPacket,
+    destination: DLiteBatchPacket | DFlashFamilyBatchPacket,
     *,
     source_start: int,
     source_end: int,
@@ -229,7 +242,12 @@ class NodePacketTransport:
         return self.topology.node_draft_ranks[draft]
 
     def send(
-        self, packet: DraftBatchPacket, *, batch_id: int, phase_id: int, schema_id: int
+        self,
+        packet: DLiteBatchPacket | DFlashFamilyBatchPacket,
+        *,
+        batch_id: int,
+        phase_id: int,
+        schema_id: int,
     ):
         producer = self.topology.target_replica_local_rank
         if not self.topology.is_target_leader or producer is None:
@@ -247,11 +265,11 @@ class NodePacketTransport:
                 if route.producer != producer:
                     continue
                 peer = self._draft_rank(route.draft)
-                meta = torch.tensor(
+                packet_header = torch.tensor(
                     [batch_id, phase_id, schema_id], dtype=torch.long, device="cuda"
                 )
-                keepalive.append(meta)
-                ops.append(dist.P2POp(dist.isend, meta, peer, group=self.group))
+                keepalive.append(packet_header)
+                ops.append(dist.P2POp(dist.isend, packet_header, peer, group=self.group))
                 for tensor in packet.batch_slice(
                     route.producer_start, route.producer_end
                 ):
@@ -266,7 +284,7 @@ class NodePacketTransport:
 
     def receive(
         self,
-        packet: DraftBatchPacket,
+        packet: DLiteBatchPacket | DFlashFamilyBatchPacket,
         *,
         batch_id: int,
         phase_id: int,
@@ -275,7 +293,7 @@ class NodePacketTransport:
         draft = self.topology.draft_local_rank
         if not self.topology.is_draft or draft is None:
             raise RuntimeError("only draft ranks receive draft packets")
-        ops, metas = [], []
+        ops, packet_headers = [], []
         with torch.cuda.stream(self.stream):
             start = torch.cuda.Event(enable_timing=True) if self.profile else None
             if start is not None:
@@ -284,24 +302,24 @@ class NodePacketTransport:
                 if route.draft != draft:
                     continue
                 peer = self._producer_rank(route.producer)
-                meta = torch.empty((3,), dtype=torch.long, device="cuda")
-                metas.append(meta)
-                ops.append(dist.P2POp(dist.irecv, meta, peer, group=self.group))
+                packet_header = torch.empty((3,), dtype=torch.long, device="cuda")
+                packet_headers.append(packet_header)
+                ops.append(dist.P2POp(dist.irecv, packet_header, peer, group=self.group))
                 for tensor in packet.batch_slice(route.draft_start, route.draft_end):
                     ops.append(dist.P2POp(dist.irecv, tensor, peer, group=self.group))
             works = dist.batch_isend_irecv(ops) if ops else []
             done = torch.cuda.Event(enable_timing=self.profile)
             done.record(self.stream)
-        return works, metas, (batch_id, phase_id, schema_id), start, done
+        return works, packet_headers, (batch_id, phase_id, schema_id), start, done
 
     @staticmethod
     def wait_receive(handle) -> float:
-        works, metas, expected, start, done = handle
+        works, packet_headers, expected, start, done = handle
         for work in works:
             work.wait()
         done.synchronize()
-        for meta in metas:
-            actual = tuple(int(value) for value in meta.tolist())
+        for packet_header in packet_headers:
+            actual = tuple(int(value) for value in packet_header.tolist())
             if actual != expected:
                 raise RuntimeError(
                     f"packet metadata mismatch: expected {expected}, got {actual}"

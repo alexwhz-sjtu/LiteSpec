@@ -21,7 +21,7 @@ from litespec.core.dlite import (
     prepare_target_hidden,
 )
 from litespec.core.outputs import RatioTerms, TrainingOutput
-from litespec.distributed.transport import DraftBatchPacket, DraftPacketSpec
+from litespec.distributed.transport import DLiteBatchPacket, DLitePacketSpec
 from litespec.modeling.config_utils import load_text_model_config
 from litespec.modeling.draft.dlite import (
     DLITE_ARCHITECTURE_VERSION,
@@ -164,7 +164,7 @@ def parse_sft_args(argv=None):
         "--local-position",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Use the pivot_q_student local-position layout (required).",
+        help="Use the student local-position layout (required).",
     )
     parser.add_argument(
         "--init-from",
@@ -442,10 +442,10 @@ def _initialize_drafts(args, mode: str, common_state: Optional[dict]):
                 attn_implementation="flex_attention",
             ).cuda()
             if source
-            else build_draft_model(args, model_role="pivot_q_student")
+            else build_draft_model(args, model_role="student")
         )
         if not draft.is_student:
-            raise ValueError("SFT requires a pivot_q_student draft")
+            raise ValueError("SFT requires a student draft")
         _sync_args_from_draft(args, draft)
         return draft, None, resume_stage
 
@@ -456,7 +456,7 @@ def _initialize_drafts(args, mode: str, common_state: Optional[dict]):
             attn_implementation="flex_attention",
         ).cuda()
         if not student.is_student:
-            raise ValueError("two-stage resume requires a pivot_q_student checkpoint")
+            raise ValueError("two-stage resume requires a student checkpoint")
     else:
         teacher = (
             DLiteDraftModel.from_pretrained(
@@ -473,7 +473,7 @@ def _initialize_drafts(args, mode: str, common_state: Optional[dict]):
         _sync_args_from_draft(args, teacher)
         student = build_draft_model(
             args,
-            model_role="pivot_q_student",
+            model_role="student",
             source_config=copy.deepcopy(teacher.config),
         )
         _copy_serial_head(teacher, student)
@@ -529,8 +529,10 @@ def _sample_anchors(args, topology, loss_mask, batch_id, metadata):
         )
     if topology.is_target_leader:
         max_anchor = max(seq_len - int(args.block_size), 0)
-        valid = loss_mask[:, : max_anchor + 1] > 0.5
-        valid = valid & (loss_mask[:, 1 : max_anchor + 2] > 0.5)
+        valid_anchor_mask = loss_mask[:, : max_anchor + 1] > 0.5
+        valid_anchor_mask = valid_anchor_mask & (
+            loss_mask[:, 1 : max_anchor + 2] > 0.5
+        )
         generator = torch.Generator(device=loss_mask.device)
         generator.manual_seed(
             int(args.seed)
@@ -538,11 +540,13 @@ def _sample_anchors(args, topology, loss_mask, batch_id, metadata):
             + 10_007 * int(topology.node_rank)
             + 101 * int(topology.target_replica_local_rank)
         )
-        random = torch.rand(valid.shape, generator=generator, device=loss_mask.device)
-        random.masked_fill_(~valid, 2.0)
-        width = min(count, valid.size(1))
+        random = torch.rand(
+            valid_anchor_mask.shape, generator=generator, device=loss_mask.device
+        )
+        random.masked_fill_(~valid_anchor_mask, 2.0)
+        width = min(count, valid_anchor_mask.size(1))
         indices = random.argsort(dim=1)[:, :width]
-        selected = torch.gather(valid, 1, indices)
+        selected = torch.gather(valid_anchor_mask, 1, indices)
         sentinel = max_anchor + 1
         indices.masked_fill_(~selected, sentinel)
         if width < count:
@@ -550,81 +554,91 @@ def _sample_anchors(args, topology, loss_mask, batch_id, metadata):
                 [indices, indices.new_full((bsz, count - width), sentinel)], dim=1
             )
         indices = indices.sort(dim=1).values
-        keep = indices.ne(sentinel)
-        anchors = torch.where(keep, indices, torch.zeros_like(indices))
-        if not bool(keep.any()):
+        block_keep_mask = indices.ne(sentinel)
+        anchor_positions = torch.where(
+            block_keep_mask, indices, torch.zeros_like(indices)
+        )
+        if not bool(block_keep_mask.any()):
             raise ValueError("batch has no valid DLite anchors")
     else:
-        anchors = torch.empty((bsz, count), dtype=torch.long, device="cuda")
-        keep = torch.empty((bsz, count), dtype=torch.bool, device="cuda")
-    for value in (anchors, keep):
+        anchor_positions = torch.empty((bsz, count), dtype=torch.long, device="cuda")
+        block_keep_mask = torch.empty((bsz, count), dtype=torch.bool, device="cuda")
+    for value in (anchor_positions, block_keep_mask):
         dist.broadcast(
             value,
             src=topology.target_tp_leader_global_rank,
             group=topology.target_tp_group,
         )
-    return anchors, keep
+    return anchor_positions, block_keep_mask
 
 
-def _prediction_hidden(final_hidden, anchors, block_size):
-    offsets = torch.arange(block_size - 1, device=anchors.device).view(1, 1, -1)
-    positions = anchors.unsqueeze(-1) + offsets
-    expanded = final_hidden.unsqueeze(1).expand(-1, anchors.size(1), -1, -1)
+def _prediction_hidden(target_last_hidden, anchor_positions, block_size):
+    offsets = torch.arange(block_size - 1, device=anchor_positions.device).view(
+        1, 1, -1
+    )
+    positions = anchor_positions.unsqueeze(-1) + offsets
+    expanded = target_last_hidden.unsqueeze(1).expand(-1, anchor_positions.size(1), -1, -1)
     return torch.gather(
         expanded,
         2,
-        positions.unsqueeze(-1).expand(-1, -1, -1, final_hidden.size(-1)),
+        positions.unsqueeze(-1).expand(-1, -1, -1, target_last_hidden.size(-1)),
     )
 
 
 def _produce_packet(args, topology, target, phase, metadata, values, batch_id):
     input_ids, attention_mask, loss_mask = values
-    output = target.generate_training_data(
+    target_output = target.generate_training_data(
         input_ids, attention_mask, loss_mask, return_logits=False
     )
-    anchors, keep = _sample_anchors(args, topology, loss_mask, batch_id, metadata)
+    anchor_positions, block_keep_mask = _sample_anchors(
+        args, topology, loss_mask, batch_id, metadata
+    )
     if not topology.is_target_leader:
         return None
-    hidden = output.hidden_states
+    target_hidden_states = target_output.hidden_states
     target_hidden = prepare_target_hidden(
-        hidden,
-        anchors,
+        target_hidden_states,
+        anchor_positions,
         metadata["target_layer_ids"],
         metadata["num_target_layers"],
     ).to(torch.bfloat16)
-    history = None
+    target_history_hidden = None
     if phase.need_history:
-        history = prepare_history_hidden_states(
-            hidden,
+        target_history_hidden = prepare_history_hidden_states(
+            target_hidden_states,
             metadata["history_layer_ids"],
             metadata["num_target_layers"],
         ).to(torch.bfloat16)
-    prediction = None
+    target_prediction_hidden = None
     if phase.need_prediction_hidden:
-        final_layer = metadata["num_target_layers"] - 1
-        final_hidden = hidden[final_layer] if isinstance(hidden, dict) else hidden[-1]
-        prediction = _prediction_hidden(
-            final_hidden, anchors, metadata["block_size"]
+        final_layer_id = metadata["num_target_layers"] - 1
+        target_last_hidden = (
+            target_hidden_states[final_layer_id]
+            if isinstance(target_hidden_states, dict)
+            else target_hidden_states[-1]
+        )
+        target_prediction_hidden = _prediction_hidden(
+            target_last_hidden, anchor_positions, metadata["block_size"]
         ).to(torch.bfloat16)
-    return DraftBatchPacket(
+    return DLiteBatchPacket(
         input_ids=input_ids,
         loss_mask=loss_mask,
-        anchor_positions=anchors,
-        block_keep_mask=keep,
+        anchor_positions=anchor_positions,
+        block_keep_mask=block_keep_mask,
         target_hidden=target_hidden,
-        target_history_hidden=history,
-        target_prediction_hidden=prediction,
+        target_history_hidden=target_history_hidden,
+        target_prediction_hidden=target_prediction_hidden,
     )
 
 
 def _packet_spec(args, topology, phase, metadata):
-    local_batch = (
+    local_batch_size = (
         int(args.node_batch_size) // topology.target_replicas_per_node
         if topology.is_target
         else int(args.node_batch_size) // topology.draft_ranks_per_node
     )
-    return DraftPacketSpec(
-        batch_size=local_batch,
+    return DLitePacketSpec(
+        batch_size=local_batch_size,
         max_length=int(args.max_length),
         num_anchors=(
             aligned_anchor_count(
@@ -645,9 +659,9 @@ def _packet_spec(args, topology, phase, metadata):
     )
 
 
-def _select_packet_layers(packet, union_ids, requested_ids):
-    indices = [union_ids.index(int(layer_id)) for layer_id in requested_ids]
-    return packet.target_hidden[:, :, indices, :]
+def _select_packet_layers(packet, available_layer_ids, required_layer_ids):
+    layer_indices = [available_layer_ids.index(int(layer_id)) for layer_id in required_layer_ids]
+    return packet.target_hidden[:, :, layer_indices, :]
 
 
 def _target_logits(packet, phase, metadata, lm_head):
@@ -705,19 +719,21 @@ def _make_online(args, draft, components, process_group, *, teacher_defaults=Fal
 def _supervised_step(session, data):
     args = session.args
     student = session.draft
-    online = session.online
+    draft_online = session.draft_online
     target = session.target
     components = session.components
-    fsdp = session.fsdp
+    fsdp_model = session.fsdp_model
     tp_draft_rank = session.tp_draft_rank
     input_ids = data["input_ids"].cuda(non_blocking=True)
     attention_mask = data["attention_mask"].cuda(non_blocking=True)
     loss_mask = data["loss_mask"].cuda(non_blocking=True)
-    anchors, block_keep = online.sample_anchor_positions(input_ids.size(1), loss_mask)
+    anchor_positions, block_keep_mask = draft_online.sample_anchor_positions(
+        input_ids.size(1), loss_mask
+    )
     if args.train_hidden_states_path:
-        hidden_states, target_logits = load_cached_target_data(
+        target_hidden_states, target_logits = load_cached_target_data(
             data,
-            anchors=anchors,
+            anchor_positions=anchor_positions,
             block_size=student.block_size,
             lm_head=components.lm_head,
             need_logits=True,
@@ -726,30 +742,30 @@ def _supervised_step(session, data):
         target_output = target.generate_training_data(
             input_ids, attention_mask, loss_mask
         )
-        hidden_states = hidden_states_to_cuda(target_output.hidden_states)
+        target_hidden_states = hidden_states_to_cuda(target_output.hidden_states)
         target_prefill_logits = target_output.logits.cuda()
     if tp_draft_rank is not None:
         input_ids = select_tp_rank_batch(input_ids, tp_draft_rank)
         loss_mask = select_tp_rank_batch(loss_mask, tp_draft_rank)
-        anchors = select_tp_rank_batch(anchors, tp_draft_rank)
-        block_keep = select_tp_rank_batch(block_keep, tp_draft_rank)
-        hidden_states = select_tp_rank_batch(hidden_states, tp_draft_rank)
+        anchor_positions = select_tp_rank_batch(anchor_positions, tp_draft_rank)
+        block_keep_mask = select_tp_rank_batch(block_keep_mask, tp_draft_rank)
+        target_hidden_states = select_tp_rank_batch(target_hidden_states, tp_draft_rank)
         target_prefill_logits = select_tp_rank_batch(
             target_prefill_logits, tp_draft_rank
         )
     if not args.train_hidden_states_path:
         target_logits = gather_target_prefill_logits(
-            target_prefill_logits, anchors, student.block_size
+            target_prefill_logits, anchor_positions, student.block_size
         )
         del target_output, target_prefill_logits
     output = get_training_adapter("dlite").training_step(
-        fsdp,
+        fsdp_model,
         dict(
             input_ids=input_ids,
-            hidden_states=hidden_states,
+            hidden_states=target_hidden_states,
             loss_mask=loss_mask,
-            anchor_positions=anchors,
-            block_keep_mask=block_keep,
+            anchor_positions=anchor_positions,
+            block_keep_mask=block_keep_mask,
             target_prefill_logits=target_logits,
             target_logits_are_gathered=True,
         ),
@@ -760,22 +776,22 @@ def _supervised_step(session, data):
 def _distillation_step(session, data):
     args = session.args
     student = session.draft
-    student_online = session.online
+    student_online = session.draft_online
     teacher_online = session.teacher_online
     target = session.target
     components = session.components
-    fsdp = session.fsdp
+    fsdp_model = session.fsdp_model
     tp_draft_rank = session.tp_draft_rank
     input_ids = data["input_ids"].cuda(non_blocking=True)
     attention_mask = data["attention_mask"].cuda(non_blocking=True)
     loss_mask = data["loss_mask"].cuda(non_blocking=True)
-    anchors, block_keep = student_online.sample_anchor_positions(
+    anchor_positions, block_keep_mask = student_online.sample_anchor_positions(
         input_ids.size(1), loss_mask
     )
     if args.train_hidden_states_path:
-        hidden_states, _ = load_cached_target_data(
+        target_hidden_states, _ = load_cached_target_data(
             data,
-            anchors=anchors,
+            anchor_positions=anchor_positions,
             block_size=student.block_size,
             lm_head=components.lm_head,
             need_logits=False,
@@ -784,30 +800,30 @@ def _distillation_step(session, data):
         target_output = target.generate_training_data(
             input_ids, attention_mask, loss_mask, return_logits=False
         )
-        hidden_states = hidden_states_to_cuda(target_output.hidden_states)
+        target_hidden_states = hidden_states_to_cuda(target_output.hidden_states)
         del target_output
     if tp_draft_rank is not None:
         # The TP target sees the shared full batch.  From this point on,
         # teacher and student on rank r both consume only sample r.
         input_ids = select_tp_rank_batch(input_ids, tp_draft_rank)
         loss_mask = select_tp_rank_batch(loss_mask, tp_draft_rank)
-        anchors = select_tp_rank_batch(anchors, tp_draft_rank)
-        block_keep = select_tp_rank_batch(block_keep, tp_draft_rank)
-        hidden_states = select_tp_rank_batch(hidden_states, tp_draft_rank)
+        anchor_positions = select_tp_rank_batch(anchor_positions, tp_draft_rank)
+        block_keep_mask = select_tp_rank_batch(block_keep_mask, tp_draft_rank)
+        target_hidden_states = select_tp_rank_batch(target_hidden_states, tp_draft_rank)
     student_batch = student_online.prepare_batch(
         input_ids,
-        hidden_states,
+        target_hidden_states,
         loss_mask,
-        anchor_positions=anchors,
-        block_keep_mask=block_keep,
+        anchor_positions=anchor_positions,
+        block_keep_mask=block_keep_mask,
     )
     with torch.no_grad():
         teacher_batch = teacher_online.prepare_batch(
             input_ids,
-            hidden_states,
+            target_hidden_states,
             loss_mask,
-            anchor_positions=anchors,
-            block_keep_mask=block_keep,
+            anchor_positions=anchor_positions,
+            block_keep_mask=block_keep_mask,
             shared_query_embeddings=student_batch.query_embeddings,
         )
         teacher_hidden = teacher_online.forward_backbone(
@@ -817,7 +833,7 @@ def _distillation_step(session, data):
             teacher_hidden, teacher_batch
         )
     student_hidden, student_serial_logits = get_training_adapter("dlite").training_step(
-        fsdp,
+        fsdp_model,
         dict(
             prepared_batch=student_batch,
             seq_len=input_ids.size(1),
@@ -846,11 +862,11 @@ def _distillation_step(session, data):
 def _transition_step(session, data):
     args = session.args
     student = session.draft
-    student_online = session.online
+    student_online = session.draft_online
     teacher_online = session.teacher_online
     target = session.target
     components = session.components
-    fsdp = session.fsdp
+    fsdp_model = session.fsdp_model
     tp_draft_rank = session.tp_draft_rank
     stage1_scale, stage2_scale = _cosine_transition_scales(
         session.state.next_batch, session.steps_per_epoch
@@ -858,13 +874,13 @@ def _transition_step(session, data):
     input_ids = data["input_ids"].cuda(non_blocking=True)
     attention_mask = data["attention_mask"].cuda(non_blocking=True)
     loss_mask = data["loss_mask"].cuda(non_blocking=True)
-    anchors, block_keep = student_online.sample_anchor_positions(
+    anchor_positions, block_keep_mask = student_online.sample_anchor_positions(
         input_ids.size(1), loss_mask
     )
     if args.train_hidden_states_path:
-        hidden_states, target_logits = load_cached_target_data(
+        target_hidden_states, target_logits = load_cached_target_data(
             data,
-            anchors=anchors,
+            anchor_positions=anchor_positions,
             block_size=student.block_size,
             lm_head=components.lm_head,
             need_logits=True,
@@ -873,36 +889,36 @@ def _transition_step(session, data):
         target_output = target.generate_training_data(
             input_ids, attention_mask, loss_mask
         )
-        hidden_states = hidden_states_to_cuda(target_output.hidden_states)
+        target_hidden_states = hidden_states_to_cuda(target_output.hidden_states)
         target_prefill_logits = target_output.logits.cuda()
     if tp_draft_rank is not None:
         input_ids = select_tp_rank_batch(input_ids, tp_draft_rank)
         loss_mask = select_tp_rank_batch(loss_mask, tp_draft_rank)
-        anchors = select_tp_rank_batch(anchors, tp_draft_rank)
-        block_keep = select_tp_rank_batch(block_keep, tp_draft_rank)
-        hidden_states = select_tp_rank_batch(hidden_states, tp_draft_rank)
+        anchor_positions = select_tp_rank_batch(anchor_positions, tp_draft_rank)
+        block_keep_mask = select_tp_rank_batch(block_keep_mask, tp_draft_rank)
+        target_hidden_states = select_tp_rank_batch(target_hidden_states, tp_draft_rank)
         target_prefill_logits = select_tp_rank_batch(
             target_prefill_logits, tp_draft_rank
         )
     if not args.train_hidden_states_path:
         target_logits = gather_target_prefill_logits(
-            target_prefill_logits, anchors, student.block_size
+            target_prefill_logits, anchor_positions, student.block_size
         )
         del target_output, target_prefill_logits
     student_batch = student_online.prepare_batch(
         input_ids,
-        hidden_states,
+        target_hidden_states,
         loss_mask,
-        anchor_positions=anchors,
-        block_keep_mask=block_keep,
+        anchor_positions=anchor_positions,
+        block_keep_mask=block_keep_mask,
     )
     with torch.no_grad():
         teacher_batch = teacher_online.prepare_batch(
             input_ids,
-            hidden_states,
+            target_hidden_states,
             loss_mask,
-            anchor_positions=anchors,
-            block_keep_mask=block_keep,
+            anchor_positions=anchor_positions,
+            block_keep_mask=block_keep_mask,
             shared_query_embeddings=student_batch.query_embeddings,
         )
         teacher_hidden = teacher_online.forward_backbone(
@@ -916,7 +932,7 @@ def _transition_step(session, data):
         student_serial_logits,
         stage2_output,
     ) = get_training_adapter("dlite").training_step(
-        fsdp,
+        fsdp_model,
         dict(
             prepared_batch=student_batch,
             seq_len=input_ids.size(1),
@@ -979,29 +995,29 @@ def _transition_step(session, data):
     )
 
 
-def _packet_step(session, packet, begin, end):
+def _packet_step(session, packet, microbatch_start, microbatch_end):
     args = session.args
     mode = args.mode
     phase = session.phase
     metadata = session.packet_metadata
     draft, teacher = session.draft, session.teacher
-    online, teacher_online = session.online, session.teacher_online
-    components, fsdp = session.components, session.fsdp
+    draft_online, teacher_online = session.draft_online, session.teacher_online
+    components, fsdp_model = session.components, session.fsdp_model
     topology = session.topology
     batch_id = session.state.global_step
     phase_start = batch_id - session.state.phase_step
     phase_total = phase.batch_count(session.steps_per_epoch)
-    input_ids = packet.input_ids[begin:end]
-    loss_mask = packet.loss_mask[begin:end]
-    anchors = packet.anchor_positions[begin:end]
-    keep = packet.block_keep_mask[begin:end]
+    input_ids = packet.input_ids[microbatch_start:microbatch_end]
+    loss_mask = packet.loss_mask[microbatch_start:microbatch_end]
+    anchor_positions = packet.anchor_positions[microbatch_start:microbatch_end]
+    block_keep_mask = packet.block_keep_mask[microbatch_start:microbatch_end]
     target_hidden = _select_packet_layers(
         packet,
         metadata["target_layer_ids"],
         draft.target_layer_ids,
-    )[begin:end]
+    )[microbatch_start:microbatch_end]
     prediction_hidden = (
-        packet.target_prediction_hidden[begin:end]
+        packet.target_prediction_hidden[microbatch_start:microbatch_end]
         if packet.target_prediction_hidden is not None
         else None
     )
@@ -1010,42 +1026,42 @@ def _packet_step(session, packet, begin, end):
     # constructing the backbone inputs. FLASH keeps the aligned
     # physical shape selected by ``_packet_spec``.
     if args.flex_attention_backend == "TRITON":
-        natural_width = int(keep.sum(dim=1).max().item())
+        natural_width = int(block_keep_mask.sum(dim=1).max().item())
         if natural_width <= 0:
             raise ValueError("microbatch has no valid DLite anchors")
-        anchors = anchors[:, :natural_width]
-        keep = keep[:, :natural_width]
+        anchor_positions = anchor_positions[:, :natural_width]
+        block_keep_mask = block_keep_mask[:, :natural_width]
         target_hidden = target_hidden[:, :natural_width]
         if prediction_hidden is not None:
             prediction_hidden = prediction_hidden[:, :natural_width]
     history = (
-        packet.target_history_hidden[begin:end]
+        packet.target_history_hidden[microbatch_start:microbatch_end]
         if packet.target_history_hidden is not None
         else None
     )
     if mode == "two_stage" and phase.name in ("stage1", "transition"):
         if teacher_online is None:
             raise ValueError("Stage 1/transition requires the teacher draft")
-        student_batch = online.prepare_batch(
+        student_batch = draft_online.prepare_batch(
             input_ids,
             None,
             loss_mask,
-            anchor_positions=anchors,
-            block_keep_mask=keep,
+            anchor_positions=anchor_positions,
+            block_keep_mask=block_keep_mask,
             target_hidden=target_hidden,
         )
         teacher_hidden = _select_packet_layers(
             packet,
             metadata["target_layer_ids"],
             teacher.target_layer_ids,
-        )[begin:end]
+        )[microbatch_start:microbatch_end]
         with torch.no_grad():
             teacher_batch = teacher_online.prepare_batch(
                 input_ids,
                 None,
                 loss_mask,
-                anchor_positions=anchors,
-                block_keep_mask=keep,
+                anchor_positions=anchor_positions,
+                block_keep_mask=block_keep_mask,
                 shared_query_embeddings=student_batch.query_embeddings,
                 target_hidden=teacher_hidden,
                 raw_history_hidden=history,
@@ -1060,7 +1076,7 @@ def _packet_step(session, packet, begin, end):
             _student_hidden, student_logits = get_training_adapter(
                 "dlite"
             ).training_step(
-                fsdp,
+                fsdp_model,
                 dict(
                     prepared_batch=student_batch,
                     seq_len=input_ids.size(1),
@@ -1087,11 +1103,11 @@ def _packet_step(session, packet, begin, end):
             )
         else:
             target_logits = _target_logits(
-                DraftBatchPacket(
+                DLiteBatchPacket(
                     input_ids,
                     loss_mask,
-                    anchors,
-                    keep,
+                    anchor_positions,
+                    block_keep_mask,
                     target_hidden,
                     history,
                     None,
@@ -1101,7 +1117,7 @@ def _packet_step(session, packet, begin, end):
                 components.lm_head,
             )
             _, student_logits, supervised = get_training_adapter("dlite").training_step(
-                fsdp,
+                fsdp_model,
                 dict(
                     prepared_batch=student_batch,
                     seq_len=input_ids.size(1),
@@ -1156,11 +1172,11 @@ def _packet_step(session, packet, begin, end):
             )
     else:
         target_logits = _target_logits(
-            DraftBatchPacket(
+            DLiteBatchPacket(
                 input_ids,
                 loss_mask,
-                anchors,
-                keep,
+                anchor_positions,
+                block_keep_mask,
                 target_hidden,
                 history,
                 (prediction_hidden),
@@ -1170,14 +1186,14 @@ def _packet_step(session, packet, begin, end):
             components.lm_head,
         )
         supervised = get_training_adapter("dlite").training_step(
-            fsdp,
+            fsdp_model,
             dict(
                 input_ids=input_ids,
                 loss_mask=loss_mask,
                 target_hidden=target_hidden,
                 raw_history_hidden=history,
-                anchor_positions=anchors,
-                block_keep_mask=keep,
+                anchor_positions=anchor_positions,
+                block_keep_mask=block_keep_mask,
                 target_prefill_logits=target_logits,
                 target_logits_are_gathered=True,
             ),
@@ -1199,14 +1215,18 @@ def parse_args(*, mode, argv=None):
 
 
 class DLiteTrainingAdapter(TrainingAdapter):
+    """Recipe for DLite training phases and model adapter.
+    Replays skipped packets on training restart, waits for phase barriers
+    before starting a new phase, and produces checkpoint metadata.
+    """
     replay_skipped = False
     phase_barrier = True
 
     def required_target_layers(self, model):
-        layers = super().required_target_layers(model)
+        required_layer_ids = super().required_target_layers(model)
         if model.is_teacher:
-            layers.update(model.history_layer_ids)
-        return layers
+            required_layer_ids.update(model.history_layer_ids)
+        return required_layer_ids
 
     def build_config(self, args, *, source_config=None, model_role=None):
         return build_draft_config(
@@ -1229,7 +1249,7 @@ class DLiteTrainingAdapter(TrainingAdapter):
                 Phase(
                     "transition",
                     2,
-                    1,
+                    1, # transition epochs, ddefault=1
                     True,
                     False,
                     log_at_schedule_end=False,
@@ -1271,7 +1291,7 @@ class DLiteTrainingAdapter(TrainingAdapter):
             inductor_config.triton.autotune_pointwise = (
                 os.environ.get("DLITE_POINTWISE_AUTOTUNE", "0") == "1"
             )
-        draft, teacher, _ = _initialize_drafts(args, args.mode, session.resume)
+        draft, teacher, _ = _initialize_drafts(args, args.mode, session.resume_state)
         if args.mode == "teacher" and not draft.is_teacher:
             raise ValueError("Teacher training requires an swa_teacher checkpoint")
         if teacher is not None:
@@ -1302,13 +1322,13 @@ class DLiteTrainingAdapter(TrainingAdapter):
         draft.requires_grad_(True)
         session.draft, session.teacher = draft, teacher
         provided = getattr(args, "teacher_draft_path", None)
-        saved = (session.resume or {}).get("teacher_checkpoint_identity")
+        saved = (session.resume_state or {}).get("teacher_checkpoint_identity")
         session.teacher_identity = saved or (
             os.path.realpath(provided) if provided else None
         )
         if teacher is not None and saved and saved != os.path.realpath(provided):
             raise ValueError("Stage1/transition requires the same teacher checkpoint")
-        validate_resume_model(session.resume, draft)
+        validate_resume_model(session.resume_state, draft)
 
     def make_online(self, session):
         if session.teacher is not None:
@@ -1372,9 +1392,17 @@ class DLiteTrainingAdapter(TrainingAdapter):
             session.teacher.eval()
         return metrics
 
-    def compute_step(self, session, data, *, begin=None, end=None, detailed=False):
+    def compute_step(
+        self,
+        session,
+        data,
+        *,
+        microbatch_start=None,
+        microbatch_end=None,
+        collect_detailed_metrics=False,
+    ):
         if session.topology is not None:
-            return _packet_step(session, data, begin, end)
+            return _packet_step(session, data, microbatch_start, microbatch_end)
         if session.phase.name == "stage1":
             return _distillation_step(session, data)
         if session.phase.name == "transition":
@@ -1386,12 +1414,12 @@ class DLiteTrainingAdapter(TrainingAdapter):
 
     def target_proxies(self, session):
         metadata = session.packet_metadata
-        capture = set(metadata["target_layer_ids"]) | set(metadata["history_layer_ids"])
+        capture_layer_ids = set(metadata["target_layer_ids"]) | set(metadata["history_layer_ids"])
         if any(phase.need_prediction_hidden for phase in session.phases):
-            capture.add(metadata["num_target_layers"] - 1)
+            capture_layer_ids.add(metadata["num_target_layers"] - 1)
         return [
             SimpleNamespace(
-                target_layer_ids=sorted(capture),
+                target_layer_ids=sorted(capture_layer_ids),
                 is_teacher=bool(metadata["history_layer_ids"]),
                 history_layer_ids=metadata["history_layer_ids"],
             )
@@ -1403,7 +1431,7 @@ class DLiteTrainingAdapter(TrainingAdapter):
         )
 
     def empty_packet(self, spec):
-        return DraftBatchPacket.empty(spec, device="cuda")
+        return DLiteBatchPacket.empty(spec, device="cuda")
 
     def produce_packet(self, session, phase, values, batch_id):
         return _produce_packet(

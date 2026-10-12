@@ -4,7 +4,34 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from importlib import import_module
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import argparse
+
+    from torch.distributed import ProcessGroup
+    from torch.distributed.fsdp import FullyShardedDataParallel
+    from torch.utils.data import DataLoader
+
+    from litespec.core.dflash import OnlineDFlashModel
+    from litespec.core.dflash2 import OnlineDFlash2Model
+    from litespec.core.dlite import OnlineDLiteModel
+    from litespec.core.dspark import OnlineDSparkModel
+    from litespec.distributed.groups import DisaggregatedTopology
+    from litespec.distributed.transport import RouteFragment
+    from litespec.modeling.draft.dflash import DFlashDraftModel
+    from litespec.modeling.draft.dflash2 import DFlash2DraftModel
+    from litespec.modeling.draft.dlite import DLiteDraftModel
+    from litespec.modeling.draft.dspark import DSparkDraftModel
+    from litespec.modeling.target.target_utils import (
+        SharedTargetEmbeddingsAndHead,
+        TargetEmbeddingsAndHead,
+    )
+    from litespec.modeling.target.training_target_model import TrainingTargetModel
+    from litespec.training.logging import Tracker
+    from litespec.training.optimizer import BF16Optimizer
+    from litespec.training.recipes._dflash_common import DFlashFamilyTrainingAdapter
+    from litespec.training.recipes.dlite import DLiteTrainingAdapter
 
 
 @dataclass(frozen=True)
@@ -38,39 +65,49 @@ class RunState:
 
 @dataclass
 class TrainingSession:
+    """Runtime container for one training run.
+    Holds CLI args, the algorithm adapter, phase cursor, models (draft /
+    teacher / target / FSDP draft_online wrapper), data, optimizer, tracker, and
+    disaggregate topology. Runner and recipes read dependencies from here
+    instead of implicit globals.
+    """
     args: Any
-    adapter: TrainingAdapter
+    adapter: DFlashFamilyTrainingAdapter | DLiteTrainingAdapter
     phases: list[Phase]
     state: RunState = field(default_factory=RunState)
-    draft: Any = None
-    teacher: Any = None
-    online: Any = None
-    teacher_online: Any = None
-    fsdp: Any = None
-    components: Any = None
-    target: Any = None
-    loader: Any = None
-    optimizer: Any = None
-    tracker: Any = None
-    topology: Any = None
-    routes: Any = None
-    packet_metadata: dict = field(default_factory=dict)
-    resume: dict | None = None
+    draft: (
+        DFlashDraftModel | DFlash2DraftModel | DSparkDraftModel | DLiteDraftModel | None
+    ) = None
+    teacher: DLiteDraftModel | None = None
+    draft_online: (
+        OnlineDFlashModel | OnlineDFlash2Model | OnlineDSparkModel | OnlineDLiteModel | None
+    ) = None
+    teacher_online: OnlineDLiteModel | None = None
+    fsdp_model: FullyShardedDataParallel | None = None
+    components: TargetEmbeddingsAndHead | SharedTargetEmbeddingsAndHead | None = None
+    target: TrainingTargetModel | None = None
+    dataloader: DataLoader | None = None
+    optimizer: BF16Optimizer | None = None
+    tracker: Tracker | None = None
+    topology: DisaggregatedTopology | None = None
+    routes: list[RouteFragment] | None = None
+    packet_metadata: dict[str, Any] = field(default_factory=dict)
+    resume_state: dict[str, Any] | None = None
     steps_per_epoch: int = 0
     total_steps: int = 0
     tp_draft_rank: int | None = None
     teacher_identity: str | None = None
 
     @property
-    def process_group(self):
+    def process_group(self) -> ProcessGroup | None:
         return self.topology.draft_group if self.topology is not None else None
 
     @property
-    def coordinator_rank(self):
+    def coordinator_rank(self) -> int:
         return self.topology.draft_global_ranks[0] if self.topology is not None else 0
 
     @property
-    def phase(self):
+    def phase(self) -> Phase:
         return self.phases[self.state.phase_index]
 
 
@@ -113,11 +150,11 @@ class TrainingAdapter:
             path, torch_dtype=torch.bfloat16, attn_implementation=attention_backend
         ).cuda()
 
-    def prepare_batch(self, online, *args, **kwargs):
-        return online.prepare_batch(*args, **kwargs)
+    def prepare_batch(self, draft_online, *args, **kwargs):
+        return draft_online.prepare_batch(*args, **kwargs)
 
-    def training_step(self, online, batch):
-        return online(**batch)
+    def training_step(self, draft_online, batch):
+        return draft_online(**batch)
 
     def required_target_layers(self, model):
         return set(model.target_layer_ids)

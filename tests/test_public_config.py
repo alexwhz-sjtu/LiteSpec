@@ -27,7 +27,7 @@ class PublicConfigTest(unittest.TestCase):
         config.block_size = 4
         config.dlite_config = {
             "architecture_version": "dlite_v1",
-            "model_role": "pivot_q_student",
+            "model_role": "student",
             "chs_num_layers": 2,
             "target_layer_ids": build_target_layer_ids(4, 2),
             "sequential_head": "rnn",
@@ -125,7 +125,7 @@ class PublicConfigTest(unittest.TestCase):
         config.block_size = 4
         config.dlite_config = {
             "architecture_version": "dlite_v2",
-            "model_role": "pivot_q_student",
+            "model_role": "student",
             "chs_num_layers": 2,
             "target_layer_ids": build_target_layer_ids(4, 2),
             "sequential_head": "rnn",

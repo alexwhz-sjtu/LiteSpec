@@ -257,10 +257,10 @@ class DFlashTrainingBase(nn.Module):
         """Sample anchors whose clean token and first target are supervised."""
 
         num_candidates = max(seq_len - 1, 0)
-        valid = (loss_mask[:, :num_candidates] > 0.5) & (
+        valid_anchor_mask = (loss_mask[:, :num_candidates] > 0.5) & (
             loss_mask[:, 1 : num_candidates + 1] > 0.5
         )
-        valid_counts = valid.sum(dim=1)
+        valid_counts = valid_anchor_mask.sum(dim=1)
         if max_valid_anchors is None:
             # Direct model callers may supply an already-device-resident mask.
             # Training strategies pass the CPU-computed value and avoid this
@@ -272,48 +272,48 @@ class DFlashTrainingBase(nn.Module):
                 "DFlash-family training requires two consecutive supervised tokens"
             )
 
-        random_values = torch.rand(valid.shape, device=device)
-        random_values.masked_fill_(~valid, 2.0)
+        random_values = torch.rand(valid_anchor_mask.shape, device=device)
+        random_values.masked_fill_(~valid_anchor_mask, 2.0)
         candidates = random_values.argsort(dim=1)[:, :width]
-        keep_mask = torch.arange(width, device=device).unsqueeze(
+        block_keep_mask = torch.arange(width, device=device).unsqueeze(
             0
         ) < valid_counts.clamp(max=width).unsqueeze(1)
 
-        sentinel = valid.shape[1]
-        anchors = torch.where(
-            keep_mask,
+        sentinel = valid_anchor_mask.shape[1]
+        anchor_positions = torch.where(
+            block_keep_mask,
             candidates,
             torch.full_like(candidates, sentinel),
         )
-        anchors = anchors.sort(dim=1).values
-        keep_mask = anchors < sentinel
-        return torch.where(keep_mask, anchors, 0), keep_mask
+        anchor_positions = anchor_positions.sort(dim=1).values
+        block_keep_mask = anchor_positions < sentinel
+        return torch.where(block_keep_mask, anchor_positions, 0), block_keep_mask
 
     def _create_position_ids(self, anchor_positions: torch.Tensor) -> torch.Tensor:
         """Create absolute position IDs for parallel draft blocks."""
-        bsz, n_blocks = anchor_positions.shape
+        bsz, num_blocks = anchor_positions.shape
         device = anchor_positions.device
         offsets = torch.arange(self.block_size, device=device).view(1, 1, -1)
-        pos_ids = anchor_positions.unsqueeze(-1) + offsets
-        return pos_ids.view(bsz, -1)
+        position_ids = anchor_positions.unsqueeze(-1) + offsets
+        return position_ids.view(bsz, -1)
 
     def _create_noise_embed(self, input_ids, anchor_positions, block_keep_mask):
         bsz, seq_len = input_ids.shape
-        n = anchor_positions.shape[1]
-        bs = self.block_size
+        num_blocks = anchor_positions.shape[1]
+        block_size = self.block_size
         device = input_ids.device
 
         noise_ids = torch.full(
-            (bsz, n * bs), self.mask_token_id, dtype=torch.long, device=device
+            (bsz, num_blocks * block_size), self.mask_token_id, dtype=torch.long, device=device
         )
 
-        block_starts = torch.arange(n, device=device) * bs
+        block_starts = torch.arange(num_blocks, device=device) * block_size
         block_starts = block_starts.unsqueeze(0).expand(bsz, -1)
 
         valid_anchor_positions = anchor_positions.clamp(0, seq_len - 1)
         anchor_tokens = torch.gather(input_ids, 1, valid_anchor_positions)
 
-        flat_batch_idx = torch.arange(bsz, device=device).unsqueeze(1).expand(bsz, n)
+        flat_batch_idx = torch.arange(bsz, device=device).unsqueeze(1).expand(bsz, num_blocks)
         # masked_fill with a scalar avoids a pageable H2D copy per microbatch.
         noise_ids[flat_batch_idx, block_starts] = anchor_tokens.masked_fill(
             ~block_keep_mask, self.mask_token_id
@@ -329,9 +329,9 @@ class DFlashTrainingBase(nn.Module):
         """Gather the frozen target state that predicts each hard label."""
 
         target_pred_indices = (safe_label_indices - 1).clamp(min=0)
-        batch_size = target_last_hidden_states.shape[0]
+        bsz = target_last_hidden_states.shape[0]
         hidden_size = target_last_hidden_states.shape[-1]
-        gather_indices = target_pred_indices.reshape(batch_size, -1, 1).expand(
+        gather_indices = target_pred_indices.reshape(bsz, -1, 1).expand(
             -1, -1, hidden_size
         )
         return torch.gather(
@@ -354,9 +354,9 @@ class DFlashTrainingBase(nn.Module):
         dashboard group.
         """
 
-        family = name.split("/", 1)[1]
+        metric_path = name.split("/", 1)[1]
         for position in range(1, numerators.numel()):
-            metrics[f"position_{position}/{family}"] = (
+            metrics[f"position_{position}/{metric_path}"] = (
                 numerators[position].detach(),
                 denominators[position].detach(),
             )
@@ -437,7 +437,7 @@ class DFlashTrainingBase(nn.Module):
     def _forward_draft_blocks(
         self,
         input_ids: torch.Tensor,
-        hidden_states: torch.Tensor,
+        target_context_hidden: torch.Tensor,
         loss_mask: torch.Tensor,
         max_valid_anchors: Optional[int] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -490,28 +490,28 @@ class DFlashTrainingBase(nn.Module):
         draft_kwargs = {}
         if self.attention_backend == "flex_attention":
             draft_kwargs["kernel_options"] = self.flex_kernel_options
-        output_hidden = self.draft_model(
+        draft_hidden_states = self.draft_model(
             position_ids=full_position_ids,
             noise_embedding=noise_embedding,
-            target_hidden=hidden_states,
+            target_hidden=target_context_hidden,
             attention_mask=dflash_attn_mask,
             **draft_kwargs,
         )
-        return anchor_positions, block_keep_mask, output_hidden
+        return anchor_positions, block_keep_mask, draft_hidden_states
 
     def _dflash_objective_chunk_terms(
         self,
-        hidden: torch.Tensor,
+        draft_block_hidden_states: torch.Tensor,
         target_ids: torch.Tensor,
         weight_mask: torch.Tensor,
         predecessor_ids: torch.Tensor,
     ) -> DFlashObjectiveTerms:
         """Return a flat tuple of additive objective and metric tensors."""
 
-        batch_size, num_blocks, block_size, hidden_size = hidden.shape
+        bsz, num_blocks, block_size, hidden_size = draft_block_hidden_states.shape
         logits = self.lm_head(
-            hidden.reshape(batch_size, num_blocks * block_size, hidden_size)
-        ).reshape(batch_size, num_blocks, block_size, -1)
+            draft_block_hidden_states.reshape(bsz, num_blocks * block_size, hidden_size)
+        ).reshape(bsz, num_blocks, block_size, -1)
         candidate_selector = getattr(self.draft_model, "candidate_selector", None)
         objective_logits = (
             self.draft_model.transform_unary_logits(logits)
@@ -529,7 +529,7 @@ class DFlashTrainingBase(nn.Module):
         if self.loss_decay_gamma is not None and self.loss_decay_gamma > 0:
             positions = torch.arange(
                 self.block_size,
-                device=hidden.device,
+                device=draft_block_hidden_states.device,
             ).view(1, 1, -1)
             decay_weights = torch.exp(
                 -(positions - 1).clamp(min=0).float() / self.loss_decay_gamma
@@ -545,7 +545,7 @@ class DFlashTrainingBase(nn.Module):
             selector_terms = self._selector_chunk_terms(
                 candidate_selector=candidate_selector,
                 objective_logits=objective_logits,
-                hidden=hidden,
+                draft_block_hidden_states=draft_block_hidden_states,
                 target_ids=target_ids,
                 predecessor_ids=predecessor_ids,
                 loss_weights=loss_weights,
@@ -589,7 +589,7 @@ class DFlashTrainingBase(nn.Module):
 
     def _dflash_metric_chunk_terms(
         self,
-        hidden: torch.Tensor,
+        draft_block_hidden_states: torch.Tensor,
         target_ids: torch.Tensor,
         weight_mask: torch.Tensor,
         predecessor_ids: torch.Tensor,
@@ -604,7 +604,7 @@ class DFlashTrainingBase(nn.Module):
 
         candidate_selector = getattr(self.draft_model, "candidate_selector", None)
         unary = self._dflash_unary_diagnostics(
-            hidden,
+            draft_block_hidden_states,
             target_ids,
             top_k=self._metric_top_k(),
         )
@@ -613,7 +613,7 @@ class DFlashTrainingBase(nn.Module):
             selector = self._dflash2_selector_diagnostics(
                 candidate_selector=candidate_selector,
                 unary=unary,
-                hidden=hidden,
+                draft_block_hidden_states=draft_block_hidden_states,
                 predecessor_ids=predecessor_ids,
                 weight_mask=weight_mask,
             )
@@ -621,7 +621,7 @@ class DFlashTrainingBase(nn.Module):
         greedy = self._dflash_greedy_diagnostics(
             candidate_selector=candidate_selector,
             unary=unary,
-            hidden=hidden,
+            draft_block_hidden_states=draft_block_hidden_states,
             target_ids=target_ids,
             weight_mask=weight_mask,
             position_den=position_den,
@@ -646,17 +646,17 @@ class DFlashTrainingBase(nn.Module):
 
     def _dflash_unary_diagnostics(
         self,
-        hidden: torch.Tensor,
+        draft_block_hidden_states: torch.Tensor,
         target_ids: torch.Tensor,
         *,
         top_k: int,
     ) -> _DFlashUnaryDiagnostics:
         """Project draft states once and derive the strict unary top-k view."""
 
-        batch_size, num_blocks, block_size, hidden_size = hidden.shape
+        bsz, num_blocks, block_size, hidden_size = draft_block_hidden_states.shape
         logits = self.lm_head(
-            hidden.reshape(batch_size, num_blocks * block_size, hidden_size)
-        ).reshape(batch_size, num_blocks, block_size, -1)
+            draft_block_hidden_states.reshape(bsz, num_blocks * block_size, hidden_size)
+        ).reshape(bsz, num_blocks, block_size, -1)
         transform = getattr(self.draft_model, "transform_unary_logits", None)
         objective_logits = logits if transform is None else transform(logits)
         probabilities = torch.softmax(objective_logits.float(), dim=-1)
@@ -682,14 +682,14 @@ class DFlashTrainingBase(nn.Module):
         *,
         candidate_selector: Optional[nn.Module],
         unary: _DFlashUnaryDiagnostics,
-        hidden: torch.Tensor,
+        draft_block_hidden_states: torch.Tensor,
         target_ids: torch.Tensor,
         weight_mask: torch.Tensor,
         position_den: torch.Tensor,
     ) -> _DFlashGreedyDiagnostics:
         """Reduce per-block acceptance chains; walk the selector path if any."""
 
-        batch_size, num_blocks, block_size, hidden_size = hidden.shape
+        bsz, num_blocks, block_size, hidden_size = draft_block_hidden_states.shape
         zero = position_den.new_zeros(())
         if block_size <= 1:
             return _DFlashGreedyDiagnostics(
@@ -724,22 +724,22 @@ class DFlashTrainingBase(nn.Module):
 
         greedy_ids = candidate_selector.greedy_path(
             candidate_ids=unary.candidate_ids[:, :, 1:].reshape(
-                batch_size * num_blocks,
+                bsz * num_blocks,
                 block_size - 1,
                 candidate_selector.top_k,
             ),
             unary_logits=unary.topk_logits[:, :, 1:].reshape(
-                batch_size * num_blocks,
+                bsz * num_blocks,
                 block_size - 1,
                 candidate_selector.top_k,
             ),
-            hidden_states=hidden[:, :, 1:].reshape(
-                batch_size * num_blocks,
+            hidden_states=draft_block_hidden_states[:, :, 1:].reshape(
+                bsz * num_blocks,
                 block_size - 1,
                 hidden_size,
             ),
             anchor_token_ids=target_ids[:, :, 0].reshape(-1),
-        ).reshape(batch_size, num_blocks, block_size - 1)
+        ).reshape(bsz, num_blocks, block_size - 1)
         greedy_hit = greedy_ids == target_ids[:, :, 1:]
         return _DFlashGreedyDiagnostics(
             selected_ids=greedy_ids,
@@ -772,10 +772,10 @@ class DFlashTrainingBase(nn.Module):
         if aligned_target_hidden is None:
             return _DFlashTeacherTerms.zeros(position_den)
 
-        batch_size, num_blocks, block_size, hidden_size = aligned_target_hidden.shape
+        bsz, num_blocks, block_size, hidden_size = aligned_target_hidden.shape
         teacher_logits = self.lm_head(
             aligned_target_hidden.reshape(
-                batch_size,
+                bsz,
                 num_blocks * block_size,
                 hidden_size,
             )

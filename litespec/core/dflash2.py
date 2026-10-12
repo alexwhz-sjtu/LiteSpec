@@ -17,7 +17,7 @@ class OnlineDFlash2Model(OnlineDFlashModel):
         self,
         candidate_selector: nn.Module,
         objective_logits: torch.Tensor,
-        hidden: torch.Tensor,
+        draft_block_hidden_states: torch.Tensor,
         target_ids: torch.Tensor,
         predecessor_ids: torch.Tensor,
         loss_weights: torch.Tensor,
@@ -37,7 +37,7 @@ class OnlineDFlash2Model(OnlineDFlashModel):
             # Isolate only the selector objective. The caller still uses the
             # original tensors for the primary DFlash objective.
             objective_logits = objective_logits.detach()
-            hidden = hidden.detach()
+            draft_block_hidden_states = draft_block_hidden_states.detach()
 
         # Match serving exactly: train only against the strict unary top-k.
         # Candidate misses are a backbone/recall failure, not a selector
@@ -52,7 +52,7 @@ class OnlineDFlash2Model(OnlineDFlashModel):
         selector_logits = candidate_selector.score_candidates(
             candidate_ids=candidate_ids,
             unary_logits=unary_logits,
-            hidden_states=hidden,
+            hidden_states=draft_block_hidden_states,
             predecessor_ids=predecessor_ids,
         )
         selector_ce = F.cross_entropy(
@@ -88,7 +88,7 @@ class OnlineDFlash2Model(OnlineDFlashModel):
         *,
         candidate_selector: nn.Module,
         unary: _DFlashUnaryDiagnostics,
-        hidden: torch.Tensor,
+        draft_block_hidden_states: torch.Tensor,
         predecessor_ids: torch.Tensor,
         weight_mask: torch.Tensor,
     ) -> _DFlashSelectorDiagnostics:
@@ -97,7 +97,7 @@ class OnlineDFlash2Model(OnlineDFlashModel):
         selector_logits = candidate_selector.score_candidates(
             candidate_ids=unary.candidate_ids,
             unary_logits=unary.topk_logits,
-            hidden_states=hidden,
+            hidden_states=draft_block_hidden_states,
             predecessor_ids=predecessor_ids,
         )
         target_is_candidate = unary.target_is_candidate.float()

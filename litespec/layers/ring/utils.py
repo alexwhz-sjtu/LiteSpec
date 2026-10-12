@@ -92,18 +92,20 @@ class RingComm:
         self, to_send: torch.Tensor, recv_tensor: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         if recv_tensor is None:
-            res = torch.empty_like(to_send)
+            received_tensor = torch.empty_like(to_send)
             # print(f"send_recv: empty_like {to_send.shape}")
         else:
-            res = recv_tensor
+            received_tensor = recv_tensor
 
         send_op = dist.P2POp(
             dist.isend, to_send, self.send_rank, group=self._process_group
         )
-        recv_op = dist.P2POp(dist.irecv, res, self.recv_rank, group=self._process_group)
+        recv_op = dist.P2POp(
+            dist.irecv, received_tensor, self.recv_rank, group=self._process_group
+        )
         self._ops.append(send_op)
         self._ops.append(recv_op)
-        return res
+        return received_tensor
 
     def commit(self):
         if self._reqs is not None:

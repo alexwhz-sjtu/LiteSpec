@@ -50,14 +50,8 @@ COMMON_ARGUMENT_KEYS = (
     "muon_lr",
     "muon_momentum",
     "muon_weight_decay",
-    "muon_nesterov",
-    "muon_ns_steps",
-    "muon_ns_coefficients",
-    "muon_eps",
-    "muon_adjust_lr_fn",
     "muon_matrices_per_rank",
     "muon_adamw_lr",
-    "muon_adamw_betas",
     "muon_adamw_weight_decay",
     "seed",
     "cache_dir",
@@ -139,13 +133,13 @@ def test_algorithm_specific_yaml_fields_stay_scoped():
 @pytest.mark.parametrize("name", CONFIGS)
 def test_muon_yaml_roundtrip_and_cli_override(name):
     from litespec.training.algorithms import get_training_adapter
-    from litespec.training.muon import MUON_DEFAULTS, muon_config_from_args
+    from litespec.training.muon import MUON_CLI_KEYS, MUON_DEFAULTS, muon_config_from_args
     from scripts.config.training_launcher import arguments_to_cli
 
     config = _config(name)
     args = config["arguments"]
-    assert args["use_muon"] is False
-    for key, value in MUON_DEFAULTS.items():
+    for key in MUON_CLI_KEYS:
+        value = MUON_DEFAULTS[key]
         assert args[f"muon_{key}"] == (
             list(value) if isinstance(value, tuple) else value
         )

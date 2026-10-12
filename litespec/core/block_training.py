@@ -10,49 +10,56 @@ import torch
 
 def sample_sorted_anchors(
     valid_anchor_mask: torch.Tensor,
-    max_anchors: int,
+    num_anchors: int,
     *,
     output_width: Optional[int] = None,
     max_valid_anchors: Optional[int] = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Randomly sample valid anchors, sort them, and append invalid padding.
+    """Randomly sample valid anchors, sort them, and pad with inactive slots.
 
-    ``output_width`` is deliberately separate from sampling.  Callers may use
-    it for a backend-specific padded shape without changing which anchors are
-    eligible or how many real anchors are sampled.
+    Returns ``anchor_positions`` and ``block_keep_mask``. ``output_width`` only
+    sets the physical padded width; it does not change which sequence positions
+    are eligible or how many real anchors are sampled.
     """
 
     if valid_anchor_mask.ndim != 2:
         raise ValueError("valid_anchor_mask must have shape (batch, candidates)")
-    valid = valid_anchor_mask.bool()
-    counts = valid.sum(dim=1)
+    valid_anchor_mask = valid_anchor_mask.bool()
+    counts = valid_anchor_mask.sum(dim=1)
     if max_valid_anchors is None:
         max_valid_anchors = int(counts.max().item())
-    real_width = min(int(max_anchors), max(0, int(max_valid_anchors)))
-    if real_width <= 0:
+    sampled_width = min(int(num_anchors), max(0, int(max_valid_anchors)))
+    if sampled_width <= 0:
         raise ValueError("No valid anchor positions in this batch.")
-    width = real_width if output_width is None else int(output_width)
-    if width < real_width:
+    width = sampled_width if output_width is None else int(output_width)
+    if width < sampled_width:
         raise ValueError("output_width cannot be smaller than sampled width")
 
-    scores = torch.rand_like(valid, dtype=torch.float32)
-    scores.masked_fill_(~valid, 2.0)
-    selected_width = min(real_width, valid.size(1))
-    indices = scores.argsort(dim=1)[:, :selected_width]
-    selected_valid = torch.gather(valid, 1, indices)
-    sentinel = valid.size(1)
-    indices = indices.masked_fill(~selected_valid, sentinel)
+    scores = torch.rand_like(valid_anchor_mask, dtype=torch.float32)
+    scores.masked_fill_(~valid_anchor_mask, 2.0)
+    selected_width = min(sampled_width, valid_anchor_mask.size(1))
+    anchor_positions = scores.argsort(dim=1)[:, :selected_width]
+    selected_valid = torch.gather(valid_anchor_mask, 1, anchor_positions)
+    sentinel = valid_anchor_mask.size(1)
+    anchor_positions = anchor_positions.masked_fill(~selected_valid, sentinel)
     if selected_width < width:
-        indices = torch.cat(
+        anchor_positions = torch.cat(
             [
-                indices,
-                indices.new_full((indices.size(0), width - selected_width), sentinel),
+                anchor_positions,
+                anchor_positions.new_full(
+                    (anchor_positions.size(0), width - selected_width), sentinel
+                ),
             ],
             dim=1,
         )
-    indices = indices.sort(dim=1).values
-    keep = indices != sentinel
-    return torch.where(keep, indices, torch.zeros_like(indices)), keep
+    anchor_positions = anchor_positions.sort(dim=1).values
+    block_keep_mask = anchor_positions != sentinel
+    return (
+        torch.where(
+            block_keep_mask, anchor_positions, torch.zeros_like(anchor_positions)
+        ),
+        block_keep_mask,
+    )
 
 
 def gather_block_values(
@@ -71,15 +78,15 @@ def gather_block_values(
     )
     indices = anchor_positions.unsqueeze(-1) + offsets
     in_bounds = indices < values.size(1)
-    safe = indices.clamp(min=0, max=max(values.size(1) - 1, 0))
+    safe_indices = indices.clamp(min=0, max=max(values.size(1) - 1, 0))
     expanded = values.unsqueeze(1).expand(
         -1, anchor_positions.size(1), *values.shape[1:]
     )
-    gather_index = safe
+    gather_index = safe_indices
     for _ in values.shape[2:]:
         gather_index = gather_index.unsqueeze(-1)
     gather_index = gather_index.expand(-1, -1, -1, *values.shape[2:])
-    return torch.gather(expanded, 2, gather_index), in_bounds, safe
+    return torch.gather(expanded, 2, gather_index), in_bounds, safe_indices
 
 
 def apply_exponential_position_decay(

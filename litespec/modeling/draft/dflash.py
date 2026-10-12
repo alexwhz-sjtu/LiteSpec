@@ -164,15 +164,17 @@ def _resolve_mla_rope_interleaved(config: Qwen3Config) -> bool:
 def validate_dflash_mla_config(config: Qwen3Config) -> None:
     """Validate the standard MLA dimension fields carried by a draft config."""
 
-    required = (
+    required_field_names = (
         "kv_lora_rank",
         "qk_nope_head_dim",
         "qk_rope_head_dim",
         "v_head_dim",
     )
-    missing = [name for name in required if getattr(config, name, None) is None]
-    if missing:
-        raise ValueError(f"MLA draft config is missing required fields: {missing}")
+    missing_field_names = [
+        name for name in required_field_names if getattr(config, name, None) is None
+    ]
+    if missing_field_names:
+        raise ValueError(f"MLA draft config is missing required fields: {missing_field_names}")
 
     q_lora_rank = getattr(config, "q_lora_rank", None)
     if q_lora_rank is not None and int(q_lora_rank) <= 0:
@@ -861,6 +863,7 @@ class DFlashDraftModel(Qwen3PreTrainedModel):
         temperature: float,
         top_p: float = 1.0,
         top_k: int = 0,
+        target_cache: Optional[Cache] = None,
     ):
         if temperature < 0:
             raise ValueError(f"temperature must be non-negative, got {temperature}")
@@ -883,7 +886,9 @@ class DFlashDraftModel(Qwen3PreTrainedModel):
             output_ids.shape[1], device=target.device
         ).unsqueeze(0)
 
-        past_key_values_target = DynamicCache()
+        past_key_values_target = (
+            DynamicCache() if target_cache is None else target_cache
+        )
         past_key_values_draft = DynamicCache()
 
         # Prefill stage

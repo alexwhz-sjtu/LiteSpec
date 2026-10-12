@@ -56,7 +56,7 @@ def run_case(group, matrices_per_rank, checkpoint_dir):
     model = TinyDraft().cuda().bfloat16()
     parameters, specs = register_optimizer_parameters(model)
     refs = [torch.nn.Parameter(p.detach().float().clone()) for p in parameters]
-    fsdp = FSDP(
+    fsdp_model = FSDP(
         model,
         process_group=group,
         use_orig_params=True,
@@ -65,7 +65,7 @@ def run_case(group, matrices_per_rank, checkpoint_dir):
             param_dtype=torch.bfloat16, buffer_dtype=torch.bfloat16
         ),
     )
-    layouts = build_fsdp_layouts(fsdp, parameters, specs, group)
+    layouts = build_fsdp_layouts(fsdp_model, parameters, specs, group)
     config = {"matrices_per_rank": matrices_per_rank}
 
     def make_optimizer():
@@ -105,7 +105,7 @@ def run_case(group, matrices_per_rank, checkpoint_dir):
         model.sequential_head.requires_grad_(step >= 2)
         model.layers[0].requires_grad_(step < 3)
         for micro in range(2):
-            loss = fsdp(torch.tensor(rank + micro + 1.0, device="cuda"))
+            loss = fsdp_model(torch.tensor(rank + micro + 1.0, device="cuda"))
             (loss / 2).backward()
         normalize_accumulated_gradients(opt, torch.tensor(2.0, device="cuda"), 2, group)
         local_grads = [

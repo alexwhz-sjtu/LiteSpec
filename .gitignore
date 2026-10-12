@@ -241,3 +241,7 @@ credentials*.json
 slurm-*.out
 
 /scripts/train_self.md
+
+# Local project notes
+/Flow.md
+/Archetecture.md

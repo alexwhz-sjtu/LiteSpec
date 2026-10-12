@@ -10,7 +10,7 @@ import torch
 from litespec.core.dflash import OnlineDFlashModel
 from litespec.core.dflash2 import OnlineDFlash2Model
 from litespec.core.dspark import OnlineDSparkModel
-from litespec.distributed.transport import FamilyBatchPacket, FamilyPacketSpec
+from litespec.distributed.transport import DFlashFamilyBatchPacket, DFlashFamilyPacketSpec
 from litespec.modeling.config_utils import load_text_model_config
 from litespec.modeling.draft.dflash import build_target_layer_ids
 from litespec.training.algorithms import TrainingAdapter, get_training_adapter
@@ -23,15 +23,15 @@ from litespec.training.setup import (
     required_hidden_layer_ids,
 )
 
-FAMILY_ALGORITHMS = ("dflash", "dflash2", "dspark")
+DFLASH_FAMILY_ALGORITHMS = ("dflash", "dflash2", "dspark")
 
 
-class FamilyTrainingAdapter(TrainingAdapter):
+class DFlashFamilyTrainingAdapter(TrainingAdapter):
     def build_config(self, args, *, source_config=None, model_role=None):
-        return build_family_config(args, self.algorithm, source_config=source_config)
+        return build_dflash_family_config(args, self.algorithm, source_config=source_config)
 
     def prepare_batch(self, data, target_output, draft, require_last):
-        return prepare_family_features(data, target_output, draft, require_last)
+        return prepare_dflash_family_features(data, target_output, draft, require_last)
 
     def phases(self, args):
         from litespec.training.algorithms import Phase
@@ -42,9 +42,9 @@ class FamilyTrainingAdapter(TrainingAdapter):
         args = session.args
         source = args.resume_from or args.init_from
         draft = (
-            load_family_draft(source, self.algorithm, args.attention_backend)
+            load_dflash_family_draft(source, self.algorithm, args.attention_backend)
             if source
-            else build_family_draft(args, self.algorithm)
+            else build_dflash_family_draft(args, self.algorithm)
         )
         sync_args_from_draft(args, draft)
         draft.requires_grad_(True)
@@ -60,7 +60,7 @@ class FamilyTrainingAdapter(TrainingAdapter):
         )
 
     def build_loader(self, session, tokenizer):
-        return build_family_dataloader(
+        return build_dflash_family_dataloader(
             session.args, tokenizer, session.draft, self.algorithm
         )
 
@@ -94,9 +94,9 @@ class FamilyTrainingAdapter(TrainingAdapter):
         return _packet_spec(session.args, session.topology, session.packet_metadata)
 
     def empty_packet(self, spec):
-        from litespec.distributed.transport import FamilyBatchPacket
+        from litespec.distributed.transport import DFlashFamilyBatchPacket
 
-        return FamilyBatchPacket.empty(spec, device="cuda")
+        return DFlashFamilyBatchPacket.empty(spec, device="cuda")
 
     def produce_packet(self, session, phase, values, batch_id):
         return _target_packet(
@@ -114,7 +114,7 @@ class FamilyTrainingAdapter(TrainingAdapter):
     phase_barrier = False
 
     def training_metadata(self, session):
-        return family_training_metadata(
+        return dflash_family_training_metadata(
             session.args,
             self.algorithm,
             session.state.optimizer_step,
@@ -131,14 +131,24 @@ class FamilyTrainingAdapter(TrainingAdapter):
             }
         return {}
 
-    def compute_step(self, session, data, *, begin=None, end=None, detailed=False):
+    def compute_step(
+        self,
+        session,
+        data,
+        *,
+        microbatch_start=None,
+        microbatch_end=None,
+        collect_detailed_metrics=False,
+    ):
         args, draft = session.args, session.draft
         if session.topology is not None:
-            input_ids = data.input_ids[begin:end]
-            loss_mask = data.loss_mask[begin:end]
-            context_hidden = data.target_context_hidden[begin:end]
+            input_ids = data.input_ids[microbatch_start:microbatch_end]
+            loss_mask = data.loss_mask[microbatch_start:microbatch_end]
+            target_context_hidden = data.target_context_hidden[
+                microbatch_start:microbatch_end
+            ]
             target_last_hidden = (
-                data.target_last_hidden[begin:end]
+                data.target_last_hidden[microbatch_start:microbatch_end]
                 if data.target_last_hidden is not None
                 else None
             )
@@ -153,13 +163,13 @@ class FamilyTrainingAdapter(TrainingAdapter):
                 target_output = session.target.generate_training_data(
                     input_ids, attention_mask, loss_mask, return_logits=False
                 )
-            context_hidden, target_last_hidden = self.prepare_batch(
+            target_context_hidden, target_last_hidden = self.prepare_batch(
                 data, target_output, draft, args.require_target_last_hidden
             )
             if session.tp_draft_rank is not None:
-                input_ids, loss_mask, context_hidden = (
+                input_ids, loss_mask, target_context_hidden = (
                     select_tp_rank_batch(value, session.tp_draft_rank)
-                    for value in (input_ids, loss_mask, context_hidden)
+                    for value in (input_ids, loss_mask, target_context_hidden)
                 )
                 if target_last_hidden is not None:
                     target_last_hidden = select_tp_rank_batch(
@@ -167,20 +177,20 @@ class FamilyTrainingAdapter(TrainingAdapter):
                     )
         kwargs = dict(
             input_ids=input_ids,
-            hidden_states=context_hidden,
+            hidden_states=target_context_hidden,
             loss_mask=loss_mask,
             target_last_hidden_states=target_last_hidden,
-            collect_detailed_metrics=detailed,
+            collect_detailed_metrics=collect_detailed_metrics,
         )
         if self.algorithm == "dflash2":
             kwargs["selector_loss_alpha"] = selector_alpha(
                 args, session.state.optimizer_step, session.total_steps
             )
-        return self.training_step(session.fsdp, kwargs)
+        return self.training_step(session.fsdp_model, kwargs)
 
 
-def add_family_args(parser: argparse.ArgumentParser, algorithm: str) -> None:
-    if algorithm not in FAMILY_ALGORITHMS:
+def add_dflash_family_args(parser: argparse.ArgumentParser, algorithm: str) -> None:
+    if algorithm not in DFLASH_FAMILY_ALGORITHMS:
         raise ValueError(f"Unsupported DFlash-family algorithm: {algorithm}")
     add_common_args(parser)
     defaults = {"dflash": 16, "dflash2": 16, "dspark": 7}
@@ -225,7 +235,7 @@ def add_family_args(parser: argparse.ArgumentParser, algorithm: str) -> None:
     train.add_argument("--confidence-loss-alpha", type=float, default=1.0)
 
 
-def validate_family_args(parser: argparse.ArgumentParser, args, algorithm: str) -> None:
+def validate_dflash_family_args(parser: argparse.ArgumentParser, args, algorithm: str) -> None:
     validate_common_args(parser, args)
     if args.resume_from and args.init_from:
         parser.error("--resume-from and --init-from are mutually exclusive")
@@ -280,7 +290,7 @@ def _parse_target_layer_ids(args, config) -> list[int]:
     )
 
 
-def build_family_config(args, algorithm: str, source_config=None):
+def build_dflash_family_config(args, algorithm: str, source_config=None):
     config = (
         load_text_model_config(
             args.target_model_path, trust_remote_code=args.trust_remote_code
@@ -344,13 +354,13 @@ def build_family_config(args, algorithm: str, source_config=None):
     return config
 
 
-def build_family_draft(args, algorithm: str, source_config=None):
+def build_dflash_family_draft(args, algorithm: str, source_config=None):
     return get_training_adapter(algorithm).build_model(
         args, source_config=source_config
     )
 
 
-def load_family_draft(path: str, algorithm: str, attention_backend: str):
+def load_dflash_family_draft(path: str, algorithm: str, attention_backend: str):
     return get_training_adapter(algorithm).load_model(path, attention_backend)
 
 
@@ -384,11 +394,11 @@ def final_target_hidden(hidden_states, num_target_layers: int) -> torch.Tensor:
     return hidden_states[layer_id + offset]
 
 
-def build_family_components(args, draft):
+def build_dflash_family_components(args, draft):
     return build_target_and_components(args, [draft])
 
 
-def build_family_dataloader(args, tokenizer, draft, algorithm: str):
+def build_dflash_family_dataloader(args, tokenizer, draft, algorithm: str):
     required_layer_ids = required_hidden_layer_ids([draft])
     if args.require_target_last_hidden:
         required_layer_ids.add(int(draft.config.num_target_layers) - 1)
@@ -435,33 +445,35 @@ def build_online_model(args, algorithm: str, draft, components, process_group=No
     )
 
 
-def prepare_family_features(data, target_output, draft, require_last: bool):
-    hidden = (
+def prepare_dflash_family_features(data, target_output, draft, require_last: bool):
+    target_hidden_states = (
         hidden_states_to_cuda(data["hidden_states"])
         if target_output is None
         else hidden_states_to_cuda(target_output.hidden_states)
     )
-    context = concatenate_target_hidden(hidden, list(draft.target_layer_ids))
-    last = (
-        final_target_hidden(hidden, int(draft.config.num_target_layers))
+    target_context_hidden = concatenate_target_hidden(
+        target_hidden_states, list(draft.target_layer_ids)
+    )
+    target_last_hidden = (
+        final_target_hidden(target_hidden_states, int(draft.config.num_target_layers))
         if require_last
         else None
     )
-    return context, last
+    return target_context_hidden, target_last_hidden
 
 
 def selector_alpha(args, optimizer_step: int, total_steps: int) -> float:
-    target = float(args.selector_loss_alpha)
-    warmup = int(total_steps * float(args.selector_warmup_ratio))
-    ramp = int(total_steps * float(args.selector_ramp_ratio))
-    if optimizer_step < warmup:
+    target_selector_alpha = float(args.selector_loss_alpha)
+    warmup_steps = int(total_steps * float(args.selector_warmup_ratio))
+    ramp_steps = int(total_steps * float(args.selector_ramp_ratio))
+    if optimizer_step < warmup_steps:
         return 0.0
-    if ramp > 0 and optimizer_step < warmup + ramp:
-        return target * (optimizer_step - warmup + 1) / ramp
-    return target
+    if ramp_steps > 0 and optimizer_step < warmup_steps + ramp_steps:
+        return target_selector_alpha * (optimizer_step - warmup_steps + 1) / ramp_steps
+    return target_selector_alpha
 
 
-def family_training_metadata(
+def dflash_family_training_metadata(
     args, algorithm: str, optimizer_step: int, total_steps: int
 ) -> dict:
     """Serializable objective and schedule state stored in every checkpoint."""
@@ -499,42 +511,42 @@ def family_training_metadata(
 
 
 __all__ = [
-    "FAMILY_ALGORITHMS",
-    "add_family_args",
-    "build_family_components",
-    "build_family_config",
-    "build_family_dataloader",
-    "build_family_draft",
+    "DFLASH_FAMILY_ALGORITHMS",
+    "add_dflash_family_args",
+    "build_dflash_family_components",
+    "build_dflash_family_config",
+    "build_dflash_family_dataloader",
+    "build_dflash_family_draft",
     "build_online_model",
     "concatenate_target_hidden",
     "final_target_hidden",
-    "family_training_metadata",
-    "load_family_draft",
-    "prepare_family_features",
+    "dflash_family_training_metadata",
+    "load_dflash_family_draft",
+    "prepare_dflash_family_features",
     "selector_alpha",
     "sync_args_from_draft",
-    "validate_family_args",
+    "validate_dflash_family_args",
 ]
 
 
-def parse_family_args(algorithm: str, argv=None):
+def parse_dflash_family_args(algorithm: str, argv=None):
     parser = argparse.ArgumentParser(description=f"Train {algorithm} draft model")
-    add_family_args(parser, algorithm)
+    add_dflash_family_args(parser, algorithm)
     args = parser.parse_args(argv)
     args.algorithm = algorithm
-    validate_family_args(parser, args, algorithm)
+    validate_dflash_family_args(parser, args, algorithm)
     get_tracker_class(args.report_to).validate_args(parser, args)
     return args
 
 
 def _packet_spec(args, topology, metadata):
-    local_batch = (
+    local_batch_size = (
         int(args.node_batch_size) // topology.target_replicas_per_node
         if topology.is_target
         else int(args.node_batch_size) // topology.draft_ranks_per_node
     )
-    return FamilyPacketSpec(
-        batch_size=local_batch,
+    return DFlashFamilyPacketSpec(
+        batch_size=local_batch_size,
         max_length=int(args.max_length),
         context_width=int(metadata["context_width"]),
         hidden_size=int(metadata["hidden_size"]),
@@ -544,21 +556,27 @@ def _packet_spec(args, topology, metadata):
 
 def _target_packet(args, topology, target, metadata, values):
     input_ids, attention_mask, loss_mask = values
-    output = target.generate_training_data(
+    target_output = target.generate_training_data(
         input_ids, attention_mask, loss_mask, return_logits=False
     )
     if not topology.is_target_leader:
         return None
-    hidden = output.hidden_states
-    context = concatenate_target_hidden(hidden, metadata["target_layer_ids"])
-    last = (
-        final_target_hidden(hidden, metadata["num_target_layers"])
+    target_hidden_states = target_output.hidden_states
+    target_context_hidden = concatenate_target_hidden(
+        target_hidden_states, metadata["target_layer_ids"]
+    )
+    target_last_hidden = (
+        final_target_hidden(target_hidden_states, metadata["num_target_layers"])
         if metadata["include_target_last_hidden"]
         else None
     )
-    return FamilyBatchPacket(
+    return DFlashFamilyBatchPacket(
         input_ids=input_ids,
         loss_mask=loss_mask,
-        target_context_hidden=context.to(torch.bfloat16),
-        target_last_hidden=(last.to(torch.bfloat16) if last is not None else None),
+        target_context_hidden=target_context_hidden.to(torch.bfloat16),
+        target_last_hidden=(
+            target_last_hidden.to(torch.bfloat16)
+            if target_last_hidden is not None
+            else None
+        ),
     )

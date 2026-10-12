@@ -317,7 +317,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 DLITE_ARCHITECTURE_VERSIONS = ("dlite_v1",)
 DLITE_ARCHITECTURE_VERSION = "dlite_v1"
-DLITE_MODEL_ROLES = ("swa_teacher", "pivot_q_student")
+DLITE_MODEL_ROLES = ("swa_teacher", "student")
 
 
 def _infer_hs_embedding_offset(
@@ -715,7 +715,7 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
 
     @property
     def is_student(self) -> bool:
-        return self.model_role == "pivot_q_student"
+        return self.model_role == "student"
 
     @property
     def fuse_slot_count(self) -> int:

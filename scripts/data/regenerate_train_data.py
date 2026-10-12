@@ -82,10 +82,12 @@ def _record_key(value: Any) -> tuple[str, str]:
 def validate_record(value: Any, line_number: int) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise RegenerationError(f"line {line_number}: record must be an object")
-    required = {"id", "conversations", "source"}
-    missing = required - value.keys()
-    if missing:
-        raise RegenerationError(f"line {line_number}: missing fields {sorted(missing)}")
+    required_field_names = {"id", "conversations", "source"}
+    missing_field_names = required_field_names - value.keys()
+    if missing_field_names:
+        raise RegenerationError(
+            f"line {line_number}: missing fields {sorted(missing_field_names)}"
+        )
     _record_key(value["id"])
     if not isinstance(value["source"], str) or not value["source"].strip():
         raise RegenerationError(f"line {line_number}: source must be non-empty text")

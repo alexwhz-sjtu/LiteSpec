@@ -1,11 +1,11 @@
 """DSpark training registration."""
 
-from ._dflash_common import FamilyTrainingAdapter
+from ._dflash_common import DFlashFamilyTrainingAdapter
 
-ADAPTER = FamilyTrainingAdapter("dspark", "DSparkDraftModel")
+ADAPTER = DFlashFamilyTrainingAdapter("dspark", "DSparkDraftModel")
 
 
 def parse_args(*, mode=None, argv=None):
-    from ._dflash_common import parse_family_args
+    from ._dflash_common import parse_dflash_family_args
 
-    return parse_family_args("dspark", argv)
+    return parse_dflash_family_args("dspark", argv)

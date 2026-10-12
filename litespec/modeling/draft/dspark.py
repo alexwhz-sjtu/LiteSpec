@@ -84,10 +84,10 @@ class VanillaMarkovHead(nn.Module):
         hidden_states: Optional[torch.Tensor],
         temperature: float = 0.0,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        batch_size, proposal_len = base_logits.shape[:2]
+        bsz, proposal_len = base_logits.shape[:2]
         if proposal_len == 0:
             empty_tokens = torch.empty(
-                batch_size,
+                bsz,
                 0,
                 dtype=torch.long,
                 device=base_logits.device,
@@ -215,10 +215,10 @@ class RNNMarkovHead(VanillaMarkovHead):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if hidden_states is None:
             raise ValueError("rnn Markov head requires hidden_states")
-        batch_size, proposal_len = base_logits.shape[:2]
+        bsz, proposal_len = base_logits.shape[:2]
         if proposal_len == 0:
             empty_tokens = torch.empty(
-                batch_size,
+                bsz,
                 0,
                 dtype=torch.long,
                 device=base_logits.device,
@@ -226,7 +226,7 @@ class RNNMarkovHead(VanillaMarkovHead):
             return empty_tokens, base_logits
 
         state = torch.zeros(
-            batch_size,
+            bsz,
             self.markov_rank,
             device=hidden_states.device,
             dtype=hidden_states.dtype,

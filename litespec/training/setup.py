@@ -53,9 +53,9 @@ def _build_processed_dataset(
             f"{args.target_model_path}-preformatted={args.is_preformatted}"
         ).encode()
     ).hexdigest()
-    raw = load_dataset("json", data_files=train_data_path)["train"]
+    raw_dataset = load_dataset("json", data_files=train_data_path)["train"]
     return build_training_dataset(
-        dataset=raw,
+        dataset=raw_dataset,
         tokenizer=tokenizer,
         chat_template=args.chat_template,
         max_length=args.max_length,
@@ -232,11 +232,11 @@ def training_data_identity(args) -> str:
 def required_hidden_layer_ids(draft_models) -> set[int]:
     from .algorithms import get_training_adapter
 
-    required: set[int] = set()
+    required_layer_ids: set[int] = set()
     for draft in draft_models:
         adapter = get_training_adapter(draft.method_config_key.removesuffix("_config"))
-        required.update(adapter.required_target_layers(draft))
-    return required
+        required_layer_ids.update(adapter.required_target_layers(draft))
+    return required_layer_ids
 
 
 def hidden_states_to_cuda(hidden_states):
@@ -275,7 +275,7 @@ def project_cached_target_logits(
 def load_cached_target_data(
     data,
     *,
-    anchors: torch.Tensor,
+    anchor_positions: torch.Tensor,
     block_size: int,
     lm_head: torch.nn.Module,
     need_logits: bool,
@@ -286,7 +286,7 @@ def load_cached_target_data(
         final_layer_id = int(data["final_norm_layer_id"])
         final_hidden = hidden_states[final_layer_id]
         target_logits = project_cached_target_logits(
-            final_hidden, anchors, block_size, lm_head
+            final_hidden, anchor_positions, block_size, lm_head
         )
     return hidden_states, target_logits
 
@@ -355,10 +355,10 @@ def build_target_model(args, draft_models):
         trust_remote_code=args.trust_remote_code,
         **backend_kwargs,
     )
-    capture = required_hidden_layer_ids(draft_models)
+    capture_layer_ids = required_hidden_layer_ids(draft_models)
     if getattr(args, "require_target_last_hidden", False):
-        capture.add(int(target_config.num_hidden_layers) - 1)
-    target.set_capture_layers(sorted(capture))
+        capture_layer_ids.add(int(target_config.num_hidden_layers) - 1)
+    target.set_capture_layers(sorted(capture_layer_ids))
     return target
 
 
@@ -491,9 +491,9 @@ def resolve_tokenizer_and_components(
     return tokenizer, components, mask_token_id
 
 
-def wrap_training_model(online, components, *, process_group=None):
+def wrap_training_model(draft_online, components, *, process_group=None):
     return FullyShardedDataParallel(
-        online,
+        draft_online,
         process_group=process_group,
         ignored_modules=[components.lm_head, components.embed_tokens],
         use_orig_params=True,
@@ -623,16 +623,16 @@ def _build_target_loader(args, tokenizer, topology):
             _has_valid_anchor_supervision,
             fn_kwargs={"block_size": int(args.block_size)},
         )
-    size = torch.tensor(
+    dataset_size = torch.tensor(
         [len(dataset) if topology.rank == 0 else 0], device="cuda", dtype=torch.long
     )
-    dist.broadcast(size, src=0)
+    dist.broadcast(dataset_size, src=0)
     producers_total = topology.nnodes * topology.target_replicas_per_node
-    local_batch = int(args.node_batch_size) // topology.target_replicas_per_node
-    steps = int(size.item()) // (producers_total * local_batch)
-    if steps <= 0:
+    local_batch_size = int(args.node_batch_size) // topology.target_replicas_per_node
+    steps_per_epoch = int(dataset_size.item()) // (producers_total * local_batch_size)
+    if steps_per_epoch <= 0:
         raise ValueError("dataset is too small for one disaggregated global batch")
-    loader = None
+    dataloader = None
     if topology.is_target_leader:
         producer_rank = topology.node_rank * topology.target_replicas_per_node + int(
             topology.target_replica_local_rank
@@ -644,9 +644,9 @@ def _build_target_loader(args, tokenizer, topology):
             shuffle=True,
             drop_last=True,
         )
-        loader = DataLoader(
+        dataloader = DataLoader(
             dataset,
-            batch_size=local_batch,
+            batch_size=local_batch_size,
             sampler=sampler,
             num_workers=args.dataloader_num_workers,
             collate_fn=FixedCollator(
@@ -655,7 +655,7 @@ def _build_target_loader(args, tokenizer, topology):
             drop_last=True,
             prefetch_factor=2 if args.dataloader_num_workers else None,
         )
-    return loader, steps
+    return dataloader, steps_per_epoch
 
 
 def _broadcast_input(args, topology, data):
@@ -720,8 +720,8 @@ def build_training_session(args, adapter):
         if topology.rank == 0:
             os.makedirs(args.cache_dir, exist_ok=True)
         dist.barrier()
-        session.resume = _load_common_state(args.resume_from, args=args)
-        validate_resume_topology(session.resume, topology_identity(args, topology))
+        session.resume_state = _load_common_state(args.resume_from, args=args)
+        validate_resume_topology(session.resume_state, topology_identity(args, topology))
         if topology.is_draft:
             adapter.initialize(session)
         source = topology.draft_global_ranks[0]
@@ -734,7 +734,7 @@ def build_training_session(args, adapter):
         tokenizer = AutoTokenizer.from_pretrained(
             args.target_model_path, trust_remote_code=args.trust_remote_code
         )
-        session.loader, session.steps_per_epoch = _build_target_loader(
+        session.dataloader, session.steps_per_epoch = _build_target_loader(
             args, tokenizer, topology
         )
         session.routes = build_node_routes(
@@ -746,13 +746,13 @@ def build_training_session(args, adapter):
             # Validate the producer's schedule/cursor before starting any sends.
             from dataclasses import asdict
 
-            if session.resume:
+            if session.resume_state:
                 for key, value in {
                     "phase_plan": [asdict(p) for p in session.phases],
                     "steps_per_epoch": session.steps_per_epoch,
                     "train_data_identity": training_data_identity(args),
                 }.items():
-                    if session.resume[key] != value:
+                    if session.resume_state[key] != value:
                         raise ValueError(f"Resume mismatch for {key}")
             session.target = build_target_model(args, adapter.target_proxies(session))
             return session
@@ -764,34 +764,36 @@ def build_training_session(args, adapter):
         )
         args.tracker_global_rank = session.coordinator_rank
     else:
-        session.resume = load_training_state(args.resume_from, args=args)
+        # resume from checkpoint
+        session.resume_state = load_training_state(args.resume_from, args=args)
         adapter.initialize(session)
         drafts = [session.draft] + (
             [session.teacher] if session.teacher is not None else []
         )
+        # target model and components
         session.target, tokenizer, session.components, _ = build_target_and_components(
             args, drafts
         )
-        session.loader = adapter.build_loader(session, tokenizer)
-        session.steps_per_epoch = len(session.loader)
+        session.dataloader = adapter.build_loader(session, tokenizer)
+        session.steps_per_epoch = len(session.dataloader)
     session.total_steps = optimizer_step_count(
         session.phases, session.steps_per_epoch, args.accumulation_steps
     )
     if session.total_steps <= 0:
         raise ValueError("The training schedule has no optimizer steps")
-    session.online = adapter.make_online(session)
+    session.draft_online = adapter.make_online(session)
     muon_config = muon_config_from_args(args)
     parameters = specs = layouts = None
     if muon_config is not None:
         parameters, specs = register_optimizer_parameters(
             session.draft, adapter.optimizer_parameters(session)
         )
-    session.fsdp = wrap_training_model(
-        session.online, session.components, process_group=session.process_group
+    session.fsdp_model = wrap_training_model(
+        session.draft_online, session.components, process_group=session.process_group
     )
     if muon_config is not None:
         layouts = build_fsdp_layouts(
-            session.fsdp, parameters, specs, session.process_group
+            session.fsdp_model, parameters, specs, session.process_group
         )
     session.optimizer = BF16Optimizer(
         session.draft,
@@ -810,14 +812,14 @@ def build_training_session(args, adapter):
         parameter_layouts=layouts,
     )
     validate_session_resume(session)
-    if session.resume is not None:
+    if session.resume_state is not None:
         if args.disaggregate:
-            session.resume = load_distributed_training_state(
+            session.resume_state = load_distributed_training_state(
                 args.resume_from, process_group=session.process_group
             )
-        session.optimizer.load_state_dict(session.resume)
+        session.optimizer.load_state_dict(session.resume_state)
     session.tracker = create_tracker(args, args.output_dir)
     # DataLoader iterator construction must not consume the model/anchor RNG.
-    if session.loader is not None:
-        session.loader.generator = torch.Generator().manual_seed(args.seed)
+    if session.dataloader is not None:
+        session.dataloader.generator = torch.Generator().manual_seed(args.seed)
     return session

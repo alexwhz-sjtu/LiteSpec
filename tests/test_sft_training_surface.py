@@ -24,7 +24,7 @@ class SFTTrainingSurfaceTest(unittest.TestCase):
         )
         config = (ROOT / "scripts/config/dlite_sft.yaml").read_text(encoding="utf-8")
 
-        self.assertIn('model_role="pivot_q_student"', recipe)
+        self.assertIn('model_role="student"', recipe)
         self.assertIn('"sft": "scripts.dlite.train_sft"', yaml_launcher)
         self.assertIn("dlite_sft.yaml", launcher)
         self.assertNotIn("train_dlite_two_stage", trainer + launcher + config)

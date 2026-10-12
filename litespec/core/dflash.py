@@ -30,9 +30,9 @@ class OnlineDFlashModel(DFlashTrainingBase):
         bsz, seq_len = input_ids.shape
         device = input_ids.device
 
-        anchor_positions, block_keep_mask, output_hidden = self._forward_draft_blocks(
+        anchor_positions, block_keep_mask, draft_hidden_states = self._forward_draft_blocks(
             input_ids=input_ids,
-            hidden_states=hidden_states,
+            target_context_hidden=hidden_states,
             loss_mask=loss_mask,
             max_valid_anchors=max_valid_anchors,
         )
@@ -69,7 +69,7 @@ class OnlineDFlashModel(DFlashTrainingBase):
         )
         weight_mask = weight_mask * original_loss_mask_gathered
 
-        hidden_4d = output_hidden.reshape(
+        draft_block_hidden_states = draft_hidden_states.reshape(
             bsz,
             anchor_positions.shape[1],
             self.block_size,
@@ -96,7 +96,7 @@ class OnlineDFlashModel(DFlashTrainingBase):
             selector_covered_num,
         ) = checkpointed_chunk_reduce(
             self._dflash_objective_chunk_terms,
-            hidden_4d,
+            draft_block_hidden_states,
             target_ids,
             weight_mask,
             predecessor_ids,
@@ -140,7 +140,7 @@ class OnlineDFlashModel(DFlashTrainingBase):
             terms = DFlashMetricTerms(
                 *checkpointed_chunk_reduce(
                     self._dflash_metric_chunk_terms,
-                    hidden_4d.detach(),
+                    draft_block_hidden_states.detach(),
                     target_ids,
                     weight_mask,
                     predecessor_ids,

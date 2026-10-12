@@ -61,7 +61,7 @@ def benchmark(args, backend: str):
     )
     physical_history = kv_len - width * (args.chs_slots + args.query_length)
     mask = create_dlite_flex_mask(
-        model_role="swa_teacher" if physical_history else "pivot_q_student",
+        model_role="swa_teacher" if physical_history else "student",
         anchor_positions=anchors,
         block_keep_mask=keep,
         token_keep_mask=token_keep,

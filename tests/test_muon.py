@@ -94,7 +94,7 @@ def test_tied_parameter_conflicting_ownership():
 
 
 @pytest.mark.parametrize("algorithm", ["dflash", "dflash2", "dspark"])
-def test_real_family_grouping(algorithm):
+def test_real_dflash_family_grouping(algorithm):
     from test_dflash_family import tiny_config
 
     from litespec.modeling.draft.dflash import DFlashDraftModel
@@ -274,10 +274,14 @@ def test_cli_and_disabled_settings():
     add_common_args(parser)
     base = ["--target-model-path", "target", "--output-dir", "out"]
     assert muon_config_from_args(parser.parse_args(base + ["--muon-lr", "-1"])) is None
-    args = parser.parse_args(
-        base + ["--use-muon", "--muon-ns-coefficients", "3.4445", "-4.775", "2.0315"]
-    )
-    assert muon_config_from_args(args)["lr"] == 0.02
+    args = parser.parse_args(base + ["--use-muon"])
+    config = muon_config_from_args(args)
+    assert config["lr"] == 0.02
+    assert config["nesterov"] is True
+    assert config["ns_steps"] == 5
+    assert config["ns_coefficients"] == (3.4445, -4.775, 2.0315)
+    assert config["eps"] == 1e-7
+    assert config["adjust_lr_fn"] == "original"
 
 
 def test_checkpoint_rejects_changed_layout_and_mode():

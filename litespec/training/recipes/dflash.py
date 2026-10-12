@@ -1,11 +1,11 @@
 """DFlash training registration."""
 
-from ._dflash_common import FamilyTrainingAdapter
+from ._dflash_common import DFlashFamilyTrainingAdapter
 
-ADAPTER = FamilyTrainingAdapter("dflash", "DFlashDraftModel")
+ADAPTER = DFlashFamilyTrainingAdapter("dflash", "DFlashDraftModel")
 
 
 def parse_args(*, mode=None, argv=None):
-    from ._dflash_common import parse_family_args
+    from ._dflash_common import parse_dflash_family_args
 
-    return parse_family_args("dflash", argv)
+    return parse_dflash_family_args("dflash", argv)

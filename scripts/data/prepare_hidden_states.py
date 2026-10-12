@@ -171,10 +171,10 @@ def tar_mode(compress: bool, read: bool = False) -> str:
 
 
 def add_bytes(archive: tarfile.TarFile, name: str, data: bytes) -> None:
-    info = tarfile.TarInfo(name=name)
-    info.size = len(data)
-    info.mtime = 0
-    archive.addfile(info, io.BytesIO(data))
+    member_info = tarfile.TarInfo(name=name)
+    member_info.size = len(data)
+    member_info.mtime = 0
+    archive.addfile(member_info, io.BytesIO(data))
 
 
 def read_shard_metadata(path: Path) -> dict[str, Any]:
@@ -659,16 +659,16 @@ def sample_payload(
     length = int(attention.sum().item())
     if length <= 0:
         raise HiddenStateError("sample has no attended tokens")
-    hidden = normalize_hidden_states(output.hidden_states, stored_layer_ids)
-    missing = sorted(set(stored_layer_ids) - set(hidden))
-    if missing:
-        raise HiddenStateError(f"target did not return requested layers {missing}")
-    if final_norm_layer_id not in hidden:
+    target_hidden_states = normalize_hidden_states(output.hidden_states, stored_layer_ids)
+    missing_layer_ids = sorted(set(stored_layer_ids) - set(target_hidden_states))
+    if missing_layer_ids:
+        raise HiddenStateError(f"target did not return requested layers {missing_layer_ids}")
+    if final_norm_layer_id not in target_hidden_states:
         raise HiddenStateError(
             f"target did not return final-norm layer {final_norm_layer_id}"
         )
     sample_hidden = {}
-    for layer_id, tensor in hidden.items():
+    for layer_id, tensor in target_hidden_states.items():
         value = tensor[batch_index, :length].detach().cpu().contiguous()
         if not torch.isfinite(value).all():
             raise HiddenStateError(f"layer {layer_id} contains NaN or Inf")
@@ -762,11 +762,11 @@ def contiguous_range(total: int, rank: int, size: int) -> tuple[int, int]:
 
 def _path_component(value: str) -> str:
     """Make a model or dataset name safe to use as one path component."""
-    safe = "".join(
+    safe_component = "".join(
         character if character.isalnum() or character in "._-" else "_"
         for character in value
     )
-    return safe.strip("._-") or "data"
+    return safe_component.strip("._-") or "data"
 
 
 def default_output_path(data_path: str, target_model_path: str) -> Path:
@@ -892,9 +892,9 @@ def run_generation(args: argparse.Namespace) -> dict[str, Any] | None:
         stored_layer_ids = sorted(set(requested_layer_ids) | {final_norm_layer_id})
         target.set_capture_layers(stored_layer_ids)
 
-        raw = load_dataset("json", data_files=str(input_path))["train"]
+        raw_dataset = load_dataset("json", data_files=str(input_path))["train"]
         if args.num_samples is not None:
-            raw = raw.select(range(min(args.num_samples, len(raw))))
+            raw_dataset = raw_dataset.select(range(min(args.num_samples, len(raw_dataset))))
         cache_key = hashlib.sha256(
             json.dumps(
                 {
@@ -910,7 +910,7 @@ def run_generation(args: argparse.Namespace) -> dict[str, Any] | None:
 
         def build_processed_dataset():
             return build_training_dataset(
-                dataset=raw,
+                dataset=raw_dataset,
                 tokenizer=tokenizer,
                 chat_template=args.chat_template,
                 max_length=args.max_length,

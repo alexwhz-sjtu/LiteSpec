@@ -6,17 +6,17 @@ from torch import nn
 from transformers import Qwen3Config
 
 from litespec.training.recipes._dflash_common import (
-    add_family_args,
-    build_family_config,
+    add_dflash_family_args,
+    build_dflash_family_config,
     selector_alpha,
-    validate_family_args,
+    validate_dflash_family_args,
 )
 from litespec.training.setup import select_tp_rank_batch
 from litespec.core.dflash import OnlineDFlashModel
 from litespec.core.dspark import OnlineDSparkModel
 from litespec.core._dflash_common import _DFlashSelectorDiagnostics
 from litespec.core._dflash_common import _DFlashUnaryDiagnostics
-from litespec.distributed.transport import FamilyBatchPacket, FamilyPacketSpec
+from litespec.distributed.transport import DFlashFamilyBatchPacket, DFlashFamilyPacketSpec
 from litespec.modeling.config_utils import _qwen35_text_dict_to_qwen3_config
 from litespec.modeling.draft import dflash as dflash_module
 from litespec.modeling.draft import dlite as dlite_module
@@ -62,10 +62,10 @@ def test_dflash_and_dlite_share_flex_attention_runtime():
     )
 
 
-def test_family_algorithms_accept_tp_draft_sharding():
+def test_dflash_family_algorithms_accept_tp_draft_sharding():
     for algorithm in ("dflash", "dflash2", "dspark"):
         parser = argparse.ArgumentParser()
-        add_family_args(parser, algorithm)
+        add_dflash_family_args(parser, algorithm)
         args = parser.parse_args(
             [
                 "--target-model-path",
@@ -83,7 +83,7 @@ def test_family_algorithms_accept_tp_draft_sharding():
                 "--shard-draft-by-tp",
             ]
         )
-        validate_family_args(parser, args, algorithm)
+        validate_dflash_family_args(parser, args, algorithm)
         assert args.shard_draft_by_tp is True
 
     batch = torch.arange(12).view(3, 4)
@@ -243,9 +243,9 @@ def test_dflash2_expected_accept_len_uses_selector_distribution():
     torch.testing.assert_close(terms.expected_accepted_length_num, torch.tensor(3.0))
 
 
-def test_family_packet_has_no_logits_and_optional_last_hidden():
-    spec = FamilyPacketSpec(2, 8, 48, 16, True)
-    packet = FamilyBatchPacket.empty(spec, device="cpu")
+def test_dflash_family_packet_has_no_logits_and_optional_last_hidden():
+    spec = DFlashFamilyPacketSpec(2, 8, 48, 16, True)
+    packet = DFlashFamilyBatchPacket.empty(spec, device="cpu")
     assert packet.target_context_hidden.shape == (2, 8, 48)
     assert packet.target_last_hidden.shape == (2, 8, 16)
     assert all(tensor.shape[0] == 2 for tensor in packet.tensors())
@@ -304,7 +304,7 @@ def test_generated_defaults_and_selector_schedule():
         selector_warmup_ratio=0.2,
         selector_ramp_ratio=0.3,
     )
-    config = build_family_config(args, "dflash2", source_config=source)
+    config = build_dflash_family_config(args, "dflash2", source_config=source)
     assert config.architectures == ["DFlash2DraftModel"]
     assert config.dflash2_config["selector_rank"] == 256
     assert len(config.dflash2_config["target_layer_ids"]) == 5
@@ -351,6 +351,6 @@ def test_qwen35_normalized_config_builds_dflash_draft():
         confidence_loss_alpha=1.0,
         backbone_conv=False,
     )
-    config = build_family_config(args, "dflash", source_config=normalized)
+    config = build_dflash_family_config(args, "dflash", source_config=normalized)
     assert config.target_source_model_type == "qwen3_5"
     assert isinstance(DFlashDraftModel(config), DFlashDraftModel)

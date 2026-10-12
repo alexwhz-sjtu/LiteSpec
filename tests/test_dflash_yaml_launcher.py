@@ -20,7 +20,7 @@ SPEC.loader.exec_module(launcher)
         ("dspark", "dspark.yaml", "8"),
     ],
 )
-def test_repository_family_yaml_loads_expected_values(algorithm, filename, block_size):
+def test_repository_dflash_family_yaml_loads_expected_values(algorithm, filename, block_size):
     path = ROOT / "scripts/config" / filename
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
 

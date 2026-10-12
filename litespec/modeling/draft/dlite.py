@@ -5,6 +5,7 @@ from typing import Callable, Optional
 import torch
 from torch import nn
 from transformers import DynamicCache
+from transformers.cache_utils import Cache
 from transformers.models.qwen3.modeling_qwen3 import (
     ALL_ATTENTION_FUNCTIONS,
     FlashAttentionKwargs,
@@ -152,13 +153,13 @@ class DLiteSequentialHead(nn.Module):
                 f"got {tuple(hidden_states.shape)}."
             )
 
-        batch_size, prediction_length = hidden_states.shape[:2]
+        bsz, prediction_length = hidden_states.shape[:2]
         if prediction_length > self.max_prediction_length:
             raise ValueError(
                 f"prediction_length={prediction_length} exceeds configured "
                 f"maximum {self.max_prediction_length}."
             )
-        state = hidden_states.new_zeros(batch_size, self.sequential_rank)
+        state = hidden_states.new_zeros(bsz, self.sequential_rank)
         prev_token_ids = first_prev_token_ids.long()
         sampled_tokens: list[torch.Tensor] = []
         final_logits: list[torch.Tensor] = []
@@ -177,12 +178,12 @@ class DLiteSequentialHead(nn.Module):
         if not sampled_tokens:
             return (
                 torch.empty(
-                    batch_size,
+                    bsz,
                     0,
                     dtype=torch.long,
                     device=hidden_states.device,
                 ),
-                hidden_states.new_empty(batch_size, 0, self.vocab_size),
+                hidden_states.new_empty(bsz, 0, self.vocab_size),
             )
         return torch.cat(sampled_tokens, dim=1), torch.cat(final_logits, dim=1)
 
@@ -317,7 +318,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 DLITE_ARCHITECTURE_VERSIONS = ("dlite_v1",)
 DLITE_ARCHITECTURE_VERSION = "dlite_v1"
-DLITE_MODEL_ROLES = ("swa_teacher", "pivot_q_student")
+DLITE_MODEL_ROLES = ("swa_teacher", "student")
 
 
 def _infer_hs_embedding_offset(
@@ -341,28 +342,28 @@ def build_target_layer_ids(
         raise ValueError(f"DLite requires at least 2 target layers, got {L}.")
     if not 2 <= S <= L:
         raise ValueError(f"chs_num_layers must be in [2, {L}], got {chs_num_layers}.")
-    picked: set[int] = {0, L - 1}
+    selected_layer_ids: set[int] = {0, L - 1}
     n_middle = S - 2
     lo, hi = 1, L - 2
     if n_middle > 0 and lo <= hi:
         interior_span = hi - lo
-        cap = hi - lo + 1
-        n_take = min(n_middle, cap)
+        num_interior_layers = hi - lo + 1
+        n_take = min(n_middle, num_interior_layers)
         if n_take == 1:
-            picked.add((lo + hi) // 2)
+            selected_layer_ids.add((lo + hi) // 2)
         else:
             for i in range(n_take):
                 if interior_span == 0:
                     idx = lo
                 else:
                     idx = lo + int(round(i * interior_span / (n_take - 1)))
-                picked.add(int(max(lo, min(hi, idx))))
-    result = sorted(picked)
-    if len(result) != S:
+                selected_layer_ids.add(int(max(lo, min(hi, idx))))
+    target_layer_ids = sorted(selected_layer_ids)
+    if len(target_layer_ids) != S:
         raise RuntimeError(
-            f"Failed to select exactly {S} CHS layers from target depth {L}: {result}"
+            f"Failed to select exactly {S} CHS layers from target depth {L}: {target_layer_ids}"
         )
-    return result
+    return target_layer_ids
 
 
 def gather_pivot_multilayer_inference(
@@ -584,16 +585,16 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
                 f"model_role must be one of {DLITE_MODEL_ROLES}, got "
                 f"{self.model_role!r}."
             )
-        required = {
+        required_field_names = {
             "model_role",
             "chs_num_layers",
             "target_layer_ids",
             "sequential_head",
             "sequential_rank",
         }
-        missing = sorted(required - dlite_config.keys())
-        if missing:
-            raise ValueError(f"dlite_config is missing required fields: {missing}")
+        missing_field_names = sorted(required_field_names - dlite_config.keys())
+        if missing_field_names:
+            raise ValueError(f"dlite_config is missing required fields: {missing_field_names}")
         self.swa_window_size = int(
             dlite_config["swa_window_size"] if self.is_teacher else 1
         )
@@ -678,12 +679,12 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
         self._mask_embedding_cache: Optional[tuple[int, torch.Tensor]] = None
         self._last_decode_stats = {}
 
-        h = config.hidden_size
+        hidden_size = config.hidden_size
         if self.is_teacher:
-            self.history_fuse = nn.Linear(3 * h, h, bias=False)
-            self.history_norm = Qwen3RMSNorm(h, eps=config.rms_norm_eps)
-        self.layer_depth_embedding = nn.Embedding(config.num_target_layers, h)
-        self.context_norm = Qwen3RMSNorm(h, eps=config.rms_norm_eps)
+            self.history_fuse = nn.Linear(3 * hidden_size, hidden_size, bias=False)
+            self.history_norm = Qwen3RMSNorm(hidden_size, eps=config.rms_norm_eps)
+        self.layer_depth_embedding = nn.Embedding(config.num_target_layers, hidden_size)
+        self.context_norm = Qwen3RMSNorm(hidden_size, eps=config.rms_norm_eps)
         logging.getLogger(__name__).debug(
             f"DLite: architecture_version={self.architecture_version}, "
             f"model_role={self.model_role}, "
@@ -715,7 +716,7 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
 
     @property
     def is_student(self) -> bool:
-        return self.model_role == "pivot_q_student"
+        return self.model_role == "student"
 
     @property
     def fuse_slot_count(self) -> int:
@@ -840,16 +841,16 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
 
     def _apply_chs_depth_embedding(self, target_hidden: torch.Tensor) -> torch.Tensor:
         """Add target-layer identity to current CHS hidden states."""
-        _, _, s_len, h = target_hidden.shape
-        if s_len != self.chs_num_layers:
+        _, _, num_chs_slots, hidden_size = target_hidden.shape
+        if num_chs_slots != self.chs_num_layers:
             raise ValueError(
-                f"Expected {self.chs_num_layers} current CHS slots, got {s_len}."
+                f"Expected {self.chs_num_layers} current CHS slots, got {num_chs_slots}."
             )
         depth_ids = torch.tensor(
             self.target_layer_ids, device=target_hidden.device, dtype=torch.long
         )
         depth_emb = self.layer_depth_embedding(depth_ids).view(
-            1, 1, self.chs_num_layers, h
+            1, 1, self.chs_num_layers, hidden_size
         )
         return self.context_norm(target_hidden + depth_emb)
 
@@ -929,8 +930,8 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
                 "shared_history must have shape (B,T,H), got "
                 f"{tuple(shared_history.shape)}."
             )
-        current_ctx = self._apply_chs_depth_embedding(target_hidden)
-        chs_flat = current_ctx.reshape(current_ctx.shape[0], -1, current_ctx.shape[-1])
+        current_chs_hidden = self._apply_chs_depth_embedding(target_hidden)
+        chs_flat = current_chs_hidden.reshape(current_chs_hidden.shape[0], -1, current_chs_hidden.shape[-1])
         if self.is_teacher:
             return torch.cat([shared_history, chs_flat], dim=1)
         return chs_flat
@@ -941,19 +942,21 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
         history_hidden: torch.Tensor,
     ) -> torch.Tensor:
         """Build the configured per-block CHS/history context."""
-        bsz, n_blk, _, _ = target_hidden.shape
-        if history_hidden.shape[:2] != (bsz, n_blk):
+        bsz, num_blocks, _, _ = target_hidden.shape
+        if history_hidden.shape[:2] != (bsz, num_blocks):
             raise ValueError(
                 "history_hidden batch/block dimensions must match target_hidden: "
                 f"{tuple(history_hidden.shape)} vs {tuple(target_hidden.shape)}."
             )
-        current_ctx = self._apply_chs_depth_embedding(target_hidden)
-        ctx = (
-            torch.cat([history_hidden, current_ctx], dim=2)
+        current_chs_hidden = self._apply_chs_depth_embedding(target_hidden)
+        context_hidden = (
+            torch.cat([history_hidden, current_chs_hidden], dim=2)
             if self.is_teacher
-            else current_ctx
+            else current_chs_hidden
         )
-        return ctx.reshape(bsz, n_blk * ctx.shape[2], current_ctx.shape[-1])
+        return context_hidden.reshape(
+            bsz, num_blocks * context_hidden.shape[2], current_chs_hidden.shape[-1]
+        )
 
     def fuse_target_output_history(self, hidden_states: tuple | list) -> torch.Tensor:
         """Fuse the three configured target layers for every returned token."""
@@ -1138,24 +1141,22 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
             target_hidden = self._fuse_target_hidden(target_hidden, history_hidden)
         noise_len = hidden_states.shape[1]
         if position_ids.shape[1] != noise_len:
-            draft_pos = position_ids[:, -noise_len:]
+            draft_pos_ids = position_ids[:, -noise_len:]
         else:
-            draft_pos = position_ids
+            draft_pos_ids = position_ids
 
-        rotary_pos = (
-            rotary_position_ids if rotary_position_ids is not None else draft_pos
+        rotary_position_ids = (
+            rotary_position_ids if rotary_position_ids is not None else draft_pos_ids
         )
         # Qwen3RotaryEmbedding only reads x.device and x.dtype. Passing the
         # existing activation avoids allocating a dense (B, KV_LEN, H) dummy;
-        # at the 10,240-token teacher setting that allocation was ~240 MiB per
-        # rank and lived at the worst point of the draft forward.
-        position_embeddings = self.rotary_emb(hidden_states, rotary_pos)
+        position_embeddings = self.rotary_emb(hidden_states, rotary_position_ids)
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states=hidden_states,
                 target_hidden=target_hidden,
                 attention_mask=attention_mask,
-                position_ids=draft_pos,
+                position_ids=draft_pos_ids,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -1212,6 +1213,7 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
         verify_block_size: Optional[int] = None,
         stochastic_verification_mode: str = "match",
         compile_serial_head: bool = False,
+        target_cache: Optional[Cache] = None,
     ):
         self.eval()
         stochastic_verification_mode = _validate_stochastic_verification_mode(
@@ -1257,7 +1259,9 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
             .expand(bsz, -1)
         )
 
-        past_key_values_target = DynamicCache()
+        past_key_values_target = (
+            DynamicCache() if target_cache is None else target_cache
+        )
 
         # Prefill stage (not included in decode wall time)
         output = target(

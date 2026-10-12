@@ -76,12 +76,12 @@ def build_fsdp_layouts(fsdp_model, parameters, specs, process_group=None):
             if handle is None:
                 continue
             flat = handle.flat_param
-            for p, shape, info in zip(
+            for p, shape, shard_info in zip(
                 flat._params, flat._shapes, flat._shard_param_infos, strict=True
             ):
                 shard = (
-                    (int(info.intra_param_start_idx), int(info.numel_in_shard))
-                    if info.in_shard
+                    (int(shard_info.intra_param_start_idx), int(shard_info.numel_in_shard))
+                    if shard_info.in_shard
                     else (0, 0)
                 )
                 entries[id(p)] = (tuple(shape), shard)
