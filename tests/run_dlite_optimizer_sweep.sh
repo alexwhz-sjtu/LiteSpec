@@ -12,6 +12,7 @@ if [[ "${1:-}" == --dry-run ]]; then
 fi
 CONFIG="${1:-scripts/config/dlite_sft.yaml}"
 SWEEP_ID="${SWEEP_ID:-muon_adamw_sweep}"
+WANDB_NAME_PREFIX="${WANDB_NAME_PREFIX:-dlite_sft_qwen3_4b}"
 KEEPER_DIR="${KEEPER_DIR:-$(dirname "$PROJECT_DIR")}"
 LOG_DIR="whz_mtp_logs/${SWEEP_ID}/$(hostname)_rank${PET_NODE_RANK:-${NODE_RANK:-0}}"
 OUTPUT_ROOT="outputs/${SWEEP_ID}"
@@ -62,14 +63,45 @@ if (( ! PREVIEW )); then
   "$KEEPER_DIR/stop_keeper.sh"
 fi
 
+wandb_name_from_overrides() {
+  local result="$WANDB_NAME_PREFIX" option short value
+  while (( $# )); do
+    option="$1"
+    shift
+    case "$option" in
+      --use-muon) result+="_um1"; continue ;;
+      --no-use-muon) result+="_um0"; continue ;;
+      --muon-lr) short=mlr ;;
+      --muon-momentum) short=mm ;;
+      --muon-weight-decay) short=mwd ;;
+      --muon-adamw-lr) short=malr ;;
+      --muon-adamw-weight-decay) short=mawd ;;
+      --muon-matrices-per-rank) short=mpr ;;
+      --learning-rate) short=lr ;;
+      --weight-decay) short=wd ;;
+      *) short="${option#--}" ;;
+    esac
+    if (( $# == 0 )); then
+      echo "Missing value for experiment override: $option" >&2
+      return 2
+    fi
+    value="$1"
+    shift
+    result+="_${short}${value}"
+  done
+  printf '%s\n' "$result"
+}
+
 run_experiment() {
   local name="$1"
   shift
+  local wandb_name
+  wandb_name="$(wandb_name_from_overrides "$@")"
   local command=(
     bash scripts/dlite/run_training_dlite_sft.sh "$CONFIG"
     "$@"
     --output-dir "$OUTPUT_ROOT/$name"
-    --wandb-name "${SWEEP_ID}_${name}"
+    --wandb-name "$wandb_name"
   )
   echo "启动实验：$name"
   if (( PREVIEW )); then
