@@ -1,0 +1,1 @@
+{"prompt": {"path": "payload.dialog", "kind": "messages", "role_path": "from", "content_path": "value", "role_map": {"human": "user", "gpt": "assistant"}}, "source": {"path": "origin"}}

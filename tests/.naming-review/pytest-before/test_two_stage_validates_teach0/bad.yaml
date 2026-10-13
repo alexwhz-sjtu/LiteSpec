@@ -1,0 +1,9 @@
+mode: two_stage
+launcher:
+  target_model: /model
+  train_data: /data.jsonl
+  output_dir: /output
+arguments:
+  stage1_epochs: 1
+  stage2_epochs: 1
+  learning_rate: 0.0004

@@ -1,0 +1,2942 @@
+--- before/Flow.md
++++ Flow.md
+@@ -239,7 +239,7 @@
+ 
+ ### 3.6 DLite disaggregate 前向
+ 
+-target 侧不计算或传输 full-vocabulary logits。它根据 phase 生产不同的 `DraftBatchPacket`：
++target 侧不计算或传输 full-vocabulary logits。它根据 phase 生产不同的 `DLiteBatchPacket`：
+ 
+ | phase | 必有 | 附加 hidden | 用途 |
+ | --- | --- | --- | --- |
+@@ -385,7 +385,7 @@
+ 
+ ### 4.6 DFlash2 disaggregate 前向
+ 
+-DFlash-family 使用 `FamilyBatchPacket`：
++DFlash-family 使用 `DFlashFamilyBatchPacket`：
+ 
+ ```text
+ input_ids             [local_batch, S]
+--- before/evaluation/benchmark.py
++++ evaluation/benchmark.py
+@@ -114,13 +114,13 @@
+         raise ValueError("Missing 'context' field in multifieldqa_en_mixup item")
+     if "input" not in data:
+         raise ValueError("Missing 'input' field in multifieldqa_en_mixup item")
+-    ctx = data["context"]
+-    inp = data["input"]
+-    if not isinstance(ctx, str):
+-        ctx = str(ctx)
+-    if not isinstance(inp, str):
+-        inp = str(inp)
+-    return f"{ctx}\n\n{inp}"
++    context = data["context"]
++    instruction = data["input"]
++    if not isinstance(context, str):
++        context = str(context)
++    if not isinstance(instruction, str):
++        instruction = str(instruction)
++    return f"{context}\n\n{instruction}"
+ 
+ 
+ def should_load_as_multifieldqa_en_mixup(
+@@ -293,12 +293,12 @@
+ 
+ 
+ def flatten_specbench_turns(turns: list) -> list[str]:
+-    out: list[str] = []
+-    for t in turns:
+-        if not isinstance(t, str):
+-            t = str(t)
+-        out.extend(expand_specbench_turn_string(t))
+-    return out
++    expanded_turns: list[str] = []
++    for turn in turns:
++        if not isinstance(turn, str):
++            turn = str(turn)
++        expanded_turns.extend(expand_specbench_turn_string(turn))
++    return expanded_turns
+ 
+ 
+ def load_specbench_question_jsonl(
+--- before/litespec/core/_dflash_common.py
++++ litespec/core/_dflash_common.py
+@@ -291,29 +291,29 @@
+ 
+     def _create_position_ids(self, anchor_positions: torch.Tensor) -> torch.Tensor:
+         """Create absolute position IDs for parallel draft blocks."""
+-        bsz, n_blocks = anchor_positions.shape
++        bsz, num_blocks = anchor_positions.shape
+         device = anchor_positions.device
+         offsets = torch.arange(self.block_size, device=device).view(1, 1, -1)
+-        pos_ids = anchor_positions.unsqueeze(-1) + offsets
+-        return pos_ids.view(bsz, -1)
++        position_ids = anchor_positions.unsqueeze(-1) + offsets
++        return position_ids.view(bsz, -1)
+ 
+     def _create_noise_embed(self, input_ids, anchor_positions, block_keep_mask):
+         bsz, seq_len = input_ids.shape
+-        n = anchor_positions.shape[1]
+-        bs = self.block_size
++        num_blocks = anchor_positions.shape[1]
++        block_size = self.block_size
+         device = input_ids.device
+ 
+         noise_ids = torch.full(
+-            (bsz, n * bs), self.mask_token_id, dtype=torch.long, device=device
+-        )
+-
+-        block_starts = torch.arange(n, device=device) * bs
++            (bsz, num_blocks * block_size), self.mask_token_id, dtype=torch.long, device=device
++        )
++
++        block_starts = torch.arange(num_blocks, device=device) * block_size
+         block_starts = block_starts.unsqueeze(0).expand(bsz, -1)
+ 
+         valid_anchor_positions = anchor_positions.clamp(0, seq_len - 1)
+         anchor_tokens = torch.gather(input_ids, 1, valid_anchor_positions)
+ 
+-        flat_batch_idx = torch.arange(bsz, device=device).unsqueeze(1).expand(bsz, n)
++        flat_batch_idx = torch.arange(bsz, device=device).unsqueeze(1).expand(bsz, num_blocks)
+         # masked_fill with a scalar avoids a pageable H2D copy per microbatch.
+         noise_ids[flat_batch_idx, block_starts] = anchor_tokens.masked_fill(
+             ~block_keep_mask, self.mask_token_id
+@@ -329,9 +329,9 @@
+         """Gather the frozen target state that predicts each hard label."""
+ 
+         target_pred_indices = (safe_label_indices - 1).clamp(min=0)
+-        batch_size = target_last_hidden_states.shape[0]
++        bsz = target_last_hidden_states.shape[0]
+         hidden_size = target_last_hidden_states.shape[-1]
+-        gather_indices = target_pred_indices.reshape(batch_size, -1, 1).expand(
++        gather_indices = target_pred_indices.reshape(bsz, -1, 1).expand(
+             -1, -1, hidden_size
+         )
+         return torch.gather(
+@@ -354,9 +354,9 @@
+         dashboard group.
+         """
+ 
+-        family = name.split("/", 1)[1]
++        metric_path = name.split("/", 1)[1]
+         for position in range(1, numerators.numel()):
+-            metrics[f"position_{position}/{family}"] = (
++            metrics[f"position_{position}/{metric_path}"] = (
+                 numerators[position].detach(),
+                 denominators[position].detach(),
+             )
+@@ -437,7 +437,7 @@
+     def _forward_draft_blocks(
+         self,
+         input_ids: torch.Tensor,
+-        hidden_states: torch.Tensor,
++        target_context_hidden: torch.Tensor,
+         loss_mask: torch.Tensor,
+         max_valid_anchors: Optional[int] = None,
+     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+@@ -490,28 +490,28 @@
+         draft_kwargs = {}
+         if self.attention_backend == "flex_attention":
+             draft_kwargs["kernel_options"] = self.flex_kernel_options
+-        output_hidden = self.draft_model(
++        draft_hidden_states = self.draft_model(
+             position_ids=full_position_ids,
+             noise_embedding=noise_embedding,
+-            target_hidden=hidden_states,
++            target_hidden=target_context_hidden,
+             attention_mask=dflash_attn_mask,
+             **draft_kwargs,
+         )
+-        return anchor_positions, block_keep_mask, output_hidden
++        return anchor_positions, block_keep_mask, draft_hidden_states
+ 
+     def _dflash_objective_chunk_terms(
+         self,
+-        hidden: torch.Tensor,
++        draft_block_hidden_states: torch.Tensor,
+         target_ids: torch.Tensor,
+         weight_mask: torch.Tensor,
+         predecessor_ids: torch.Tensor,
+     ) -> DFlashObjectiveTerms:
+         """Return a flat tuple of additive objective and metric tensors."""
+ 
+-        batch_size, num_blocks, block_size, hidden_size = hidden.shape
++        bsz, num_blocks, block_size, hidden_size = draft_block_hidden_states.shape
+         logits = self.lm_head(
+-            hidden.reshape(batch_size, num_blocks * block_size, hidden_size)
+-        ).reshape(batch_size, num_blocks, block_size, -1)
++            draft_block_hidden_states.reshape(bsz, num_blocks * block_size, hidden_size)
++        ).reshape(bsz, num_blocks, block_size, -1)
+         candidate_selector = getattr(self.draft_model, "candidate_selector", None)
+         objective_logits = (
+             self.draft_model.transform_unary_logits(logits)
+@@ -529,7 +529,7 @@
+         if self.loss_decay_gamma is not None and self.loss_decay_gamma > 0:
+             positions = torch.arange(
+                 self.block_size,
+-                device=hidden.device,
++                device=draft_block_hidden_states.device,
+             ).view(1, 1, -1)
+             decay_weights = torch.exp(
+                 -(positions - 1).clamp(min=0).float() / self.loss_decay_gamma
+@@ -545,7 +545,7 @@
+             selector_terms = self._selector_chunk_terms(
+                 candidate_selector=candidate_selector,
+                 objective_logits=objective_logits,
+-                hidden=hidden,
++                draft_block_hidden_states=draft_block_hidden_states,
+                 target_ids=target_ids,
+                 predecessor_ids=predecessor_ids,
+                 loss_weights=loss_weights,
+@@ -589,7 +589,7 @@
+ 
+     def _dflash_metric_chunk_terms(
+         self,
+-        hidden: torch.Tensor,
++        draft_block_hidden_states: torch.Tensor,
+         target_ids: torch.Tensor,
+         weight_mask: torch.Tensor,
+         predecessor_ids: torch.Tensor,
+@@ -604,7 +604,7 @@
+ 
+         candidate_selector = getattr(self.draft_model, "candidate_selector", None)
+         unary = self._dflash_unary_diagnostics(
+-            hidden,
++            draft_block_hidden_states,
+             target_ids,
+             top_k=self._metric_top_k(),
+         )
+@@ -613,7 +613,7 @@
+             selector = self._dflash2_selector_diagnostics(
+                 candidate_selector=candidate_selector,
+                 unary=unary,
+-                hidden=hidden,
++                draft_block_hidden_states=draft_block_hidden_states,
+                 predecessor_ids=predecessor_ids,
+                 weight_mask=weight_mask,
+             )
+@@ -621,7 +621,7 @@
+         greedy = self._dflash_greedy_diagnostics(
+             candidate_selector=candidate_selector,
+             unary=unary,
+-            hidden=hidden,
++            draft_block_hidden_states=draft_block_hidden_states,
+             target_ids=target_ids,
+             weight_mask=weight_mask,
+             position_den=position_den,
+@@ -646,17 +646,17 @@
+ 
+     def _dflash_unary_diagnostics(
+         self,
+-        hidden: torch.Tensor,
++        draft_block_hidden_states: torch.Tensor,
+         target_ids: torch.Tensor,
+         *,
+         top_k: int,
+     ) -> _DFlashUnaryDiagnostics:
+         """Project draft states once and derive the strict unary top-k view."""
+ 
+-        batch_size, num_blocks, block_size, hidden_size = hidden.shape
++        bsz, num_blocks, block_size, hidden_size = draft_block_hidden_states.shape
+         logits = self.lm_head(
+-            hidden.reshape(batch_size, num_blocks * block_size, hidden_size)
+-        ).reshape(batch_size, num_blocks, block_size, -1)
++            draft_block_hidden_states.reshape(bsz, num_blocks * block_size, hidden_size)
++        ).reshape(bsz, num_blocks, block_size, -1)
+         transform = getattr(self.draft_model, "transform_unary_logits", None)
+         objective_logits = logits if transform is None else transform(logits)
+         probabilities = torch.softmax(objective_logits.float(), dim=-1)
+@@ -682,14 +682,14 @@
+         *,
+         candidate_selector: Optional[nn.Module],
+         unary: _DFlashUnaryDiagnostics,
+-        hidden: torch.Tensor,
++        draft_block_hidden_states: torch.Tensor,
+         target_ids: torch.Tensor,
+         weight_mask: torch.Tensor,
+         position_den: torch.Tensor,
+     ) -> _DFlashGreedyDiagnostics:
+         """Reduce per-block acceptance chains; walk the selector path if any."""
+ 
+-        batch_size, num_blocks, block_size, hidden_size = hidden.shape
++        bsz, num_blocks, block_size, hidden_size = draft_block_hidden_states.shape
+         zero = position_den.new_zeros(())
+         if block_size <= 1:
+             return _DFlashGreedyDiagnostics(
+@@ -724,22 +724,22 @@
+ 
+         greedy_ids = candidate_selector.greedy_path(
+             candidate_ids=unary.candidate_ids[:, :, 1:].reshape(
+-                batch_size * num_blocks,
++                bsz * num_blocks,
+                 block_size - 1,
+                 candidate_selector.top_k,
+             ),
+             unary_logits=unary.topk_logits[:, :, 1:].reshape(
+-                batch_size * num_blocks,
++                bsz * num_blocks,
+                 block_size - 1,
+                 candidate_selector.top_k,
+             ),
+-            hidden_states=hidden[:, :, 1:].reshape(
+-                batch_size * num_blocks,
++            hidden_states=draft_block_hidden_states[:, :, 1:].reshape(
++                bsz * num_blocks,
+                 block_size - 1,
+                 hidden_size,
+             ),
+             anchor_token_ids=target_ids[:, :, 0].reshape(-1),
+-        ).reshape(batch_size, num_blocks, block_size - 1)
++        ).reshape(bsz, num_blocks, block_size - 1)
+         greedy_hit = greedy_ids == target_ids[:, :, 1:]
+         return _DFlashGreedyDiagnostics(
+             selected_ids=greedy_ids,
+@@ -772,10 +772,10 @@
+         if aligned_target_hidden is None:
+             return _DFlashTeacherTerms.zeros(position_den)
+ 
+-        batch_size, num_blocks, block_size, hidden_size = aligned_target_hidden.shape
++        bsz, num_blocks, block_size, hidden_size = aligned_target_hidden.shape
+         teacher_logits = self.lm_head(
+             aligned_target_hidden.reshape(
+-                batch_size,
++                bsz,
+                 num_blocks * block_size,
+                 hidden_size,
+             )
+--- before/litespec/core/attention_masks.py
++++ litespec/core/attention_masks.py
+@@ -60,22 +60,22 @@
+ ):
+     if sliding_window is not None and sliding_window <= 0:
+         raise ValueError("sliding_window must be > 0")
+-    batch, blocks = anchor_positions.shape
+-    q_len, kv_len = blocks * block_size, S + blocks * block_size
++    bsz, num_blocks = anchor_positions.shape
++    q_len, kv_len = num_blocks * block_size, S + num_blocks * block_size
+     q = torch.arange(q_len, device=device).view(1, 1, -1, 1)
+     kv = torch.arange(kv_len, device=device).view(1, 1, 1, -1)
+     q_block, q_offset = q // block_size, q % block_size
+-    anchors = anchor_positions.view(batch, 1, blocks, 1).repeat_interleave(
++    anchors = anchor_positions.view(bsz, 1, num_blocks, 1).repeat_interleave(
+         block_size, 2
+     )
+-    context = (kv < S) & (kv < anchors)
++    context_mask = (kv < S) & (kv < anchors)
+     if sliding_window is not None:
+-        context &= kv >= anchors + q_offset - (sliding_window - 1)
+-    draft = (kv >= S) & (q_block == (kv - S) // block_size)
++        context_mask &= kv >= anchors + q_offset - (sliding_window - 1)
++    draft_mask = (kv >= S) & (q_block == (kv - S) // block_size)
+     if sliding_window is not None:
+-        draft &= (kv - S) % block_size <= q_offset
+-    valid = block_keep_mask.view(batch, 1, blocks, 1).repeat_interleave(block_size, 2)
+-    return (context | draft) & valid
++        draft_mask &= (kv - S) % block_size <= q_offset
++    valid = block_keep_mask.view(bsz, 1, num_blocks, 1).repeat_interleave(block_size, 2)
++    return (context_mask | draft_mask) & valid
+ 
+ 
+ # Same visibility as create_dflash_sdpa_mask.
+@@ -93,26 +93,30 @@
+         raise RuntimeError("flex_attention is not available")
+     if sliding_window is not None and sliding_window <= 0:
+         raise ValueError("sliding_window must be > 0")
+-    batch, blocks = anchor_positions.shape
++    bsz, num_blocks = anchor_positions.shape
+ 
+     def mask_mod(b, h, q_idx, kv_idx):
+         qb, qo = q_idx // block_size, q_idx % block_size
+-        safe = qb.clamp(max=blocks - 1)
+-        anchor = anchor_positions[b, safe]
+-        context = (kv_idx < S) & (kv_idx < anchor)
++        safe_block_indices = qb.clamp(max=num_blocks - 1)
++        anchor = anchor_positions[b, safe_block_indices]
++        context_mask = (kv_idx < S) & (kv_idx < anchor)
+         if sliding_window is not None:
+-            context &= kv_idx >= anchor + qo - (sliding_window - 1)
+-        draft = (kv_idx >= S) & (qb == (kv_idx - S) // block_size)
++            context_mask &= kv_idx >= anchor + qo - (sliding_window - 1)
++        draft_mask = (kv_idx >= S) & (qb == (kv_idx - S) // block_size)
+         if sliding_window is not None:
+-            draft &= (kv_idx - S) % block_size <= qo
+-        return (context | draft) & block_keep_mask[b, safe] & (qb < blocks)
++            draft_mask &= (kv_idx - S) % block_size <= qo
++        return (
++            (context_mask | draft_mask)
++            & block_keep_mask[b, safe_block_indices]
++            & (qb < num_blocks)
++        )
+ 
+     return create_flex_block_mask(
+         mask_mod,
+-        B=batch,
++        B=bsz,
+         H=None,
+-        Q_LEN=blocks * block_size,
+-        KV_LEN=S + blocks * block_size,
++        Q_LEN=num_blocks * block_size,
++        KV_LEN=S + num_blocks * block_size,
+         device=device,
+         backend=flex_backend,
+     )
+--- before/litespec/core/block_training.py
++++ litespec/core/block_training.py
+@@ -78,15 +78,15 @@
+     )
+     indices = anchor_positions.unsqueeze(-1) + offsets
+     in_bounds = indices < values.size(1)
+-    safe = indices.clamp(min=0, max=max(values.size(1) - 1, 0))
++    safe_indices = indices.clamp(min=0, max=max(values.size(1) - 1, 0))
+     expanded = values.unsqueeze(1).expand(
+         -1, anchor_positions.size(1), *values.shape[1:]
+     )
+-    gather_index = safe
++    gather_index = safe_indices
+     for _ in values.shape[2:]:
+         gather_index = gather_index.unsqueeze(-1)
+     gather_index = gather_index.expand(-1, -1, -1, *values.shape[2:])
+-    return torch.gather(expanded, 2, gather_index), in_bounds, safe
++    return torch.gather(expanded, 2, gather_index), in_bounds, safe_indices
+ 
+ 
+ def apply_exponential_position_decay(
+--- before/litespec/core/dflash.py
++++ litespec/core/dflash.py
+@@ -30,9 +30,9 @@
+         bsz, seq_len = input_ids.shape
+         device = input_ids.device
+ 
+-        anchor_positions, block_keep_mask, output_hidden = self._forward_draft_blocks(
++        anchor_positions, block_keep_mask, draft_hidden_states = self._forward_draft_blocks(
+             input_ids=input_ids,
+-            hidden_states=hidden_states,
++            target_context_hidden=hidden_states,
+             loss_mask=loss_mask,
+             max_valid_anchors=max_valid_anchors,
+         )
+@@ -69,7 +69,7 @@
+         )
+         weight_mask = weight_mask * original_loss_mask_gathered
+ 
+-        hidden_4d = output_hidden.reshape(
++        draft_block_hidden_states = draft_hidden_states.reshape(
+             bsz,
+             anchor_positions.shape[1],
+             self.block_size,
+@@ -96,7 +96,7 @@
+             selector_covered_num,
+         ) = checkpointed_chunk_reduce(
+             self._dflash_objective_chunk_terms,
+-            hidden_4d,
++            draft_block_hidden_states,
+             target_ids,
+             weight_mask,
+             predecessor_ids,
+@@ -140,7 +140,7 @@
+             terms = DFlashMetricTerms(
+                 *checkpointed_chunk_reduce(
+                     self._dflash_metric_chunk_terms,
+-                    hidden_4d.detach(),
++                    draft_block_hidden_states.detach(),
+                     target_ids,
+                     weight_mask,
+                     predecessor_ids,
+--- before/litespec/core/dflash2.py
++++ litespec/core/dflash2.py
+@@ -17,7 +17,7 @@
+         self,
+         candidate_selector: nn.Module,
+         objective_logits: torch.Tensor,
+-        hidden: torch.Tensor,
++        draft_block_hidden_states: torch.Tensor,
+         target_ids: torch.Tensor,
+         predecessor_ids: torch.Tensor,
+         loss_weights: torch.Tensor,
+@@ -37,7 +37,7 @@
+             # Isolate only the selector objective. The caller still uses the
+             # original tensors for the primary DFlash objective.
+             objective_logits = objective_logits.detach()
+-            hidden = hidden.detach()
++            draft_block_hidden_states = draft_block_hidden_states.detach()
+ 
+         # Match serving exactly: train only against the strict unary top-k.
+         # Candidate misses are a backbone/recall failure, not a selector
+@@ -52,7 +52,7 @@
+         selector_logits = candidate_selector.score_candidates(
+             candidate_ids=candidate_ids,
+             unary_logits=unary_logits,
+-            hidden_states=hidden,
++            hidden_states=draft_block_hidden_states,
+             predecessor_ids=predecessor_ids,
+         )
+         selector_ce = F.cross_entropy(
+@@ -88,7 +88,7 @@
+         *,
+         candidate_selector: nn.Module,
+         unary: _DFlashUnaryDiagnostics,
+-        hidden: torch.Tensor,
++        draft_block_hidden_states: torch.Tensor,
+         predecessor_ids: torch.Tensor,
+         weight_mask: torch.Tensor,
+     ) -> _DFlashSelectorDiagnostics:
+@@ -97,7 +97,7 @@
+         selector_logits = candidate_selector.score_candidates(
+             candidate_ids=unary.candidate_ids,
+             unary_logits=unary.topk_logits,
+-            hidden_states=hidden,
++            hidden_states=draft_block_hidden_states,
+             predecessor_ids=predecessor_ids,
+         )
+         target_is_candidate = unary.target_is_candidate.float()
+--- before/litespec/core/dspark.py
++++ litespec/core/dspark.py
+@@ -126,9 +126,9 @@
+         """Gather the target state that predicts each DSpark label token."""
+ 
+         target_pred_indices = (safe_label_indices - 1).clamp(min=0)
+-        batch_size = target_last_hidden_states.shape[0]
++        bsz = target_last_hidden_states.shape[0]
+         hidden_size = target_last_hidden_states.shape[-1]
+-        gather_indices = target_pred_indices.reshape(batch_size, -1, 1).expand(
++        gather_indices = target_pred_indices.reshape(bsz, -1, 1).expand(
+             -1, -1, hidden_size
+         )
+         return torch.gather(
+@@ -139,7 +139,7 @@
+ 
+     def _dspark_objective_chunk_terms(
+         self,
+-        hidden: torch.Tensor,
++        draft_block_hidden_states: torch.Tensor,
+         prev_token_ids: torch.Tensor,
+         target_ids: torch.Tensor,
+         loss_weights: torch.Tensor,
+@@ -148,14 +148,14 @@
+     ) -> Tuple[torch.Tensor, ...]:
+         """Return additive loss and telemetry numerators for one block slice."""
+ 
+-        batch_size, num_blocks, block_size, hidden_size = hidden.shape
++        bsz, num_blocks, block_size, hidden_size = draft_block_hidden_states.shape
+         base_logits = self.lm_head(
+-            hidden.reshape(batch_size, num_blocks * block_size, hidden_size)
+-        ).reshape(batch_size, num_blocks, block_size, -1)
++            draft_block_hidden_states.reshape(bsz, num_blocks * block_size, hidden_size)
++        ).reshape(bsz, num_blocks, block_size, -1)
+         draft_logits = self.draft_model.apply_logits_head(
+             base_logits,
+             prev_token_ids=prev_token_ids,
+-            hidden_states=hidden,
++            hidden_states=draft_block_hidden_states,
+         )
+         vocab_size = draft_logits.shape[-1]
+         cross_entropy = F.cross_entropy(
+@@ -182,7 +182,7 @@
+             with torch.no_grad():
+                 target_logits = self.lm_head(
+                     aligned_target_hidden.reshape(
+-                        batch_size,
++                        bsz,
+                         num_blocks * block_size,
+                         hidden_size,
+                     )
+@@ -198,7 +198,7 @@
+                 l1_num = (l1_per_token * loss_weights).sum()
+ 
+         confidence_pred = self.draft_model.predict_confidence(
+-            hidden,
++            draft_block_hidden_states,
+             prev_token_ids=prev_token_ids,
+         )
+         if confidence_pred is not None and self.dspark_confidence_head_alpha > 0:
+@@ -264,7 +264,7 @@
+     def _compute_dspark_loss(
+         self,
+         *,
+-        output_hidden: torch.Tensor,
++        draft_hidden_states: torch.Tensor,
+         target_ids: torch.Tensor,
+         eval_mask: torch.Tensor,
+         prev_token_ids: torch.Tensor,
+@@ -275,9 +275,9 @@
+     ) -> TrainingOutput:
+         """Token-pooled DSpark objective with bounded vocab-logit memory."""
+ 
+-        batch_size, num_blocks, block_size = target_ids.shape
+-        hidden_4d = output_hidden.reshape(
+-            batch_size,
++        bsz, num_blocks, block_size = target_ids.shape
++        draft_block_hidden_states = draft_hidden_states.reshape(
++            bsz,
+             num_blocks,
+             block_size,
+             -1,
+@@ -295,7 +295,7 @@
+ 
+         totals = checkpointed_chunk_reduce(
+             self._dspark_objective_chunk_terms,
+-            hidden_4d,
++            draft_block_hidden_states,
+             prev_token_ids,
+             target_ids,
+             loss_weights,
+@@ -391,9 +391,9 @@
+             raise ValueError(
+                 "flex_attention is not available on this device; use sdpa/eager."
+             )
+-        anchor_positions, block_keep_mask, output_hidden = self._forward_draft_blocks(
++        anchor_positions, block_keep_mask, draft_hidden_states = self._forward_draft_blocks(
+             input_ids=input_ids,
+-            hidden_states=hidden_states,
++            target_context_hidden=hidden_states,
+             loss_mask=loss_mask,
+             max_valid_anchors=max_valid_anchors,
+         )
+@@ -414,7 +414,7 @@
+             dim=-1,
+         )
+         output = self._compute_dspark_loss(
+-            output_hidden=output_hidden,
++            draft_hidden_states=draft_hidden_states,
+             target_ids=target_ids,
+             eval_mask=eval_mask,
+             prev_token_ids=prev_token_ids,
+--- before/litespec/data/hidden_cache.py
++++ litespec/data/hidden_cache.py
+@@ -87,15 +87,15 @@
+     final_layer_id = int(manifest.get("final_norm_layer_id", -1))
+     if final_layer_id != int(num_hidden_layers) - 1:
+         raise HiddenCacheError("regen_full final-norm layer ID is invalid")
+-    stored = {int(value) for value in manifest.get("stored_hidden_layer_ids", [])}
+-    missing = sorted(set(required_layer_ids) - stored)
+-    if final_layer_id not in stored:
+-        missing = sorted(set(missing) | {final_layer_id})
+-    if missing:
+-        needed = sorted(set(required_layer_ids) | {final_layer_id})
+-        raise HiddenCacheError(
+-            f"regen_full is missing required hidden layers {missing}; "
+-            f"regenerate with --target-layer-ids {','.join(map(str, needed))}"
++    stored_layer_ids = {int(value) for value in manifest.get("stored_hidden_layer_ids", [])}
++    missing_layer_ids = sorted(set(required_layer_ids) - stored_layer_ids)
++    if final_layer_id not in stored_layer_ids:
++        missing_layer_ids = sorted(set(missing_layer_ids) | {final_layer_id})
++    if missing_layer_ids:
++        needed_layer_ids = sorted(set(required_layer_ids) | {final_layer_id})
++        raise HiddenCacheError(
++            f"regen_full is missing required hidden layers {missing_layer_ids}; "
++            f"regenerate with --target-layer-ids {','.join(map(str, needed_layer_ids))}"
+         )
+ 
+     shards = manifest.get("shards")
+@@ -412,11 +412,11 @@
+     def __call__(self, features: list[dict[str, Any]]) -> dict[str, Any]:
+         if not features:
+             raise HiddenCacheError("cannot collate an empty regen_full batch")
+-        sequence_length = max(item["input_ids"].numel() for item in features)
++        seq_len = max(item["input_ids"].numel() for item in features)
+         if self.pad_to_length is not None:
+-            if sequence_length > self.pad_to_length:
++            if seq_len > self.pad_to_length:
+                 raise HiddenCacheError("cached sequence exceeds fixed padding length")
+-            sequence_length = self.pad_to_length
++            seq_len = self.pad_to_length
+ 
+         def pad_vectors(key: str, padding_value: int) -> torch.Tensor:
+             value = pad_sequence(
+@@ -424,7 +424,7 @@
+                 batch_first=True,
+                 padding_value=padding_value,
+             )
+-            return self._pad_to(value, sequence_length)
++            return self._pad_to(value, seq_len)
+ 
+         layer_ids = sorted(features[0]["hidden_states"])
+         if any(sorted(item["hidden_states"]) != layer_ids for item in features):
+@@ -439,7 +439,7 @@
+                 batch_first=True,
+                 padding_value=0.0,
+             )
+-            hidden_states[layer_id] = self._pad_to(value, sequence_length)
++            hidden_states[layer_id] = self._pad_to(value, seq_len)
+         return {
+             "sample_index": torch.tensor(
+                 [item["sample_index"] for item in features], dtype=torch.long
+--- before/litespec/distributed/transport.py
++++ litespec/distributed/transport.py
+@@ -33,23 +33,24 @@
+         raise ValueError("node_batch_size must be divisible by target producers")
+     if node_batch_size % drafts:
+         raise ValueError("node_batch_size must be divisible by draft ranks")
+-    producer_batch = node_batch_size // producers
+-    draft_batch = node_batch_size // drafts
++    producer_batch_size = node_batch_size // producers
++    draft_batch_size = node_batch_size // drafts
+     routes: list[RouteFragment] = []
+     for producer in range(producers):
+-        p0, p1 = producer * producer_batch, (producer + 1) * producer_batch
++        producer_start = producer * producer_batch_size
++        producer_end = (producer + 1) * producer_batch_size
+         for draft in range(drafts):
+-            d0, d1 = draft * draft_batch, (draft + 1) * draft_batch
+-            start, end = max(p0, d0), min(p1, d1)
++            draft_start, draft_end = draft * draft_batch_size, (draft + 1) * draft_batch_size
++            start, end = max(producer_start, draft_start), min(producer_end, draft_end)
+             if start < end:
+                 routes.append(
+                     RouteFragment(
+                         producer,
+                         draft,
+-                        start - p0,
+-                        end - p0,
+-                        start - d0,
+-                        end - d0,
++                        start - producer_start,
++                        end - producer_start,
++                        start - draft_start,
++                        end - draft_start,
+                     )
+                 )
+     if sum(route.size for route in routes) != node_batch_size:
+@@ -58,7 +59,7 @@
+ 
+ 
+ @dataclass(frozen=True)
+-class DraftPacketSpec:
++class DLitePacketSpec:
+     batch_size: int
+     max_length: int
+     num_anchors: int
+@@ -78,7 +79,7 @@
+ 
+ 
+ @dataclass
+-class DraftBatchPacket:
++class DLiteBatchPacket:
+     """Fixed-shape GPU payload. Full-vocabulary logits are never transported."""
+ 
+     input_ids: torch.Tensor
+@@ -91,21 +92,29 @@
+ 
+     @classmethod
+     def empty(
+-        cls, spec: DraftPacketSpec, *, device: torch.device | str
+-    ) -> "DraftBatchPacket":
+-        b, length, n = spec.batch_size, spec.max_length, spec.num_anchors
+-        h, c, k = spec.hidden_size, spec.num_target_layers, spec.prediction_length
++        cls, spec: DLitePacketSpec, *, device: torch.device | str
++    ) -> "DLiteBatchPacket":
++        bsz, seq_len, num_anchors = spec.batch_size, spec.max_length, spec.num_anchors
++        hidden_size = spec.hidden_size
++        num_target_layers = spec.num_target_layers
++        prediction_length = spec.prediction_length
+         return cls(
+-            input_ids=torch.empty((b, length), dtype=torch.long, device=device),
+-            loss_mask=torch.empty((b, length), dtype=torch.float32, device=device),
+-            anchor_positions=torch.empty((b, n), dtype=torch.long, device=device),
+-            block_keep_mask=torch.empty((b, n), dtype=torch.bool, device=device),
++            input_ids=torch.empty((bsz, seq_len), dtype=torch.long, device=device),
++            loss_mask=torch.empty((bsz, seq_len), dtype=torch.float32, device=device),
++            anchor_positions=torch.empty(
++                (bsz, num_anchors), dtype=torch.long, device=device
++            ),
++            block_keep_mask=torch.empty(
++                (bsz, num_anchors), dtype=torch.bool, device=device
++            ),
+             target_hidden=torch.empty(
+-                (b, n, c, h), dtype=torch.bfloat16, device=device
++                (bsz, num_anchors, num_target_layers, hidden_size),
++                dtype=torch.bfloat16,
++                device=device,
+             ),
+             target_history_hidden=(
+                 torch.empty(
+-                    (b, length, spec.num_history_layers, h),
++                    (bsz, seq_len, spec.num_history_layers, hidden_size),
+                     dtype=torch.bfloat16,
+                     device=device,
+                 )
+@@ -113,7 +122,11 @@
+                 else None
+             ),
+             target_prediction_hidden=(
+-                torch.empty((b, n, k, h), dtype=torch.bfloat16, device=device)
++                torch.empty(
++                    (bsz, num_anchors, prediction_length, hidden_size),
++                    dtype=torch.bfloat16,
++                    device=device,
++                )
+                 if spec.include_target_prediction_hidden
+                 else None
+             ),
+@@ -130,7 +143,7 @@
+ 
+ 
+ @dataclass(frozen=True)
+-class FamilyPacketSpec:
++class DFlashFamilyPacketSpec:
+     """Fixed full-context schema for DFlash-family training."""
+ 
+     batch_size: int
+@@ -145,7 +158,7 @@
+ 
+ 
+ @dataclass
+-class FamilyBatchPacket:
++class DFlashFamilyBatchPacket:
+     """DFlash-family features; never contains full-vocabulary logits."""
+ 
+     input_ids: torch.Tensor
+@@ -155,20 +168,20 @@
+ 
+     @classmethod
+     def empty(
+-        cls, spec: FamilyPacketSpec, *, device: torch.device | str
+-    ) -> "FamilyBatchPacket":
+-        b, length = spec.batch_size, spec.max_length
++        cls, spec: DFlashFamilyPacketSpec, *, device: torch.device | str
++    ) -> "DFlashFamilyBatchPacket":
++        bsz, seq_len = spec.batch_size, spec.max_length
+         return cls(
+-            input_ids=torch.empty((b, length), dtype=torch.long, device=device),
+-            loss_mask=torch.empty((b, length), dtype=torch.float32, device=device),
++            input_ids=torch.empty((bsz, seq_len), dtype=torch.long, device=device),
++            loss_mask=torch.empty((bsz, seq_len), dtype=torch.float32, device=device),
+             target_context_hidden=torch.empty(
+-                (b, length, spec.context_width),
++                (bsz, seq_len, spec.context_width),
+                 dtype=torch.bfloat16,
+                 device=device,
+             ),
+             target_last_hidden=(
+                 torch.empty(
+-                    (b, length, spec.hidden_size),
++                    (bsz, seq_len, spec.hidden_size),
+                     dtype=torch.bfloat16,
+                     device=device,
+                 )
+@@ -188,8 +201,8 @@
+ 
+ 
+ def copy_packet_slice(
+-    source: DraftBatchPacket,
+-    destination: DraftBatchPacket,
++    source: DLiteBatchPacket | DFlashFamilyBatchPacket,
++    destination: DLiteBatchPacket | DFlashFamilyBatchPacket,
+     *,
+     source_start: int,
+     source_end: int,
+@@ -229,7 +242,12 @@
+         return self.topology.node_draft_ranks[draft]
+ 
+     def send(
+-        self, packet: DraftBatchPacket, *, batch_id: int, phase_id: int, schema_id: int
++        self,
++        packet: DLiteBatchPacket | DFlashFamilyBatchPacket,
++        *,
++        batch_id: int,
++        phase_id: int,
++        schema_id: int,
+     ):
+         producer = self.topology.target_replica_local_rank
+         if not self.topology.is_target_leader or producer is None:
+@@ -247,11 +265,11 @@
+                 if route.producer != producer:
+                     continue
+                 peer = self._draft_rank(route.draft)
+-                meta = torch.tensor(
++                packet_header = torch.tensor(
+                     [batch_id, phase_id, schema_id], dtype=torch.long, device="cuda"
+                 )
+-                keepalive.append(meta)
+-                ops.append(dist.P2POp(dist.isend, meta, peer, group=self.group))
++                keepalive.append(packet_header)
++                ops.append(dist.P2POp(dist.isend, packet_header, peer, group=self.group))
+                 for tensor in packet.batch_slice(
+                     route.producer_start, route.producer_end
+                 ):
+@@ -266,7 +284,7 @@
+ 
+     def receive(
+         self,
+-        packet: DraftBatchPacket,
++        packet: DLiteBatchPacket | DFlashFamilyBatchPacket,
+         *,
+         batch_id: int,
+         phase_id: int,
+@@ -275,7 +293,7 @@
+         draft = self.topology.draft_local_rank
+         if not self.topology.is_draft or draft is None:
+             raise RuntimeError("only draft ranks receive draft packets")
+-        ops, metas = [], []
++        ops, packet_headers = [], []
+         with torch.cuda.stream(self.stream):
+             start = torch.cuda.Event(enable_timing=True) if self.profile else None
+             if start is not None:
+@@ -284,24 +302,24 @@
+                 if route.draft != draft:
+                     continue
+                 peer = self._producer_rank(route.producer)
+-                meta = torch.empty((3,), dtype=torch.long, device="cuda")
+-                metas.append(meta)
+-                ops.append(dist.P2POp(dist.irecv, meta, peer, group=self.group))
++                packet_header = torch.empty((3,), dtype=torch.long, device="cuda")
++                packet_headers.append(packet_header)
++                ops.append(dist.P2POp(dist.irecv, packet_header, peer, group=self.group))
+                 for tensor in packet.batch_slice(route.draft_start, route.draft_end):
+                     ops.append(dist.P2POp(dist.irecv, tensor, peer, group=self.group))
+             works = dist.batch_isend_irecv(ops) if ops else []
+             done = torch.cuda.Event(enable_timing=self.profile)
+             done.record(self.stream)
+-        return works, metas, (batch_id, phase_id, schema_id), start, done
++        return works, packet_headers, (batch_id, phase_id, schema_id), start, done
+ 
+     @staticmethod
+     def wait_receive(handle) -> float:
+-        works, metas, expected, start, done = handle
++        works, packet_headers, expected, start, done = handle
+         for work in works:
+             work.wait()
+         done.synchronize()
+-        for meta in metas:
+-            actual = tuple(int(value) for value in meta.tolist())
++        for packet_header in packet_headers:
++            actual = tuple(int(value) for value in packet_header.tolist())
+             if actual != expected:
+                 raise RuntimeError(
+                     f"packet metadata mismatch: expected {expected}, got {actual}"
+--- before/litespec/layers/lm_head.py
++++ litespec/layers/lm_head.py
+@@ -95,10 +95,10 @@
+             # all-gather shards along vocab dim
+             chunks = [torch.empty_like(local_logits) for _ in range(self.tp_size)]
+             dist.all_gather(chunks, local_logits, group=self.tp_group)
+-            full = torch.cat(chunks, dim=-1)[
++            full_logits = torch.cat(chunks, dim=-1)[
+                 :, : self.out_features
+             ]  # trim padding from ceil-div
+-            return full.view(*orig_shape[:-1], self.out_features).contiguous()
++            return full_logits.view(*orig_shape[:-1], self.out_features).contiguous()
+ 
+     def reset_parameters(self):
+         nn.init.xavier_normal_(self.weight)
+--- before/litespec/layers/ring/utils.py
++++ litespec/layers/ring/utils.py
+@@ -92,18 +92,20 @@
+         self, to_send: torch.Tensor, recv_tensor: Optional[torch.Tensor] = None
+     ) -> torch.Tensor:
+         if recv_tensor is None:
+-            res = torch.empty_like(to_send)
++            received_tensor = torch.empty_like(to_send)
+             # print(f"send_recv: empty_like {to_send.shape}")
+         else:
+-            res = recv_tensor
++            received_tensor = recv_tensor
+ 
+         send_op = dist.P2POp(
+             dist.isend, to_send, self.send_rank, group=self._process_group
+         )
+-        recv_op = dist.P2POp(dist.irecv, res, self.recv_rank, group=self._process_group)
++        recv_op = dist.P2POp(
++            dist.irecv, received_tensor, self.recv_rank, group=self._process_group
++        )
+         self._ops.append(send_op)
+         self._ops.append(recv_op)
+-        return res
++        return received_tensor
+ 
+     def commit(self):
+         if self._reqs is not None:
+--- before/litespec/modeling/config_utils.py
++++ litespec/modeling/config_utils.py
+@@ -47,7 +47,7 @@
+     if intermediate_size is None:
+         intermediate_size = text_config.get("moe_intermediate_size")
+ 
+-    required = (
++    required_field_names = (
+         "vocab_size",
+         "hidden_size",
+         "num_hidden_layers",
+@@ -55,15 +55,15 @@
+         "num_key_value_heads",
+         "head_dim",
+     )
+-    missing = [name for name in required if text_config.get(name) is None]
++    missing_field_names = [name for name in required_field_names if text_config.get(name) is None]
+     if intermediate_size is None:
+-        missing.append(
++        missing_field_names.append(
+             "intermediate_size/shared_expert_intermediate_size/" "moe_intermediate_size"
+         )
+-    if missing:
++    if missing_field_names:
+         raise ValueError(
+             "Qwen3.5 text_config is missing required DLite fields: "
+-            + ", ".join(missing)
++            + ", ".join(missing_field_names)
+         )
+ 
+     rope_parameters = text_config.get("rope_parameters") or {}
+--- before/litespec/modeling/draft/dflash.py
++++ litespec/modeling/draft/dflash.py
+@@ -164,15 +164,17 @@
+ def validate_dflash_mla_config(config: Qwen3Config) -> None:
+     """Validate the standard MLA dimension fields carried by a draft config."""
+ 
+-    required = (
++    required_field_names = (
+         "kv_lora_rank",
+         "qk_nope_head_dim",
+         "qk_rope_head_dim",
+         "v_head_dim",
+     )
+-    missing = [name for name in required if getattr(config, name, None) is None]
+-    if missing:
+-        raise ValueError(f"MLA draft config is missing required fields: {missing}")
++    missing_field_names = [
++        name for name in required_field_names if getattr(config, name, None) is None
++    ]
++    if missing_field_names:
++        raise ValueError(f"MLA draft config is missing required fields: {missing_field_names}")
+ 
+     q_lora_rank = getattr(config, "q_lora_rank", None)
+     if q_lora_rank is not None and int(q_lora_rank) <= 0:
+--- before/litespec/modeling/draft/dflash2.py
++++ litespec/modeling/draft/dflash2.py
+@@ -78,23 +78,23 @@
+         *,
+         side: int,
+     ) -> torch.Tensor:
+-        batch_size, sequence_length, hidden_size = hidden_states.shape
+-        if sequence_length % self.block_size:
++        bsz, seq_len, hidden_size = hidden_states.shape
++        if seq_len % self.block_size:
+             raise ValueError(
+                 "DFlash2 convolution sequence length must be divisible by "
+-                f"block_size={self.block_size}, got {sequence_length}"
+-            )
+-
+-        num_blocks = sequence_length // self.block_size
++                f"block_size={self.block_size}, got {seq_len}"
++            )
++
++        num_blocks = seq_len // self.block_size
+         blocks = hidden_states.reshape(
+-            batch_size,
++            bsz,
+             num_blocks,
+             self.block_size,
+             self.num_groups,
+             self.group_size,
+         )
+         dynamic = delta.reshape(
+-            batch_size,
++            bsz,
+             num_blocks,
+             self.block_size,
+             self.taps,
+@@ -117,7 +117,7 @@
+                 (0, 0, 0, 0, tap, 0),
+             )
+             output = output + coefficients[:, :, :, tap] * shifted
+-        return output.reshape(batch_size, sequence_length, hidden_size)
++        return output.reshape(bsz, seq_len, hidden_size)
+ 
+     def prepare(self, hidden_states: torch.Tensor):
+         coefficients = self.kernel_projection(hidden_states).reshape(
+@@ -446,8 +446,8 @@
+     ) -> tuple[torch.LongTensor, Optional[torch.Tensor], torch.LongTensor]:
+         """Return the official sparse selector proposal for verification."""
+ 
+-        hidden = draft_hidden[:, -self.block_size + 1 :, :]
+-        unary_logits = self.transform_unary_logits(target_lm_head(target)(hidden))
++        draft_prediction_hidden = draft_hidden[:, -self.block_size + 1 :, :]
++        unary_logits = self.transform_unary_logits(target_lm_head(target)(draft_prediction_hidden))
+         unary_topk, candidate_ids = unary_logits.topk(
+             self.candidate_selector.top_k,
+             dim=-1,
+@@ -455,7 +455,7 @@
+         token_ids, probabilities = self.candidate_selector.select_path(
+             candidate_ids=candidate_ids,
+             unary_logits=unary_topk,
+-            hidden_states=hidden,
++            hidden_states=draft_prediction_hidden,
+             anchor_token_ids=block_output_ids[:, 0],
+             temperature=temperature,
+         )
+--- before/litespec/modeling/draft/dlite.py
++++ litespec/modeling/draft/dlite.py
+@@ -152,13 +152,13 @@
+                 f"got {tuple(hidden_states.shape)}."
+             )
+ 
+-        batch_size, prediction_length = hidden_states.shape[:2]
++        bsz, prediction_length = hidden_states.shape[:2]
+         if prediction_length > self.max_prediction_length:
+             raise ValueError(
+                 f"prediction_length={prediction_length} exceeds configured "
+                 f"maximum {self.max_prediction_length}."
+             )
+-        state = hidden_states.new_zeros(batch_size, self.sequential_rank)
++        state = hidden_states.new_zeros(bsz, self.sequential_rank)
+         prev_token_ids = first_prev_token_ids.long()
+         sampled_tokens: list[torch.Tensor] = []
+         final_logits: list[torch.Tensor] = []
+@@ -177,12 +177,12 @@
+         if not sampled_tokens:
+             return (
+                 torch.empty(
+-                    batch_size,
++                    bsz,
+                     0,
+                     dtype=torch.long,
+                     device=hidden_states.device,
+                 ),
+-                hidden_states.new_empty(batch_size, 0, self.vocab_size),
++                hidden_states.new_empty(bsz, 0, self.vocab_size),
+             )
+         return torch.cat(sampled_tokens, dim=1), torch.cat(final_logits, dim=1)
+ 
+@@ -341,28 +341,28 @@
+         raise ValueError(f"DLite requires at least 2 target layers, got {L}.")
+     if not 2 <= S <= L:
+         raise ValueError(f"chs_num_layers must be in [2, {L}], got {chs_num_layers}.")
+-    picked: set[int] = {0, L - 1}
++    selected_layer_ids: set[int] = {0, L - 1}
+     n_middle = S - 2
+     lo, hi = 1, L - 2
+     if n_middle > 0 and lo <= hi:
+         interior_span = hi - lo
+-        cap = hi - lo + 1
+-        n_take = min(n_middle, cap)
++        num_interior_layers = hi - lo + 1
++        n_take = min(n_middle, num_interior_layers)
+         if n_take == 1:
+-            picked.add((lo + hi) // 2)
++            selected_layer_ids.add((lo + hi) // 2)
+         else:
+             for i in range(n_take):
+                 if interior_span == 0:
+                     idx = lo
+                 else:
+                     idx = lo + int(round(i * interior_span / (n_take - 1)))
+-                picked.add(int(max(lo, min(hi, idx))))
+-    result = sorted(picked)
+-    if len(result) != S:
++                selected_layer_ids.add(int(max(lo, min(hi, idx))))
++    target_layer_ids = sorted(selected_layer_ids)
++    if len(target_layer_ids) != S:
+         raise RuntimeError(
+-            f"Failed to select exactly {S} CHS layers from target depth {L}: {result}"
+-        )
+-    return result
++            f"Failed to select exactly {S} CHS layers from target depth {L}: {target_layer_ids}"
++        )
++    return target_layer_ids
+ 
+ 
+ def gather_pivot_multilayer_inference(
+@@ -584,16 +584,16 @@
+                 f"model_role must be one of {DLITE_MODEL_ROLES}, got "
+                 f"{self.model_role!r}."
+             )
+-        required = {
++        required_field_names = {
+             "model_role",
+             "chs_num_layers",
+             "target_layer_ids",
+             "sequential_head",
+             "sequential_rank",
+         }
+-        missing = sorted(required - dlite_config.keys())
+-        if missing:
+-            raise ValueError(f"dlite_config is missing required fields: {missing}")
++        missing_field_names = sorted(required_field_names - dlite_config.keys())
++        if missing_field_names:
++            raise ValueError(f"dlite_config is missing required fields: {missing_field_names}")
+         self.swa_window_size = int(
+             dlite_config["swa_window_size"] if self.is_teacher else 1
+         )
+@@ -678,12 +678,12 @@
+         self._mask_embedding_cache: Optional[tuple[int, torch.Tensor]] = None
+         self._last_decode_stats = {}
+ 
+-        h = config.hidden_size
++        hidden_size = config.hidden_size
+         if self.is_teacher:
+-            self.history_fuse = nn.Linear(3 * h, h, bias=False)
+-            self.history_norm = Qwen3RMSNorm(h, eps=config.rms_norm_eps)
+-        self.layer_depth_embedding = nn.Embedding(config.num_target_layers, h)
+-        self.context_norm = Qwen3RMSNorm(h, eps=config.rms_norm_eps)
++            self.history_fuse = nn.Linear(3 * hidden_size, hidden_size, bias=False)
++            self.history_norm = Qwen3RMSNorm(hidden_size, eps=config.rms_norm_eps)
++        self.layer_depth_embedding = nn.Embedding(config.num_target_layers, hidden_size)
++        self.context_norm = Qwen3RMSNorm(hidden_size, eps=config.rms_norm_eps)
+         logging.getLogger(__name__).debug(
+             f"DLite: architecture_version={self.architecture_version}, "
+             f"model_role={self.model_role}, "
+@@ -840,16 +840,16 @@
+ 
+     def _apply_chs_depth_embedding(self, target_hidden: torch.Tensor) -> torch.Tensor:
+         """Add target-layer identity to current CHS hidden states."""
+-        _, _, s_len, h = target_hidden.shape
+-        if s_len != self.chs_num_layers:
+-            raise ValueError(
+-                f"Expected {self.chs_num_layers} current CHS slots, got {s_len}."
++        _, _, num_chs_slots, hidden_size = target_hidden.shape
++        if num_chs_slots != self.chs_num_layers:
++            raise ValueError(
++                f"Expected {self.chs_num_layers} current CHS slots, got {num_chs_slots}."
+             )
+         depth_ids = torch.tensor(
+             self.target_layer_ids, device=target_hidden.device, dtype=torch.long
+         )
+         depth_emb = self.layer_depth_embedding(depth_ids).view(
+-            1, 1, self.chs_num_layers, h
++            1, 1, self.chs_num_layers, hidden_size
+         )
+         return self.context_norm(target_hidden + depth_emb)
+ 
+@@ -929,8 +929,8 @@
+                 "shared_history must have shape (B,T,H), got "
+                 f"{tuple(shared_history.shape)}."
+             )
+-        current_ctx = self._apply_chs_depth_embedding(target_hidden)
+-        chs_flat = current_ctx.reshape(current_ctx.shape[0], -1, current_ctx.shape[-1])
++        current_chs_hidden = self._apply_chs_depth_embedding(target_hidden)
++        chs_flat = current_chs_hidden.reshape(current_chs_hidden.shape[0], -1, current_chs_hidden.shape[-1])
+         if self.is_teacher:
+             return torch.cat([shared_history, chs_flat], dim=1)
+         return chs_flat
+@@ -941,19 +941,21 @@
+         history_hidden: torch.Tensor,
+     ) -> torch.Tensor:
+         """Build the configured per-block CHS/history context."""
+-        bsz, n_blk, _, _ = target_hidden.shape
+-        if history_hidden.shape[:2] != (bsz, n_blk):
++        bsz, num_blocks, _, _ = target_hidden.shape
++        if history_hidden.shape[:2] != (bsz, num_blocks):
+             raise ValueError(
+                 "history_hidden batch/block dimensions must match target_hidden: "
+                 f"{tuple(history_hidden.shape)} vs {tuple(target_hidden.shape)}."
+             )
+-        current_ctx = self._apply_chs_depth_embedding(target_hidden)
+-        ctx = (
+-            torch.cat([history_hidden, current_ctx], dim=2)
++        current_chs_hidden = self._apply_chs_depth_embedding(target_hidden)
++        context_hidden = (
++            torch.cat([history_hidden, current_chs_hidden], dim=2)
+             if self.is_teacher
+-            else current_ctx
+-        )
+-        return ctx.reshape(bsz, n_blk * ctx.shape[2], current_ctx.shape[-1])
++            else current_chs_hidden
++        )
++        return context_hidden.reshape(
++            bsz, num_blocks * context_hidden.shape[2], current_chs_hidden.shape[-1]
++        )
+ 
+     def fuse_target_output_history(self, hidden_states: tuple | list) -> torch.Tensor:
+         """Fuse the three configured target layers for every returned token."""
+--- before/litespec/modeling/draft/dspark.py
++++ litespec/modeling/draft/dspark.py
+@@ -84,10 +84,10 @@
+         hidden_states: Optional[torch.Tensor],
+         temperature: float = 0.0,
+     ) -> Tuple[torch.Tensor, torch.Tensor]:
+-        batch_size, proposal_len = base_logits.shape[:2]
++        bsz, proposal_len = base_logits.shape[:2]
+         if proposal_len == 0:
+             empty_tokens = torch.empty(
+-                batch_size,
++                bsz,
+                 0,
+                 dtype=torch.long,
+                 device=base_logits.device,
+@@ -215,10 +215,10 @@
+     ) -> Tuple[torch.Tensor, torch.Tensor]:
+         if hidden_states is None:
+             raise ValueError("rnn Markov head requires hidden_states")
+-        batch_size, proposal_len = base_logits.shape[:2]
++        bsz, proposal_len = base_logits.shape[:2]
+         if proposal_len == 0:
+             empty_tokens = torch.empty(
+-                batch_size,
++                bsz,
+                 0,
+                 dtype=torch.long,
+                 device=base_logits.device,
+@@ -226,7 +226,7 @@
+             return empty_tokens, base_logits
+ 
+         state = torch.zeros(
+-            batch_size,
++            bsz,
+             self.markov_rank,
+             device=hidden_states.device,
+             dtype=hidden_states.dtype,
+--- before/litespec/training/algorithms.py
++++ litespec/training/algorithms.py
+@@ -52,16 +52,16 @@
+     teacher: Any = None
+     draft_online: Any = None
+     teacher_online: Any = None
+-    fsdp: Any = None
++    fsdp_model: Any = None
+     components: Any = None
+     target: Any = None
+-    loader: Any = None
++    dataloader: Any = None
+     optimizer: Any = None
+     tracker: Any = None
+     topology: Any = None
+     routes: Any = None
+     packet_metadata: dict = field(default_factory=dict)
+-    resume: dict | None = None
++    resume_state: dict | None = None
+     steps_per_epoch: int = 0
+     total_steps: int = 0
+     tp_draft_rank: int | None = None
+--- before/litespec/training/checkpoint.py
++++ litespec/training/checkpoint.py
+@@ -75,10 +75,10 @@
+ 
+ 
+ def validate_session_resume(session):
+-    if session.resume is None:
++    if session.resume_state is None:
+         return
+     expected = session_metadata(session)
+-    if session.resume.get("optimizer_kind", "adamw") != expected.get(
++    if session.resume_state.get("optimizer_kind", "adamw") != expected.get(
+         "optimizer_kind", "adamw"
+     ):
+         raise ValueError("Cannot resume across AdamW-only and Muon/AdamW modes")
+@@ -91,13 +91,14 @@
+         "selector_effective_alpha",
+     }
+     for key, value in expected.items():
+-        if key not in progress_keys and session.resume.get(key) != value:
++        if key not in progress_keys and session.resume_state.get(key) != value:
+             raise ValueError(
+-                f"Resume mismatch for {key}: saved={session.resume.get(key)!r}, requested={value!r}"
++                f"Resume mismatch for {key}: saved={session.resume_state.get(key)!r}, "
++                f"requested={value!r}"
+             )
+     from .algorithms import RunState
+ 
+-    cursor = RunState(**session.resume["cursor"])
++    cursor = RunState(**session.resume_state["cursor"])
+     counts = [phase.batch_count(session.steps_per_epoch) for phase in session.phases]
+     if not 0 <= cursor.phase_index <= len(counts):
+         raise ValueError("Invalid checkpoint phase index")
+@@ -136,7 +137,7 @@
+     expected_updates += cursor.phase_step // accumulation
+     if (
+         cursor.optimizer_step != expected_updates
+-        or session.resume["optimizer_step"] != expected_updates
++        or session.resume_state["optimizer_step"] != expected_updates
+     ):
+         raise ValueError("Checkpoint optimizer step disagrees with the data cursor")
+     session.state = cursor
+@@ -146,7 +147,7 @@
+     return save_checkpoint(
+         output_dir=session.args.output_dir,
+         name=name,
+-        fsdp_model=session.fsdp,
++        fsdp_model=session.fsdp_model,
+         draft_model=session.draft,
+         optimizer=session.optimizer,
+         metadata=session_metadata(session),
+@@ -265,10 +266,11 @@
+             f"Optimizer state for global rank {rank} is missing. Expected {ranked_path}."
+         )
+     for other_rank in range(world_size):
+-        required = ranked_training_state_path(checkpoint_dir, other_rank)
+-        if not os.path.isfile(required):
++        required_state_path = ranked_training_state_path(checkpoint_dir, other_rank)
++        if not os.path.isfile(required_state_path):
+             raise FileNotFoundError(
+-                f"Optimizer state for global rank {other_rank} is missing. Expected {required}."
++                f"Optimizer state for global rank {other_rank} is missing. "
++                f"Expected {required_state_path}."
+             )
+     common = torch.load(common_path, map_location="cpu", weights_only=False)
+     common_metadata = common.get(_DISTRIBUTED_STATE_KEY, {})
+--- before/litespec/training/config.py
++++ litespec/training/config.py
+@@ -225,16 +225,16 @@
+                 parser.error(
+                     "disaggregate target/draft rank total must equal nproc_per_node"
+                 )
+-        required = (
++        required_arg_names = (
+             "target_ranks_per_node",
+             "draft_ranks_per_node",
+             "node_batch_size",
+         )
+-        missing = [name for name in required if getattr(args, name) is None]
+-        if missing:
++        missing_arg_names = [name for name in required_arg_names if getattr(args, name) is None]
++        if missing_arg_names:
+             parser.error(
+                 "--disaggregate requires "
+-                + ", ".join(f"--{name.replace('_', '-')}" for name in missing)
++                + ", ".join(f"--{name.replace('_', '-')}" for name in missing_arg_names)
+             )
+         if args.train_hidden_states_path:
+             parser.error("--disaggregate supports --train-data-path only")
+--- before/litespec/training/fsdp_layout.py
++++ litespec/training/fsdp_layout.py
+@@ -76,12 +76,12 @@
+             if handle is None:
+                 continue
+             flat = handle.flat_param
+-            for p, shape, info in zip(
++            for p, shape, shard_info in zip(
+                 flat._params, flat._shapes, flat._shard_param_infos, strict=True
+             ):
+                 shard = (
+-                    (int(info.intra_param_start_idx), int(info.numel_in_shard))
+-                    if info.in_shard
++                    (int(shard_info.intra_param_start_idx), int(shard_info.numel_in_shard))
++                    if shard_info.in_shard
+                     else (0, 0)
+                 )
+                 entries[id(p)] = (tuple(shape), shard)
+--- before/litespec/training/muon.py
++++ litespec/training/muon.py
+@@ -268,8 +268,8 @@
+         matrices = {}
+         if owned:
+             shape = self.layouts[owned[0]].spec.shape
+-            full = collected.receive.new_empty((len(owned), *shape))
+-            matrices = dict(zip(owned, full.unbind()))
++            full_matrices = collected.receive.new_empty((len(owned), *shape))
++            matrices = dict(zip(owned, full_matrices.unbind()))
+             cursor = 0
+             for peer in range(self.world):
+                 for i in owned:
+@@ -279,10 +279,10 @@
+                     )
+                     cursor += length
+             group = self.param_groups[0]
+-            result = newton_schulz(
+-                full, group["ns_coefficients"], group["ns_steps"], group["eps"]
+-            )
+-            matrices = dict(zip(owned, result.unbind()))
++            orthogonalized_matrices = newton_schulz(
++                full_matrices, group["ns_coefficients"], group["ns_steps"], group["eps"]
++            )
++            matrices = dict(zip(owned, orthogonalized_matrices.unbind()))
+         parts = []
+         for peer in range(self.world):
+             for i in owned:
+--- before/litespec/training/recipes/_dflash_common.py
++++ litespec/training/recipes/_dflash_common.py
+@@ -10,7 +10,7 @@
+ from litespec.core.dflash import OnlineDFlashModel
+ from litespec.core.dflash2 import OnlineDFlash2Model
+ from litespec.core.dspark import OnlineDSparkModel
+-from litespec.distributed.transport import FamilyBatchPacket, FamilyPacketSpec
++from litespec.distributed.transport import DFlashFamilyBatchPacket, DFlashFamilyPacketSpec
+ from litespec.modeling.config_utils import load_text_model_config
+ from litespec.modeling.draft.dflash import build_target_layer_ids
+ from litespec.training.algorithms import TrainingAdapter, get_training_adapter
+@@ -23,15 +23,15 @@
+     required_hidden_layer_ids,
+ )
+ 
+-FAMILY_ALGORITHMS = ("dflash", "dflash2", "dspark")
+-
+-
+-class FamilyTrainingAdapter(TrainingAdapter):
++DFLASH_FAMILY_ALGORITHMS = ("dflash", "dflash2", "dspark")
++
++
++class DFlashFamilyTrainingAdapter(TrainingAdapter):
+     def build_config(self, args, *, source_config=None, model_role=None):
+-        return build_family_config(args, self.algorithm, source_config=source_config)
++        return build_dflash_family_config(args, self.algorithm, source_config=source_config)
+ 
+     def prepare_batch(self, data, target_output, draft, require_last):
+-        return prepare_family_features(data, target_output, draft, require_last)
++        return prepare_dflash_family_features(data, target_output, draft, require_last)
+ 
+     def phases(self, args):
+         from litespec.training.algorithms import Phase
+@@ -42,9 +42,9 @@
+         args = session.args
+         source = args.resume_from or args.init_from
+         draft = (
+-            load_family_draft(source, self.algorithm, args.attention_backend)
++            load_dflash_family_draft(source, self.algorithm, args.attention_backend)
+             if source
+-            else build_family_draft(args, self.algorithm)
++            else build_dflash_family_draft(args, self.algorithm)
+         )
+         sync_args_from_draft(args, draft)
+         draft.requires_grad_(True)
+@@ -60,7 +60,7 @@
+         )
+ 
+     def build_loader(self, session, tokenizer):
+-        return build_family_dataloader(
++        return build_dflash_family_dataloader(
+             session.args, tokenizer, session.draft, self.algorithm
+         )
+ 
+@@ -94,9 +94,9 @@
+         return _packet_spec(session.args, session.topology, session.packet_metadata)
+ 
+     def empty_packet(self, spec):
+-        from litespec.distributed.transport import FamilyBatchPacket
+-
+-        return FamilyBatchPacket.empty(spec, device="cuda")
++        from litespec.distributed.transport import DFlashFamilyBatchPacket
++
++        return DFlashFamilyBatchPacket.empty(spec, device="cuda")
+ 
+     def produce_packet(self, session, phase, values, batch_id):
+         return _target_packet(
+@@ -114,7 +114,7 @@
+     phase_barrier = False
+ 
+     def training_metadata(self, session):
+-        return family_training_metadata(
++        return dflash_family_training_metadata(
+             session.args,
+             self.algorithm,
+             session.state.optimizer_step,
+@@ -136,7 +136,7 @@
+         if session.topology is not None:
+             input_ids = data.input_ids[begin:end]
+             loss_mask = data.loss_mask[begin:end]
+-            context_hidden = data.target_context_hidden[begin:end]
++            target_context_hidden = data.target_context_hidden[begin:end]
+             target_last_hidden = (
+                 data.target_last_hidden[begin:end]
+                 if data.target_last_hidden is not None
+@@ -153,13 +153,13 @@
+                 target_output = session.target.generate_training_data(
+                     input_ids, attention_mask, loss_mask, return_logits=False
+                 )
+-            context_hidden, target_last_hidden = self.prepare_batch(
++            target_context_hidden, target_last_hidden = self.prepare_batch(
+                 data, target_output, draft, args.require_target_last_hidden
+             )
+             if session.tp_draft_rank is not None:
+-                input_ids, loss_mask, context_hidden = (
++                input_ids, loss_mask, target_context_hidden = (
+                     select_tp_rank_batch(value, session.tp_draft_rank)
+-                    for value in (input_ids, loss_mask, context_hidden)
++                    for value in (input_ids, loss_mask, target_context_hidden)
+                 )
+                 if target_last_hidden is not None:
+                     target_last_hidden = select_tp_rank_batch(
+@@ -167,7 +167,7 @@
+                     )
+         kwargs = dict(
+             input_ids=input_ids,
+-            hidden_states=context_hidden,
++            hidden_states=target_context_hidden,
+             loss_mask=loss_mask,
+             target_last_hidden_states=target_last_hidden,
+             collect_detailed_metrics=detailed,
+@@ -176,11 +176,11 @@
+             kwargs["selector_loss_alpha"] = selector_alpha(
+                 args, session.state.optimizer_step, session.total_steps
+             )
+-        return self.training_step(session.fsdp, kwargs)
+-
+-
+-def add_family_args(parser: argparse.ArgumentParser, algorithm: str) -> None:
+-    if algorithm not in FAMILY_ALGORITHMS:
++        return self.training_step(session.fsdp_model, kwargs)
++
++
++def add_dflash_family_args(parser: argparse.ArgumentParser, algorithm: str) -> None:
++    if algorithm not in DFLASH_FAMILY_ALGORITHMS:
+         raise ValueError(f"Unsupported DFlash-family algorithm: {algorithm}")
+     add_common_args(parser)
+     defaults = {"dflash": 16, "dflash2": 16, "dspark": 7}
+@@ -225,7 +225,7 @@
+     train.add_argument("--confidence-loss-alpha", type=float, default=1.0)
+ 
+ 
+-def validate_family_args(parser: argparse.ArgumentParser, args, algorithm: str) -> None:
++def validate_dflash_family_args(parser: argparse.ArgumentParser, args, algorithm: str) -> None:
+     validate_common_args(parser, args)
+     if args.resume_from and args.init_from:
+         parser.error("--resume-from and --init-from are mutually exclusive")
+@@ -280,7 +280,7 @@
+     )
+ 
+ 
+-def build_family_config(args, algorithm: str, source_config=None):
++def build_dflash_family_config(args, algorithm: str, source_config=None):
+     config = (
+         load_text_model_config(
+             args.target_model_path, trust_remote_code=args.trust_remote_code
+@@ -344,13 +344,13 @@
+     return config
+ 
+ 
+-def build_family_draft(args, algorithm: str, source_config=None):
++def build_dflash_family_draft(args, algorithm: str, source_config=None):
+     return get_training_adapter(algorithm).build_model(
+         args, source_config=source_config
+     )
+ 
+ 
+-def load_family_draft(path: str, algorithm: str, attention_backend: str):
++def load_dflash_family_draft(path: str, algorithm: str, attention_backend: str):
+     return get_training_adapter(algorithm).load_model(path, attention_backend)
+ 
+ 
+@@ -384,11 +384,11 @@
+     return hidden_states[layer_id + offset]
+ 
+ 
+-def build_family_components(args, draft):
++def build_dflash_family_components(args, draft):
+     return build_target_and_components(args, [draft])
+ 
+ 
+-def build_family_dataloader(args, tokenizer, draft, algorithm: str):
++def build_dflash_family_dataloader(args, tokenizer, draft, algorithm: str):
+     required_layer_ids = required_hidden_layer_ids([draft])
+     if args.require_target_last_hidden:
+         required_layer_ids.add(int(draft.config.num_target_layers) - 1)
+@@ -435,33 +435,35 @@
+     )
+ 
+ 
+-def prepare_family_features(data, target_output, draft, require_last: bool):
+-    hidden = (
++def prepare_dflash_family_features(data, target_output, draft, require_last: bool):
++    target_hidden_states = (
+         hidden_states_to_cuda(data["hidden_states"])
+         if target_output is None
+         else hidden_states_to_cuda(target_output.hidden_states)
+     )
+-    context = concatenate_target_hidden(hidden, list(draft.target_layer_ids))
+-    last = (
+-        final_target_hidden(hidden, int(draft.config.num_target_layers))
++    target_context_hidden = concatenate_target_hidden(
++        target_hidden_states, list(draft.target_layer_ids)
++    )
++    target_last_hidden = (
++        final_target_hidden(target_hidden_states, int(draft.config.num_target_layers))
+         if require_last
+         else None
+     )
+-    return context, last
++    return target_context_hidden, target_last_hidden
+ 
+ 
+ def selector_alpha(args, optimizer_step: int, total_steps: int) -> float:
+-    target = float(args.selector_loss_alpha)
+-    warmup = int(total_steps * float(args.selector_warmup_ratio))
+-    ramp = int(total_steps * float(args.selector_ramp_ratio))
+-    if optimizer_step < warmup:
++    target_selector_alpha = float(args.selector_loss_alpha)
++    warmup_steps = int(total_steps * float(args.selector_warmup_ratio))
++    ramp_steps = int(total_steps * float(args.selector_ramp_ratio))
++    if optimizer_step < warmup_steps:
+         return 0.0
+-    if ramp > 0 and optimizer_step < warmup + ramp:
+-        return target * (optimizer_step - warmup + 1) / ramp
+-    return target
+-
+-
+-def family_training_metadata(
++    if ramp_steps > 0 and optimizer_step < warmup_steps + ramp_steps:
++        return target_selector_alpha * (optimizer_step - warmup_steps + 1) / ramp_steps
++    return target_selector_alpha
++
++
++def dflash_family_training_metadata(
+     args, algorithm: str, optimizer_step: int, total_steps: int
+ ) -> dict:
+     """Serializable objective and schedule state stored in every checkpoint."""
+@@ -499,42 +501,42 @@
+ 
+ 
+ __all__ = [
+-    "FAMILY_ALGORITHMS",
+-    "add_family_args",
+-    "build_family_components",
+-    "build_family_config",
+-    "build_family_dataloader",
+-    "build_family_draft",
++    "DFLASH_FAMILY_ALGORITHMS",
++    "add_dflash_family_args",
++    "build_dflash_family_components",
++    "build_dflash_family_config",
++    "build_dflash_family_dataloader",
++    "build_dflash_family_draft",
+     "build_online_model",
+     "concatenate_target_hidden",
+     "final_target_hidden",
+-    "family_training_metadata",
+-    "load_family_draft",
+-    "prepare_family_features",
++    "dflash_family_training_metadata",
++    "load_dflash_family_draft",
++    "prepare_dflash_family_features",
+     "selector_alpha",
+     "sync_args_from_draft",
+-    "validate_family_args",
++    "validate_dflash_family_args",
+ ]
+ 
+ 
+-def parse_family_args(algorithm: str, argv=None):
++def parse_dflash_family_args(algorithm: str, argv=None):
+     parser = argparse.ArgumentParser(description=f"Train {algorithm} draft model")
+-    add_family_args(parser, algorithm)
++    add_dflash_family_args(parser, algorithm)
+     args = parser.parse_args(argv)
+     args.algorithm = algorithm
+-    validate_family_args(parser, args, algorithm)
++    validate_dflash_family_args(parser, args, algorithm)
+     get_tracker_class(args.report_to).validate_args(parser, args)
+     return args
+ 
+ 
+ def _packet_spec(args, topology, metadata):
+-    local_batch = (
++    local_batch_size = (
+         int(args.node_batch_size) // topology.target_replicas_per_node
+         if topology.is_target
+         else int(args.node_batch_size) // topology.draft_ranks_per_node
+     )
+-    return FamilyPacketSpec(
+-        batch_size=local_batch,
++    return DFlashFamilyPacketSpec(
++        batch_size=local_batch_size,
+         max_length=int(args.max_length),
+         context_width=int(metadata["context_width"]),
+         hidden_size=int(metadata["hidden_size"]),
+@@ -544,21 +546,27 @@
+ 
+ def _target_packet(args, topology, target, metadata, values):
+     input_ids, attention_mask, loss_mask = values
+-    output = target.generate_training_data(
++    target_output = target.generate_training_data(
+         input_ids, attention_mask, loss_mask, return_logits=False
+     )
+     if not topology.is_target_leader:
+         return None
+-    hidden = output.hidden_states
+-    context = concatenate_target_hidden(hidden, metadata["target_layer_ids"])
+-    last = (
+-        final_target_hidden(hidden, metadata["num_target_layers"])
++    target_hidden_states = target_output.hidden_states
++    target_context_hidden = concatenate_target_hidden(
++        target_hidden_states, metadata["target_layer_ids"]
++    )
++    target_last_hidden = (
++        final_target_hidden(target_hidden_states, metadata["num_target_layers"])
+         if metadata["include_target_last_hidden"]
+         else None
+     )
+-    return FamilyBatchPacket(
++    return DFlashFamilyBatchPacket(
+         input_ids=input_ids,
+         loss_mask=loss_mask,
+-        target_context_hidden=context.to(torch.bfloat16),
+-        target_last_hidden=(last.to(torch.bfloat16) if last is not None else None),
+-    )
++        target_context_hidden=target_context_hidden.to(torch.bfloat16),
++        target_last_hidden=(
++            target_last_hidden.to(torch.bfloat16)
++            if target_last_hidden is not None
++            else None
++        ),
++    )
+--- before/litespec/training/recipes/dflash.py
++++ litespec/training/recipes/dflash.py
+@@ -1,11 +1,11 @@
+ """DFlash training registration."""
+ 
+-from ._dflash_common import FamilyTrainingAdapter
++from ._dflash_common import DFlashFamilyTrainingAdapter
+ 
+-ADAPTER = FamilyTrainingAdapter("dflash", "DFlashDraftModel")
++ADAPTER = DFlashFamilyTrainingAdapter("dflash", "DFlashDraftModel")
+ 
+ 
+ def parse_args(*, mode=None, argv=None):
+-    from ._dflash_common import parse_family_args
++    from ._dflash_common import parse_dflash_family_args
+ 
+-    return parse_family_args("dflash", argv)
++    return parse_dflash_family_args("dflash", argv)
+--- before/litespec/training/recipes/dflash2.py
++++ litespec/training/recipes/dflash2.py
+@@ -1,11 +1,11 @@
+ """DFlash2 training registration."""
+ 
+-from ._dflash_common import FamilyTrainingAdapter
++from ._dflash_common import DFlashFamilyTrainingAdapter
+ 
+-ADAPTER = FamilyTrainingAdapter("dflash2", "DFlash2DraftModel")
++ADAPTER = DFlashFamilyTrainingAdapter("dflash2", "DFlash2DraftModel")
+ 
+ 
+ def parse_args(*, mode=None, argv=None):
+-    from ._dflash_common import parse_family_args
++    from ._dflash_common import parse_dflash_family_args
+ 
+-    return parse_family_args("dflash2", argv)
++    return parse_dflash_family_args("dflash2", argv)
+--- before/litespec/training/recipes/dlite.py
++++ litespec/training/recipes/dlite.py
+@@ -21,7 +21,7 @@
+     prepare_target_hidden,
+ )
+ from litespec.core.outputs import RatioTerms, TrainingOutput
+-from litespec.distributed.transport import DraftBatchPacket, DraftPacketSpec
++from litespec.distributed.transport import DLiteBatchPacket, DLitePacketSpec
+ from litespec.modeling.config_utils import load_text_model_config
+ from litespec.modeling.draft.dlite import (
+     DLITE_ARCHITECTURE_VERSION,
+@@ -572,22 +572,22 @@
+     return anchor_positions, block_keep_mask
+ 
+ 
+-def _prediction_hidden(final_hidden, anchor_positions, block_size):
++def _prediction_hidden(target_last_hidden, anchor_positions, block_size):
+     offsets = torch.arange(block_size - 1, device=anchor_positions.device).view(
+         1, 1, -1
+     )
+     positions = anchor_positions.unsqueeze(-1) + offsets
+-    expanded = final_hidden.unsqueeze(1).expand(-1, anchor_positions.size(1), -1, -1)
++    expanded = target_last_hidden.unsqueeze(1).expand(-1, anchor_positions.size(1), -1, -1)
+     return torch.gather(
+         expanded,
+         2,
+-        positions.unsqueeze(-1).expand(-1, -1, -1, final_hidden.size(-1)),
++        positions.unsqueeze(-1).expand(-1, -1, -1, target_last_hidden.size(-1)),
+     )
+ 
+ 
+ def _produce_packet(args, topology, target, phase, metadata, values, batch_id):
+     input_ids, attention_mask, loss_mask = values
+-    output = target.generate_training_data(
++    target_output = target.generate_training_data(
+         input_ids, attention_mask, loss_mask, return_logits=False
+     )
+     anchor_positions, block_keep_mask = _sample_anchors(
+@@ -595,46 +595,50 @@
+     )
+     if not topology.is_target_leader:
+         return None
+-    hidden = output.hidden_states
++    target_hidden_states = target_output.hidden_states
+     target_hidden = prepare_target_hidden(
+-        hidden,
++        target_hidden_states,
+         anchor_positions,
+         metadata["target_layer_ids"],
+         metadata["num_target_layers"],
+     ).to(torch.bfloat16)
+-    history = None
++    target_history_hidden = None
+     if phase.need_history:
+-        history = prepare_history_hidden_states(
+-            hidden,
++        target_history_hidden = prepare_history_hidden_states(
++            target_hidden_states,
+             metadata["history_layer_ids"],
+             metadata["num_target_layers"],
+         ).to(torch.bfloat16)
+-    prediction = None
++    target_prediction_hidden = None
+     if phase.need_prediction_hidden:
+-        final_layer = metadata["num_target_layers"] - 1
+-        final_hidden = hidden[final_layer] if isinstance(hidden, dict) else hidden[-1]
+-        prediction = _prediction_hidden(
+-            final_hidden, anchor_positions, metadata["block_size"]
++        final_layer_id = metadata["num_target_layers"] - 1
++        target_last_hidden = (
++            target_hidden_states[final_layer_id]
++            if isinstance(target_hidden_states, dict)
++            else target_hidden_states[-1]
++        )
++        target_prediction_hidden = _prediction_hidden(
++            target_last_hidden, anchor_positions, metadata["block_size"]
+         ).to(torch.bfloat16)
+-    return DraftBatchPacket(
++    return DLiteBatchPacket(
+         input_ids=input_ids,
+         loss_mask=loss_mask,
+         anchor_positions=anchor_positions,
+         block_keep_mask=block_keep_mask,
+         target_hidden=target_hidden,
+-        target_history_hidden=history,
+-        target_prediction_hidden=prediction,
++        target_history_hidden=target_history_hidden,
++        target_prediction_hidden=target_prediction_hidden,
+     )
+ 
+ 
+ def _packet_spec(args, topology, phase, metadata):
+-    local_batch = (
++    local_batch_size = (
+         int(args.node_batch_size) // topology.target_replicas_per_node
+         if topology.is_target
+         else int(args.node_batch_size) // topology.draft_ranks_per_node
+     )
+-    return DraftPacketSpec(
+-        batch_size=local_batch,
++    return DLitePacketSpec(
++        batch_size=local_batch_size,
+         max_length=int(args.max_length),
+         num_anchors=(
+             aligned_anchor_count(
+@@ -655,9 +659,9 @@
+     )
+ 
+ 
+-def _select_packet_layers(packet, union_ids, requested_ids):
+-    indices = [union_ids.index(int(layer_id)) for layer_id in requested_ids]
+-    return packet.target_hidden[:, :, indices, :]
++def _select_packet_layers(packet, available_layer_ids, required_layer_ids):
++    layer_indices = [available_layer_ids.index(int(layer_id)) for layer_id in required_layer_ids]
++    return packet.target_hidden[:, :, layer_indices, :]
+ 
+ 
+ def _target_logits(packet, phase, metadata, lm_head):
+@@ -718,7 +722,7 @@
+     draft_online = session.draft_online
+     target = session.target
+     components = session.components
+-    fsdp = session.fsdp
++    fsdp_model = session.fsdp_model
+     tp_draft_rank = session.tp_draft_rank
+     input_ids = data["input_ids"].cuda(non_blocking=True)
+     attention_mask = data["attention_mask"].cuda(non_blocking=True)
+@@ -727,7 +731,7 @@
+         input_ids.size(1), loss_mask
+     )
+     if args.train_hidden_states_path:
+-        hidden_states, target_logits = load_cached_target_data(
++        target_hidden_states, target_logits = load_cached_target_data(
+             data,
+             anchor_positions=anchor_positions,
+             block_size=student.block_size,
+@@ -738,14 +742,14 @@
+         target_output = target.generate_training_data(
+             input_ids, attention_mask, loss_mask
+         )
+-        hidden_states = hidden_states_to_cuda(target_output.hidden_states)
++        target_hidden_states = hidden_states_to_cuda(target_output.hidden_states)
+         target_prefill_logits = target_output.logits.cuda()
+     if tp_draft_rank is not None:
+         input_ids = select_tp_rank_batch(input_ids, tp_draft_rank)
+         loss_mask = select_tp_rank_batch(loss_mask, tp_draft_rank)
+         anchor_positions = select_tp_rank_batch(anchor_positions, tp_draft_rank)
+         block_keep_mask = select_tp_rank_batch(block_keep_mask, tp_draft_rank)
+-        hidden_states = select_tp_rank_batch(hidden_states, tp_draft_rank)
++        target_hidden_states = select_tp_rank_batch(target_hidden_states, tp_draft_rank)
+         target_prefill_logits = select_tp_rank_batch(
+             target_prefill_logits, tp_draft_rank
+         )
+@@ -755,10 +759,10 @@
+         )
+         del target_output, target_prefill_logits
+     output = get_training_adapter("dlite").training_step(
+-        fsdp,
++        fsdp_model,
+         dict(
+             input_ids=input_ids,
+-            hidden_states=hidden_states,
++            hidden_states=target_hidden_states,
+             loss_mask=loss_mask,
+             anchor_positions=anchor_positions,
+             block_keep_mask=block_keep_mask,
+@@ -776,7 +780,7 @@
+     teacher_online = session.teacher_online
+     target = session.target
+     components = session.components
+-    fsdp = session.fsdp
++    fsdp_model = session.fsdp_model
+     tp_draft_rank = session.tp_draft_rank
+     input_ids = data["input_ids"].cuda(non_blocking=True)
+     attention_mask = data["attention_mask"].cuda(non_blocking=True)
+@@ -785,7 +789,7 @@
+         input_ids.size(1), loss_mask
+     )
+     if args.train_hidden_states_path:
+-        hidden_states, _ = load_cached_target_data(
++        target_hidden_states, _ = load_cached_target_data(
+             data,
+             anchor_positions=anchor_positions,
+             block_size=student.block_size,
+@@ -796,7 +800,7 @@
+         target_output = target.generate_training_data(
+             input_ids, attention_mask, loss_mask, return_logits=False
+         )
+-        hidden_states = hidden_states_to_cuda(target_output.hidden_states)
++        target_hidden_states = hidden_states_to_cuda(target_output.hidden_states)
+         del target_output
+     if tp_draft_rank is not None:
+         # The TP target sees the shared full batch.  From this point on,
+@@ -805,10 +809,10 @@
+         loss_mask = select_tp_rank_batch(loss_mask, tp_draft_rank)
+         anchor_positions = select_tp_rank_batch(anchor_positions, tp_draft_rank)
+         block_keep_mask = select_tp_rank_batch(block_keep_mask, tp_draft_rank)
+-        hidden_states = select_tp_rank_batch(hidden_states, tp_draft_rank)
++        target_hidden_states = select_tp_rank_batch(target_hidden_states, tp_draft_rank)
+     student_batch = student_online.prepare_batch(
+         input_ids,
+-        hidden_states,
++        target_hidden_states,
+         loss_mask,
+         anchor_positions=anchor_positions,
+         block_keep_mask=block_keep_mask,
+@@ -816,7 +820,7 @@
+     with torch.no_grad():
+         teacher_batch = teacher_online.prepare_batch(
+             input_ids,
+-            hidden_states,
++            target_hidden_states,
+             loss_mask,
+             anchor_positions=anchor_positions,
+             block_keep_mask=block_keep_mask,
+@@ -829,7 +833,7 @@
+             teacher_hidden, teacher_batch
+         )
+     student_hidden, student_serial_logits = get_training_adapter("dlite").training_step(
+-        fsdp,
++        fsdp_model,
+         dict(
+             prepared_batch=student_batch,
+             seq_len=input_ids.size(1),
+@@ -862,7 +866,7 @@
+     teacher_online = session.teacher_online
+     target = session.target
+     components = session.components
+-    fsdp = session.fsdp
++    fsdp_model = session.fsdp_model
+     tp_draft_rank = session.tp_draft_rank
+     stage1_scale, stage2_scale = _cosine_transition_scales(
+         session.state.next_batch, session.steps_per_epoch
+@@ -874,7 +878,7 @@
+         input_ids.size(1), loss_mask
+     )
+     if args.train_hidden_states_path:
+-        hidden_states, target_logits = load_cached_target_data(
++        target_hidden_states, target_logits = load_cached_target_data(
+             data,
+             anchor_positions=anchor_positions,
+             block_size=student.block_size,
+@@ -885,14 +889,14 @@
+         target_output = target.generate_training_data(
+             input_ids, attention_mask, loss_mask
+         )
+-        hidden_states = hidden_states_to_cuda(target_output.hidden_states)
++        target_hidden_states = hidden_states_to_cuda(target_output.hidden_states)
+         target_prefill_logits = target_output.logits.cuda()
+     if tp_draft_rank is not None:
+         input_ids = select_tp_rank_batch(input_ids, tp_draft_rank)
+         loss_mask = select_tp_rank_batch(loss_mask, tp_draft_rank)
+         anchor_positions = select_tp_rank_batch(anchor_positions, tp_draft_rank)
+         block_keep_mask = select_tp_rank_batch(block_keep_mask, tp_draft_rank)
+-        hidden_states = select_tp_rank_batch(hidden_states, tp_draft_rank)
++        target_hidden_states = select_tp_rank_batch(target_hidden_states, tp_draft_rank)
+         target_prefill_logits = select_tp_rank_batch(
+             target_prefill_logits, tp_draft_rank
+         )
+@@ -903,7 +907,7 @@
+         del target_output, target_prefill_logits
+     student_batch = student_online.prepare_batch(
+         input_ids,
+-        hidden_states,
++        target_hidden_states,
+         loss_mask,
+         anchor_positions=anchor_positions,
+         block_keep_mask=block_keep_mask,
+@@ -911,7 +915,7 @@
+     with torch.no_grad():
+         teacher_batch = teacher_online.prepare_batch(
+             input_ids,
+-            hidden_states,
++            target_hidden_states,
+             loss_mask,
+             anchor_positions=anchor_positions,
+             block_keep_mask=block_keep_mask,
+@@ -928,7 +932,7 @@
+         student_serial_logits,
+         stage2_output,
+     ) = get_training_adapter("dlite").training_step(
+-        fsdp,
++        fsdp_model,
+         dict(
+             prepared_batch=student_batch,
+             seq_len=input_ids.size(1),
+@@ -998,7 +1002,7 @@
+     metadata = session.packet_metadata
+     draft, teacher = session.draft, session.teacher
+     draft_online, teacher_online = session.draft_online, session.teacher_online
+-    components, fsdp = session.components, session.fsdp
++    components, fsdp_model = session.components, session.fsdp_model
+     topology = session.topology
+     batch_id = session.state.global_step
+     phase_start = batch_id - session.state.phase_step
+@@ -1072,7 +1076,7 @@
+             _student_hidden, student_logits = get_training_adapter(
+                 "dlite"
+             ).training_step(
+-                fsdp,
++                fsdp_model,
+                 dict(
+                     prepared_batch=student_batch,
+                     seq_len=input_ids.size(1),
+@@ -1099,7 +1103,7 @@
+             )
+         else:
+             target_logits = _target_logits(
+-                DraftBatchPacket(
++                DLiteBatchPacket(
+                     input_ids,
+                     loss_mask,
+                     anchor_positions,
+@@ -1113,7 +1117,7 @@
+                 components.lm_head,
+             )
+             _, student_logits, supervised = get_training_adapter("dlite").training_step(
+-                fsdp,
++                fsdp_model,
+                 dict(
+                     prepared_batch=student_batch,
+                     seq_len=input_ids.size(1),
+@@ -1168,7 +1172,7 @@
+             )
+     else:
+         target_logits = _target_logits(
+-            DraftBatchPacket(
++            DLiteBatchPacket(
+                 input_ids,
+                 loss_mask,
+                 anchor_positions,
+@@ -1182,7 +1186,7 @@
+             components.lm_head,
+         )
+         supervised = get_training_adapter("dlite").training_step(
+-            fsdp,
++            fsdp_model,
+             dict(
+                 input_ids=input_ids,
+                 loss_mask=loss_mask,
+@@ -1219,10 +1223,10 @@
+     phase_barrier = True
+ 
+     def required_target_layers(self, model):
+-        layers = super().required_target_layers(model)
++        required_layer_ids = super().required_target_layers(model)
+         if model.is_teacher:
+-            layers.update(model.history_layer_ids)
+-        return layers
++            required_layer_ids.update(model.history_layer_ids)
++        return required_layer_ids
+ 
+     def build_config(self, args, *, source_config=None, model_role=None):
+         return build_draft_config(
+@@ -1287,7 +1291,7 @@
+             inductor_config.triton.autotune_pointwise = (
+                 os.environ.get("DLITE_POINTWISE_AUTOTUNE", "0") == "1"
+             )
+-        draft, teacher, _ = _initialize_drafts(args, args.mode, session.resume)
++        draft, teacher, _ = _initialize_drafts(args, args.mode, session.resume_state)
+         if args.mode == "teacher" and not draft.is_teacher:
+             raise ValueError("Teacher training requires an swa_teacher checkpoint")
+         if teacher is not None:
+@@ -1318,13 +1322,13 @@
+         draft.requires_grad_(True)
+         session.draft, session.teacher = draft, teacher
+         provided = getattr(args, "teacher_draft_path", None)
+-        saved = (session.resume or {}).get("teacher_checkpoint_identity")
++        saved = (session.resume_state or {}).get("teacher_checkpoint_identity")
+         session.teacher_identity = saved or (
+             os.path.realpath(provided) if provided else None
+         )
+         if teacher is not None and saved and saved != os.path.realpath(provided):
+             raise ValueError("Stage1/transition requires the same teacher checkpoint")
+-        validate_resume_model(session.resume, draft)
++        validate_resume_model(session.resume_state, draft)
+ 
+     def make_online(self, session):
+         if session.teacher is not None:
+@@ -1402,12 +1406,12 @@
+ 
+     def target_proxies(self, session):
+         metadata = session.packet_metadata
+-        capture = set(metadata["target_layer_ids"]) | set(metadata["history_layer_ids"])
++        capture_layer_ids = set(metadata["target_layer_ids"]) | set(metadata["history_layer_ids"])
+         if any(phase.need_prediction_hidden for phase in session.phases):
+-            capture.add(metadata["num_target_layers"] - 1)
++            capture_layer_ids.add(metadata["num_target_layers"] - 1)
+         return [
+             SimpleNamespace(
+-                target_layer_ids=sorted(capture),
++                target_layer_ids=sorted(capture_layer_ids),
+                 is_teacher=bool(metadata["history_layer_ids"]),
+                 history_layer_ids=metadata["history_layer_ids"],
+             )
+@@ -1419,7 +1423,7 @@
+         )
+ 
+     def empty_packet(self, spec):
+-        return DraftBatchPacket.empty(spec, device="cuda")
++        return DLiteBatchPacket.empty(spec, device="cuda")
+ 
+     def produce_packet(self, session, phase, values, batch_id):
+         return _produce_packet(
+--- before/litespec/training/recipes/dspark.py
++++ litespec/training/recipes/dspark.py
+@@ -1,11 +1,11 @@
+ """DSpark training registration."""
+ 
+-from ._dflash_common import FamilyTrainingAdapter
++from ._dflash_common import DFlashFamilyTrainingAdapter
+ 
+-ADAPTER = FamilyTrainingAdapter("dspark", "DSparkDraftModel")
++ADAPTER = DFlashFamilyTrainingAdapter("dspark", "DSparkDraftModel")
+ 
+ 
+ def parse_args(*, mode=None, argv=None):
+-    from ._dflash_common import parse_family_args
++    from ._dflash_common import parse_dflash_family_args
+ 
+-    return parse_family_args("dspark", argv)
++    return parse_dflash_family_args("dspark", argv)
+--- before/litespec/training/runner.py
++++ litespec/training/runner.py
+@@ -123,7 +123,7 @@
+     for epoch in range(state.epoch, phase.epochs):
+         start = state.next_batch if epoch == state.epoch else 0
+         for _, data in iter_epoch(
+-            session.loader,
++            session.dataloader,
+             epoch,
+             start_batch=start,
+             description=f"{phase.name} epoch {epoch}",
+@@ -137,10 +137,10 @@
+     if session.topology is None:
+         yield None, None
+     else:
+-        size = session.args.node_batch_size // session.args.draft_ranks_per_node
+-        micro = session.args.draft_micro_batch_size
+-        for begin in range(0, size, micro):
+-            yield begin, begin + micro
++        local_batch_size = session.args.node_batch_size // session.args.draft_ranks_per_node
++        micro_batch_size = session.args.draft_micro_batch_size
++        for begin in range(0, local_batch_size, micro_batch_size):
++            yield begin, begin + micro_batch_size
+ 
+ 
+ def log_window(session, window, grad_norm):
+@@ -148,7 +148,7 @@
+ 
+     from .logging import build_training_log_payload
+ 
+-    reduced = session.adapter.log_metrics(
++    reduced_metrics = session.adapter.log_metrics(
+         session, window.metrics.reduce(session.process_group)
+     )
+     details = {
+@@ -160,7 +160,7 @@
+     if session.adapter.modes:
+         prefix += "/" + session.phase.name
+     payload = build_training_log_payload(
+-        reduced,
++        reduced_metrics,
+         session.optimizer.get_learning_rate(),
+         detail_metrics=details,
+         detail_prefix=prefix,
+@@ -176,7 +176,8 @@
+     if not dist.is_initialized() or dist.get_rank() == session.coordinator_rank:
+         print(
+             f"{prefix} optimizer_step={session.state.optimizer_step} "
+-            f"micro_step={session.state.global_step} loss={float(reduced['objective/loss']):.4f}",
++            f"micro_step={session.state.global_step} "
++            f"loss={float(reduced_metrics['objective/loss']):.4f}",
+             flush=True,
+         )
+ 
+@@ -198,7 +199,7 @@
+     window = OptimizerWindow(
+         session.optimizer, args.accumulation_steps, session.process_group
+     )
+-    pending_rng = session.resume["rng_state"] if session.resume is not None else None
++    pending_rng = session.resume_state["rng_state"] if session.resume_state is not None else None
+     accumulated = 0
+     if torch.cuda.is_available():
+         torch.cuda.reset_peak_memory_stats()
+@@ -231,8 +232,8 @@
+         if phase.start_checkpoint and state.phase_step == 0:
+             # A resumed boundary already has this checkpoint; do not duplicate it.
+             if (
+-                session.resume is None
+-                or state.phase_index != session.resume["cursor"]["phase_index"]
++                session.resume_state is None
++                or state.phase_index != session.resume_state["cursor"]["phase_index"]
+             ):
+                 save(session, phase.start_checkpoint)
+         remaining = phase.batch_count(session.steps_per_epoch) - state.phase_step
+@@ -320,14 +321,14 @@
+         if topology.is_target_leader
+         else None
+     )
+-    start_id = session.resume["cursor"]["global_step"] if session.resume else 0
++    start_id = session.resume_state["cursor"]["global_step"] if session.resume_state else 0
+     batch_id = 0
+     for phase in session.phases:
+         spec = session.adapter.packet_spec(session, phase)
+         batch_id, bridge_ms = run_target_phase(
+             args=args,
+             topology=topology,
+-            loader=session.loader,
++            dataloader=session.dataloader,
+             steps=session.steps_per_epoch,
+             epochs=phase.epochs,
+             epoch_offset=session.adapter.target_epoch_offset(phase),
+@@ -396,7 +397,7 @@
+     *,
+     args,
+     topology,
+-    loader,
++    dataloader,
+     steps,
+     epochs,
+     epoch_offset,
+@@ -415,8 +416,8 @@
+     progress, wait_ms = 0, 0.0
+     for epoch in range(epochs):
+         if topology.is_target_leader:
+-            loader.sampler.set_epoch(epoch_offset + epoch)
+-            iterator = iter(loader)
++            dataloader.sampler.set_epoch(epoch_offset + epoch)
++            iterator = iter(dataloader)
+         for _ in range(steps):
+             if progress >= limit:
+                 break
+--- before/litespec/training/setup.py
++++ litespec/training/setup.py
+@@ -53,9 +53,9 @@
+             f"{args.target_model_path}-preformatted={args.is_preformatted}"
+         ).encode()
+     ).hexdigest()
+-    raw = load_dataset("json", data_files=train_data_path)["train"]
++    raw_dataset = load_dataset("json", data_files=train_data_path)["train"]
+     return build_training_dataset(
+-        dataset=raw,
++        dataset=raw_dataset,
+         tokenizer=tokenizer,
+         chat_template=args.chat_template,
+         max_length=args.max_length,
+@@ -623,16 +623,16 @@
+             _has_valid_anchor_supervision,
+             fn_kwargs={"block_size": int(args.block_size)},
+         )
+-    size = torch.tensor(
++    dataset_size = torch.tensor(
+         [len(dataset) if topology.rank == 0 else 0], device="cuda", dtype=torch.long
+     )
+-    dist.broadcast(size, src=0)
++    dist.broadcast(dataset_size, src=0)
+     producers_total = topology.nnodes * topology.target_replicas_per_node
+-    local_batch = int(args.node_batch_size) // topology.target_replicas_per_node
+-    steps = int(size.item()) // (producers_total * local_batch)
+-    if steps <= 0:
++    local_batch_size = int(args.node_batch_size) // topology.target_replicas_per_node
++    steps_per_epoch = int(dataset_size.item()) // (producers_total * local_batch_size)
++    if steps_per_epoch <= 0:
+         raise ValueError("dataset is too small for one disaggregated global batch")
+-    loader = None
++    dataloader = None
+     if topology.is_target_leader:
+         producer_rank = topology.node_rank * topology.target_replicas_per_node + int(
+             topology.target_replica_local_rank
+@@ -644,9 +644,9 @@
+             shuffle=True,
+             drop_last=True,
+         )
+-        loader = DataLoader(
++        dataloader = DataLoader(
+             dataset,
+-            batch_size=local_batch,
++            batch_size=local_batch_size,
+             sampler=sampler,
+             num_workers=args.dataloader_num_workers,
+             collate_fn=FixedCollator(
+@@ -655,7 +655,7 @@
+             drop_last=True,
+             prefetch_factor=2 if args.dataloader_num_workers else None,
+         )
+-    return loader, steps
++    return dataloader, steps_per_epoch
+ 
+ 
+ def _broadcast_input(args, topology, data):
+@@ -720,8 +720,8 @@
+         if topology.rank == 0:
+             os.makedirs(args.cache_dir, exist_ok=True)
+         dist.barrier()
+-        session.resume = _load_common_state(args.resume_from, args=args)
+-        validate_resume_topology(session.resume, topology_identity(args, topology))
++        session.resume_state = _load_common_state(args.resume_from, args=args)
++        validate_resume_topology(session.resume_state, topology_identity(args, topology))
+         if topology.is_draft:
+             adapter.initialize(session)
+         source = topology.draft_global_ranks[0]
+@@ -734,7 +734,7 @@
+         tokenizer = AutoTokenizer.from_pretrained(
+             args.target_model_path, trust_remote_code=args.trust_remote_code
+         )
+-        session.loader, session.steps_per_epoch = _build_target_loader(
++        session.dataloader, session.steps_per_epoch = _build_target_loader(
+             args, tokenizer, topology
+         )
+         session.routes = build_node_routes(
+@@ -746,13 +746,13 @@
+             # Validate the producer's schedule/cursor before starting any sends.
+             from dataclasses import asdict
+ 
+-            if session.resume:
++            if session.resume_state:
+                 for key, value in {
+                     "phase_plan": [asdict(p) for p in session.phases],
+                     "steps_per_epoch": session.steps_per_epoch,
+                     "train_data_identity": training_data_identity(args),
+                 }.items():
+-                    if session.resume[key] != value:
++                    if session.resume_state[key] != value:
+                         raise ValueError(f"Resume mismatch for {key}")
+             session.target = build_target_model(args, adapter.target_proxies(session))
+             return session
+@@ -765,7 +765,7 @@
+         args.tracker_global_rank = session.coordinator_rank
+     else:
+         # resume from checkpoint
+-        session.resume = load_training_state(args.resume_from, args=args)
++        session.resume_state = load_training_state(args.resume_from, args=args)
+         adapter.initialize(session)
+         drafts = [session.draft] + (
+             [session.teacher] if session.teacher is not None else []
+@@ -773,8 +773,8 @@
+         session.target, tokenizer, session.components, _ = build_target_and_components(
+             args, drafts
+         )
+-        session.loader = adapter.build_loader(session, tokenizer)
+-        session.steps_per_epoch = len(session.loader)
++        session.dataloader = adapter.build_loader(session, tokenizer)
++        session.steps_per_epoch = len(session.dataloader)
+     session.total_steps = optimizer_step_count(
+         session.phases, session.steps_per_epoch, args.accumulation_steps
+     )
+@@ -787,12 +787,12 @@
+         parameters, specs = register_optimizer_parameters(
+             session.draft, adapter.optimizer_parameters(session)
+         )
+-    session.fsdp = wrap_training_model(
++    session.fsdp_model = wrap_training_model(
+         session.draft_online, session.components, process_group=session.process_group
+     )
+     if muon_config is not None:
+         layouts = build_fsdp_layouts(
+-            session.fsdp, parameters, specs, session.process_group
++            session.fsdp_model, parameters, specs, session.process_group
+         )
+     session.optimizer = BF16Optimizer(
+         session.draft,
+@@ -811,14 +811,14 @@
+         parameter_layouts=layouts,
+     )
+     validate_session_resume(session)
+-    if session.resume is not None:
++    if session.resume_state is not None:
+         if args.disaggregate:
+-            session.resume = load_distributed_training_state(
++            session.resume_state = load_distributed_training_state(
+                 args.resume_from, process_group=session.process_group
+             )
+-        session.optimizer.load_state_dict(session.resume)
++        session.optimizer.load_state_dict(session.resume_state)
+     session.tracker = create_tracker(args, args.output_dir)
+     # DataLoader iterator construction must not consume the model/anchor RNG.
+-    if session.loader is not None:
+-        session.loader.generator = torch.Generator().manual_seed(args.seed)
++    if session.dataloader is not None:
++        session.dataloader.generator = torch.Generator().manual_seed(args.seed)
+     return session
+--- before/scripts/config/training_launcher.py
++++ scripts/config/training_launcher.py
+@@ -83,9 +83,9 @@
+     unknown = sorted(set(launcher) - allowed)
+     if unknown:
+         raise ConfigError(f"unknown launcher keys: {unknown}")
+-    missing = [key for key in ("target_model", "output_dir") if not launcher.get(key)]
+-    if missing:
+-        raise ConfigError(f"missing launcher keys: {missing}")
++    missing_field_names = [key for key in ("target_model", "output_dir") if not launcher.get(key)]
++    if missing_field_names:
++        raise ConfigError(f"missing launcher keys: {missing_field_names}")
+     if bool(launcher.get("train_data")) == bool(launcher.get("train_hidden_states")):
+         raise ConfigError(
+             "set exactly one of launcher.train_data and launcher.train_hidden_states"
+@@ -129,12 +129,12 @@
+         return
+     if offline:
+         raise ConfigError("disaggregate supports train_data only")
+-    required = ("target_ranks_per_node", "draft_ranks_per_node", "node_batch_size")
+-    missing = [name for name in required if arguments.get(name) is None]
+-    if missing:
++    required_arg_names = ("target_ranks_per_node", "draft_ranks_per_node", "node_batch_size")
++    missing_arg_names = [name for name in required_arg_names if arguments.get(name) is None]
++    if missing_arg_names:
+         raise ConfigError(
+             "disaggregate requires "
+-            + ", ".join(f"arguments.{name}" for name in missing)
++            + ", ".join(f"arguments.{name}" for name in missing_arg_names)
+         )
+     target_ranks = _positive_int(
+         arguments["target_ranks_per_node"], "arguments.target_ranks_per_node"
+--- before/scripts/data/prepare_hidden_states.py
++++ scripts/data/prepare_hidden_states.py
+@@ -171,10 +171,10 @@
+ 
+ 
+ def add_bytes(archive: tarfile.TarFile, name: str, data: bytes) -> None:
+-    info = tarfile.TarInfo(name=name)
+-    info.size = len(data)
+-    info.mtime = 0
+-    archive.addfile(info, io.BytesIO(data))
++    member_info = tarfile.TarInfo(name=name)
++    member_info.size = len(data)
++    member_info.mtime = 0
++    archive.addfile(member_info, io.BytesIO(data))
+ 
+ 
+ def read_shard_metadata(path: Path) -> dict[str, Any]:
+@@ -659,16 +659,16 @@
+     length = int(attention.sum().item())
+     if length <= 0:
+         raise HiddenStateError("sample has no attended tokens")
+-    hidden = normalize_hidden_states(output.hidden_states, stored_layer_ids)
+-    missing = sorted(set(stored_layer_ids) - set(hidden))
+-    if missing:
+-        raise HiddenStateError(f"target did not return requested layers {missing}")
+-    if final_norm_layer_id not in hidden:
++    target_hidden_states = normalize_hidden_states(output.hidden_states, stored_layer_ids)
++    missing_layer_ids = sorted(set(stored_layer_ids) - set(target_hidden_states))
++    if missing_layer_ids:
++        raise HiddenStateError(f"target did not return requested layers {missing_layer_ids}")
++    if final_norm_layer_id not in target_hidden_states:
+         raise HiddenStateError(
+             f"target did not return final-norm layer {final_norm_layer_id}"
+         )
+     sample_hidden = {}
+-    for layer_id, tensor in hidden.items():
++    for layer_id, tensor in target_hidden_states.items():
+         value = tensor[batch_index, :length].detach().cpu().contiguous()
+         if not torch.isfinite(value).all():
+             raise HiddenStateError(f"layer {layer_id} contains NaN or Inf")
+@@ -762,11 +762,11 @@
+ 
+ def _path_component(value: str) -> str:
+     """Make a model or dataset name safe to use as one path component."""
+-    safe = "".join(
++    safe_component = "".join(
+         character if character.isalnum() or character in "._-" else "_"
+         for character in value
+     )
+-    return safe.strip("._-") or "data"
++    return safe_component.strip("._-") or "data"
+ 
+ 
+ def default_output_path(data_path: str, target_model_path: str) -> Path:
+@@ -892,9 +892,9 @@
+         stored_layer_ids = sorted(set(requested_layer_ids) | {final_norm_layer_id})
+         target.set_capture_layers(stored_layer_ids)
+ 
+-        raw = load_dataset("json", data_files=str(input_path))["train"]
++        raw_dataset = load_dataset("json", data_files=str(input_path))["train"]
+         if args.num_samples is not None:
+-            raw = raw.select(range(min(args.num_samples, len(raw))))
++            raw_dataset = raw_dataset.select(range(min(args.num_samples, len(raw_dataset))))
+         cache_key = hashlib.sha256(
+             json.dumps(
+                 {
+@@ -910,7 +910,7 @@
+ 
+         def build_processed_dataset():
+             return build_training_dataset(
+-                dataset=raw,
++                dataset=raw_dataset,
+                 tokenizer=tokenizer,
+                 chat_template=args.chat_template,
+                 max_length=args.max_length,
+--- before/scripts/data/regenerate_train_data.py
++++ scripts/data/regenerate_train_data.py
+@@ -82,10 +82,12 @@
+ def validate_record(value: Any, line_number: int) -> dict[str, Any]:
+     if not isinstance(value, dict):
+         raise RegenerationError(f"line {line_number}: record must be an object")
+-    required = {"id", "conversations", "source"}
+-    missing = required - value.keys()
+-    if missing:
+-        raise RegenerationError(f"line {line_number}: missing fields {sorted(missing)}")
++    required_field_names = {"id", "conversations", "source"}
++    missing_field_names = required_field_names - value.keys()
++    if missing_field_names:
++        raise RegenerationError(
++            f"line {line_number}: missing fields {sorted(missing_field_names)}"
++        )
+     _record_key(value["id"])
+     if not isinstance(value["source"], str) or not value["source"].strip():
+         raise RegenerationError(f"line {line_number}: source must be non-empty text")
+--- before/tests/benchmark_fsdp_muon.py
++++ tests/benchmark_fsdp_muon.py
+@@ -49,12 +49,12 @@
+         torch.manual_seed(101)
+         model = MatrixBank(args.matrices, args.rows, args.cols).cuda().bfloat16()
+         parameters, specs = register_optimizer_parameters(model)
+-        fsdp = FSDP(
++        fsdp_model = FSDP(
+             model,
+             use_orig_params=True,
+             sharding_strategy=ShardingStrategy.SHARD_GRAD_OP,
+         )
+-        layouts = build_fsdp_layouts(fsdp, parameters, specs)
++        layouts = build_fsdp_layouts(fsdp_model, parameters, specs)
+         opt = BF16Optimizer(
+             model,
+             lr=0.1,
+--- before/tests/distributed_dlite_disaggregate_smoke.py
++++ tests/distributed_dlite_disaggregate_smoke.py
+@@ -6,8 +6,8 @@
+ import torch.distributed as dist
+ 
+ from litespec.distributed.transport import (
+-    DraftBatchPacket,
+-    DraftPacketSpec,
++    DLiteBatchPacket,
++    DLitePacketSpec,
+     NodePacketTransport,
+     build_node_routes,
+ )
+@@ -42,13 +42,13 @@
+         dist.barrier()
+         destroy_distributed()
+         return
+-    local_batch = (
++    local_batch_size = (
+         args.node_batch // topology.target_replicas_per_node
+         if topology.is_target
+         else args.node_batch // topology.draft_ranks_per_node
+     )
+-    spec = DraftPacketSpec(local_batch, 4, 2, 2, 4, 2)
+-    packet = DraftBatchPacket.empty(spec, device="cuda")
++    spec = DLitePacketSpec(local_batch_size, 4, 2, 2, 4, 2)
++    packet = DLiteBatchPacket.empty(spec, device="cuda")
+     transport = NodePacketTransport(topology=topology, routes=routes)
+     if topology.is_target_leader:
+         for index, tensor in enumerate(packet.tensors()):
+--- before/tests/distributed_muon_smoke.py
++++ tests/distributed_muon_smoke.py
+@@ -56,7 +56,7 @@
+     model = TinyDraft().cuda().bfloat16()
+     parameters, specs = register_optimizer_parameters(model)
+     refs = [torch.nn.Parameter(p.detach().float().clone()) for p in parameters]
+-    fsdp = FSDP(
++    fsdp_model = FSDP(
+         model,
+         process_group=group,
+         use_orig_params=True,
+@@ -65,7 +65,7 @@
+             param_dtype=torch.bfloat16, buffer_dtype=torch.bfloat16
+         ),
+     )
+-    layouts = build_fsdp_layouts(fsdp, parameters, specs, group)
++    layouts = build_fsdp_layouts(fsdp_model, parameters, specs, group)
+     config = {"matrices_per_rank": matrices_per_rank}
+ 
+     def make_optimizer():
+@@ -105,7 +105,7 @@
+         model.sequential_head.requires_grad_(step >= 2)
+         model.layers[0].requires_grad_(step < 3)
+         for micro in range(2):
+-            loss = fsdp(torch.tensor(rank + micro + 1.0, device="cuda"))
++            loss = fsdp_model(torch.tensor(rank + micro + 1.0, device="cuda"))
+             (loss / 2).backward()
+         normalize_accumulated_gradients(opt, torch.tensor(2.0, device="cuda"), 2, group)
+         local_grads = [
+--- before/tests/test_dflash_family.py
++++ tests/test_dflash_family.py
+@@ -6,17 +6,17 @@
+ from transformers import Qwen3Config
+ 
+ from litespec.training.recipes._dflash_common import (
+-    add_family_args,
+-    build_family_config,
++    add_dflash_family_args,
++    build_dflash_family_config,
+     selector_alpha,
+-    validate_family_args,
++    validate_dflash_family_args,
+ )
+ from litespec.training.setup import select_tp_rank_batch
+ from litespec.core.dflash import OnlineDFlashModel
+ from litespec.core.dspark import OnlineDSparkModel
+ from litespec.core._dflash_common import _DFlashSelectorDiagnostics
+ from litespec.core._dflash_common import _DFlashUnaryDiagnostics
+-from litespec.distributed.transport import FamilyBatchPacket, FamilyPacketSpec
++from litespec.distributed.transport import DFlashFamilyBatchPacket, DFlashFamilyPacketSpec
+ from litespec.modeling.config_utils import _qwen35_text_dict_to_qwen3_config
+ from litespec.modeling.draft import dflash as dflash_module
+ from litespec.modeling.draft import dlite as dlite_module
+@@ -62,10 +62,10 @@
+     )
+ 
+ 
+-def test_family_algorithms_accept_tp_draft_sharding():
++def test_dflash_family_algorithms_accept_tp_draft_sharding():
+     for algorithm in ("dflash", "dflash2", "dspark"):
+         parser = argparse.ArgumentParser()
+-        add_family_args(parser, algorithm)
++        add_dflash_family_args(parser, algorithm)
+         args = parser.parse_args(
+             [
+                 "--target-model-path",
+@@ -83,7 +83,7 @@
+                 "--shard-draft-by-tp",
+             ]
+         )
+-        validate_family_args(parser, args, algorithm)
++        validate_dflash_family_args(parser, args, algorithm)
+         assert args.shard_draft_by_tp is True
+ 
+     batch = torch.arange(12).view(3, 4)
+@@ -243,9 +243,9 @@
+     torch.testing.assert_close(terms.expected_accepted_length_num, torch.tensor(3.0))
+ 
+ 
+-def test_family_packet_has_no_logits_and_optional_last_hidden():
+-    spec = FamilyPacketSpec(2, 8, 48, 16, True)
+-    packet = FamilyBatchPacket.empty(spec, device="cpu")
++def test_dflash_family_packet_has_no_logits_and_optional_last_hidden():
++    spec = DFlashFamilyPacketSpec(2, 8, 48, 16, True)
++    packet = DFlashFamilyBatchPacket.empty(spec, device="cpu")
+     assert packet.target_context_hidden.shape == (2, 8, 48)
+     assert packet.target_last_hidden.shape == (2, 8, 16)
+     assert all(tensor.shape[0] == 2 for tensor in packet.tensors())
+@@ -304,7 +304,7 @@
+         selector_warmup_ratio=0.2,
+         selector_ramp_ratio=0.3,
+     )
+-    config = build_family_config(args, "dflash2", source_config=source)
++    config = build_dflash_family_config(args, "dflash2", source_config=source)
+     assert config.architectures == ["DFlash2DraftModel"]
+     assert config.dflash2_config["selector_rank"] == 256
+     assert len(config.dflash2_config["target_layer_ids"]) == 5
+@@ -351,6 +351,6 @@
+         confidence_loss_alpha=1.0,
+         backbone_conv=False,
+     )
+-    config = build_family_config(args, "dflash", source_config=normalized)
++    config = build_dflash_family_config(args, "dflash", source_config=normalized)
+     assert config.target_source_model_type == "qwen3_5"
+     assert isinstance(DFlashDraftModel(config), DFlashDraftModel)
+--- before/tests/test_dflash_training_surface.py
++++ tests/test_dflash_training_surface.py
+@@ -17,7 +17,7 @@
+         assert f'run_training("{algorithm}")' in trainer.read_text(encoding="utf-8")
+ 
+ 
+-def test_family_training_excludes_removed_objectives():
++def test_dflash_family_training_excludes_removed_objectives():
+     source = (
+         ROOT / "litespec/training/recipes/_dflash_common.py"
+     ).read_text(encoding="utf-8")
+--- before/tests/test_dflash_yaml_launcher.py
++++ tests/test_dflash_yaml_launcher.py
+@@ -20,7 +20,7 @@
+         ("dspark", "dspark.yaml", "8"),
+     ],
+ )
+-def test_repository_family_yaml_loads_expected_values(algorithm, filename, block_size):
++def test_repository_dflash_family_yaml_loads_expected_values(algorithm, filename, block_size):
+     path = ROOT / "scripts/config" / filename
+     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+ 
+--- before/tests/test_dlite_disaggregate.py
++++ tests/test_dlite_disaggregate.py
+@@ -11,8 +11,8 @@
+ from litespec.training.config import add_common_args
+ from litespec.training.config import validate_common_args
+ from litespec.distributed.transport import (
+-    DraftBatchPacket,
+-    DraftPacketSpec,
++    DLiteBatchPacket,
++    DLitePacketSpec,
+     build_node_routes,
+     copy_packet_slice,
+ )
+@@ -46,7 +46,7 @@
+ 
+ 
+ def test_packet_contains_history_and_prediction_hidden_but_no_logits():
+-    spec = DraftPacketSpec(
++    spec = DLitePacketSpec(
+         batch_size=2,
+         max_length=8,
+         num_anchors=4,
+@@ -56,8 +56,8 @@
+         num_history_layers=3,
+         include_target_prediction_hidden=True,
+     )
+-    source = DraftBatchPacket.empty(spec, device="cpu")
+-    destination = DraftBatchPacket.empty(spec, device="cpu")
++    source = DLiteBatchPacket.empty(spec, device="cpu")
++    destination = DLiteBatchPacket.empty(spec, device="cpu")
+     source.target_history_hidden.fill_(5)
+     source.target_prediction_hidden.fill_(7)
+     copy_packet_slice(
+@@ -76,8 +76,8 @@
+ 
+ 
+ def test_packet_layer_union_is_reordered_for_each_draft():
+-    spec = DraftPacketSpec(1, 4, 2, 3, 1, 2)
+-    packet = DraftBatchPacket.empty(spec, device="cpu")
++    spec = DLitePacketSpec(1, 4, 2, 3, 1, 2)
++    packet = DLiteBatchPacket.empty(spec, device="cpu")
+     packet.target_hidden[..., 0, :].fill_(2)
+     packet.target_hidden[..., 1, :].fill_(7)
+     packet.target_hidden[..., 2, :].fill_(11)
+--- before/tests/test_muon.py
++++ tests/test_muon.py
+@@ -94,7 +94,7 @@
+ 
+ 
+ @pytest.mark.parametrize("algorithm", ["dflash", "dflash2", "dspark"])
+-def test_real_family_grouping(algorithm):
++def test_real_dflash_family_grouping(algorithm):
+     from test_dflash_family import tiny_config
+ 
+     from litespec.modeling.draft.dflash import DFlashDraftModel
+--- before/tests/test_training_runner.py
++++ tests/test_training_runner.py
+@@ -263,7 +263,7 @@
+         def __iter__(self):
+             return iter([values(i) for i in range(3)])
+ 
+-    session.loader = Loader()
++    session.dataloader = Loader()
+     run_draft(session, save=lambda *a: None)
+     assert epochs == [0, 1]
+     assert [call[2] for call in session.adapter.calls] == [0, 0, 0, 0, 1, 1]
+@@ -329,10 +329,10 @@
+     expected = copy.deepcopy(session.draft.state_dict())
+     restore_rng_state(initial_rng)
+     resumed = make()
+-    resumed.resume = load_distributed_training_state(str(tmp_path))
+-    validate_training_identity(resumed.resume, resumed.args)
++    resumed.resume_state = load_distributed_training_state(str(tmp_path))
++    validate_training_identity(resumed.resume_state, resumed.args)
+     validate_session_resume(resumed)
+-    resumed.optimizer.load_state_dict(resumed.resume)
++    resumed.optimizer.load_state_dict(resumed.resume_state)
+     torch.rand(19)  # setup/replay must not perturb the restored training stream
+     run_draft(resumed, batch_source=source, save=lambda *a: None)
+     assert resumed.state == session.state
+@@ -400,7 +400,7 @@
+         state = {**training_identity(session.args), key: value}
+         with pytest.raises(ValueError, match=key):
+             validate_training_identity(state, session.args)
+-    session.resume = {
++    session.resume_state = {
+         **session_metadata(session),
+         "cursor": asdict(RunState(next_batch=1, phase_step=1, global_step=1)),
+     }
+@@ -449,7 +449,7 @@
+     session.args.pipeline_depth = 2
+     session.topology.is_target_leader = True
+     session.topology.rank = 0
+-    session.resume = {"cursor": {"global_step": 2}}
++    session.resume_state = {"cursor": {"global_step": 2}}
+     events = []
+ 
+     class Loader:
+@@ -482,7 +482,7 @@
+             ("produce", current)
+         ),
+     )
+-    session.loader = Loader()
++    session.dataloader = Loader()
+     monkeypatch.setattr(transport, "NodePacketTransport", Transport)
+     monkeypatch.setattr(setup, "_broadcast_input", lambda *a: a[-1])
+     monkeypatch.setattr(
+@@ -513,7 +513,7 @@
+         prepare_history_hidden_states,
+         prepare_target_hidden,
+     )
+-    from litespec.distributed.transport import DraftBatchPacket
++    from litespec.distributed.transport import DLiteBatchPacket
+     from litespec.modeling.draft.dlite import DLiteDraftModel
+     from litespec.training.recipes import dlite
+ 
+@@ -580,7 +580,7 @@
+     if disaggregate:
+         session.topology = SimpleNamespace(draft_group=None)
+     session.draft_online = base.make_online(session)
+-    session.fsdp = session.draft_online
++    session.fsdp_model = session.draft_online
+     base.enter_phase(session, session.phase)
+     anchors = torch.tensor([[0, 4]])
+     keep = torch.ones_like(anchors, dtype=torch.bool)
+@@ -619,7 +619,7 @@
+             if session.phase.need_prediction_hidden
+             else None
+         )
+-        batch = DraftBatchPacket(
++        batch = DLiteBatchPacket(
+             ids,
+             torch.ones_like(ids),
+             anchors,
+@@ -652,10 +652,10 @@
+ 
+ 
+ @pytest.mark.parametrize("algorithm", ["dflash", "dflash2", "dspark"])
+-def test_real_family_recipe_online_offline_and_packet_match(monkeypatch, algorithm):
++def test_real_dflash_family_recipe_online_offline_and_packet_match(monkeypatch, algorithm):
+     from refactor_baseline import capture
+ 
+-    from litespec.distributed.transport import FamilyBatchPacket
++    from litespec.distributed.transport import DFlashFamilyBatchPacket
+ 
+     monkeypatch.setattr(torch.Tensor, "cuda", lambda tensor, **kwargs: tensor)
+     base = get_training_adapter(algorithm)
+@@ -687,7 +687,7 @@
+     session.components.lm_head.requires_grad_(False)
+     session.components.embed_tokens.requires_grad_(False)
+     session.draft_online = base.make_online(session)
+-    session.fsdp = session.draft_online
++    session.fsdp_model = session.draft_online
+     session.total_steps = 10
+     hidden = {i: torch.randn(1, 12, 16) for i in range(4)}
+     data = dict(
+@@ -710,7 +710,7 @@
+             output = base.compute_step(session, data, detailed=True)
+         else:
+             session.topology = SimpleNamespace(draft_group=None)
+-            packet = FamilyBatchPacket(
++            packet = DFlashFamilyBatchPacket(
+                 data["input_ids"], data["loss_mask"], hidden[1], hidden[3]
+             )
+             output = base.compute_step(session, packet, begin=0, end=1, detailed=True)

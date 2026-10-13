@@ -443,6 +443,8 @@ class OnlineDLiteModel(nn.Module):
         prediction_hidden: torch.Tensor,
         batch: PreparedDLiteBatch,
         target_prefill_logits: torch.Tensor,
+        *,
+        serial_logits: Optional[torch.Tensor] = None,
     ) -> TrainingOutput:
         """Compute supervised loss and its full-vocabulary projections.
 
@@ -486,11 +488,15 @@ class OnlineDLiteModel(nn.Module):
         sequential_head = self.draft_model.sequential_head
         use_base_logits = self.base_lm_ce_weight > 0
         base_logits = self.lm_head(active_hidden).float() if use_base_logits else None
-        latent = sequential_head.forward_teacher_forcing(
-            hidden_states=prediction_hidden,
-            prev_token_ids=prev_token_ids,
-        )
-        final_logits = sequential_head.project_logits(latent[active_positions]).float()
+        if serial_logits is None:
+            latent = sequential_head.forward_teacher_forcing(
+                hidden_states=prediction_hidden,
+                prev_token_ids=prev_token_ids,
+            )
+            final_logits = sequential_head.project_logits(latent[active_positions]).float()
+        else:
+            # The transition objective shares this graph with Stage-1 KL.
+            final_logits = serial_logits
         if (active_ce_labels < 0).any() or (
             active_ce_labels >= final_logits.size(-1)
         ).any():
@@ -679,7 +685,8 @@ class OnlineDLiteModel(nn.Module):
                 prediction_hidden, prepared_batch
             )
             supervised = self.compute_supervised_loss(
-                prediction_hidden, prepared_batch, gathered_target_logits
+                prediction_hidden, prepared_batch, gathered_target_logits,
+                serial_logits=student_serial_logits,
             )
             return (
                 prediction_hidden,

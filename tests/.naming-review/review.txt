@@ -1,0 +1,21 @@
+Naming review validation
+
+Scope: project-owned Python in litespec, scripts, evaluation, tests; symbol references in Flow.md.
+Packet classes/specs and DFlashFamily adapter/helpers renamed; no compatibility aliases added.
+TrainingSession runtime fields and internal variable/call-chain names updated.
+Public model keywords, registered state keys, serialized fields, packet field order and schema IDs preserved.
+
+Validation:
+- Pre-task full suite: 276 passed, 4 failed, 4 subtests passed.
+- First renamed full suite: 276 passed, same 4 failed, 4 subtests passed.
+- Final full suite: 275 passed, 5 failed, 4 subtests passed.
+- Four pre-existing failures: Muon resume test fixtures lack args.muon_lr.
+- Additional final failure: scripts/config/dlite_sft.yaml was changed outside this naming migration during execution; fixture asserts the example model/path values.
+- Current launcher with saved pre-task sft config passes that assertion (baseline-config-check.log).
+- Four-algorithm deterministic parity: all 217 tensors match exactly, rtol=0 and atol=0; includes parameters, outputs, losses, and gradients (parity-final.log).
+- All packet/spec field definitions, order, and schema ID formulas match the baseline AST.
+- Modified Python ASTs match after normalizing identifiers/annotations and equivalent unpacking assignments; no other structural differences.
+- No obsolete packet/family symbols remain in active source, tests or reviewed docs.
+- git diff --check passed.
+
+No algorithm/optimizer fixes or YAML edits were made as part of this migration.

@@ -581,7 +581,7 @@ class BF16Optimizer:
             self.muon_scheduler.step()
         with torch.no_grad():
             for p, mp in zip(self.model_params, self.fp32_params):
-                p.data.copy_(mp.data.to(p.dtype))
+                p.copy_(mp)
                 p.grad = None
         return grad_norm_value
 
@@ -675,7 +675,7 @@ class BF16Optimizer:
                 self.model_params, self.fp32_params, masters, strict=True
             ):
                 master.copy_(saved)
-                model_param.copy_(master.to(model_param.dtype))
+                model_param.copy_(master)
         if self.use_muon:
             schedulers = state_dict["scheduler_state_dict"]
             for key, opt, scheduler in (

@@ -1,0 +1,4 @@
+algorithm: dflash2
+launcher:
+  target_model: /model
+  output_dir: /output

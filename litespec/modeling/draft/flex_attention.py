@@ -14,6 +14,7 @@ dynamo.config.recompile_limit = 64
 
 FLASH_Q_TILE = 256
 FLASH_KV_TILE = 128
+TRITON_MASK_TILE = 128
 
 
 def flex_kernel_options(backend: str) -> dict:
@@ -193,6 +194,19 @@ def create_flex_block_mask(
             device=device,
             BLOCK_SIZE=(FLASH_Q_TILE, FLASH_KV_TILE),
         )
+    if Q_LEN <= TRITON_MASK_TILE or KV_LEN <= TRITON_MASK_TILE:
+        # PyTorch 2.9.1's auto-dynamic compilation can generate invalid sparse
+        # counts when a shape transition leaves only one Q or KV tile. These
+        # small masks are cheap to build eagerly; keep larger masks compiled.
+        return create_block_mask(
+            mask_mod,
+            B=B,
+            H=H,
+            Q_LEN=Q_LEN,
+            KV_LEN=KV_LEN,
+            device=device,
+            BLOCK_SIZE=TRITON_MASK_TILE,
+        )
     return compile_friendly_create_block_mask(
         mask_mod,
         B=B,
@@ -200,6 +214,7 @@ def create_flex_block_mask(
         Q_LEN=Q_LEN,
         KV_LEN=KV_LEN,
         device=device,
+        BLOCK_SIZE=TRITON_MASK_TILE,
     )
 
 

@@ -1,8 +1,11 @@
 from unittest import mock
 
 import pytest
+import torch
+from torch.nn.attention.flex_attention import create_block_mask
 
 from litespec.core.attention_masks import (
+    create_dlite_flex_mask,
     flash_kv_padding,
     flash_padded_block_width,
 )
@@ -68,9 +71,57 @@ def test_block_mask_creation_uses_one_backend_policy():
             mask_mod,
             B=1,
             H=None,
-            Q_LEN=16,
-            KV_LEN=32,
+            Q_LEN=256,
+            KV_LEN=512,
             device="cpu",
             backend="TRITON",
         )
         compiled.assert_called_once()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_dlite_mask_shape_transitions_match_eager():
+    # The old compiled path produced corrupt q_num_blocks at width=16 and
+    # kv_num_blocks at width=1 after compiling larger, dynamic shapes.
+    for width in (768, 767, 16, 1, 17, 129):
+        anchors = torch.arange(width, device="cuda").view(1, -1)
+        keep = torch.ones_like(anchors, dtype=torch.bool)
+        if width > 1:
+            keep[:, -1] = False
+        mask = create_dlite_flex_mask(
+            model_role="student",
+            anchor_positions=anchors,
+            block_keep_mask=keep,
+            token_keep_mask=keep.unsqueeze(-1),
+            seq_len=10240,
+            swa_window_size=1,
+            chs_slots=12,
+            query_len=8,
+            device="cuda",
+        )
+        torch.cuda.synchronize()
+        if width > 129:
+            continue
+        reference = create_block_mask(
+            mask.mask_mod,
+            B=1,
+            H=None,
+            Q_LEN=width * 8,
+            KV_LEN=width * 20,
+            device="cuda",
+        )
+        for name in (
+            "kv_num_blocks",
+            "kv_indices",
+            "full_kv_num_blocks",
+            "full_kv_indices",
+            "q_num_blocks",
+            "q_indices",
+            "full_q_num_blocks",
+            "full_q_indices",
+        ):
+            torch.testing.assert_close(
+                getattr(mask, name),
+                getattr(reference, name),
+                msg=lambda message, name=name: f"width={width}, {name}: {message}",
+            )
