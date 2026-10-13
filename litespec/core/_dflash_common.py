@@ -505,6 +505,8 @@ class DFlashTrainingBase(nn.Module):
         target_ids: torch.Tensor,
         weight_mask: torch.Tensor,
         predecessor_ids: torch.Tensor,
+        *,
+        metrics_callback=None,
     ) -> DFlashObjectiveTerms:
         """Return a flat tuple of additive objective and metric tensors."""
 
@@ -512,6 +514,8 @@ class DFlashTrainingBase(nn.Module):
         logits = self.lm_head(
             draft_block_hidden_states.reshape(bsz, num_blocks * block_size, hidden_size)
         ).reshape(bsz, num_blocks, block_size, -1)
+        if metrics_callback is not None:
+            metrics_callback(logits)
         candidate_selector = getattr(self.draft_model, "candidate_selector", None)
         objective_logits = (
             self.draft_model.transform_unary_logits(logits)
@@ -594,6 +598,8 @@ class DFlashTrainingBase(nn.Module):
         weight_mask: torch.Tensor,
         predecessor_ids: torch.Tensor,
         aligned_target_hidden: Optional[torch.Tensor] = None,
+        *,
+        logits: Optional[torch.Tensor] = None,
     ) -> DFlashMetricTerms:
         """Return additive unary, selector, and teacher diagnostics for one chunk.
 
@@ -607,6 +613,7 @@ class DFlashTrainingBase(nn.Module):
             draft_block_hidden_states,
             target_ids,
             top_k=self._metric_top_k(),
+            logits=logits,
         )
         selector = None
         if candidate_selector is not None:
@@ -650,13 +657,15 @@ class DFlashTrainingBase(nn.Module):
         target_ids: torch.Tensor,
         *,
         top_k: int,
+        logits: Optional[torch.Tensor] = None,
     ) -> _DFlashUnaryDiagnostics:
         """Project draft states once and derive the strict unary top-k view."""
 
         bsz, num_blocks, block_size, hidden_size = draft_block_hidden_states.shape
-        logits = self.lm_head(
-            draft_block_hidden_states.reshape(bsz, num_blocks * block_size, hidden_size)
-        ).reshape(bsz, num_blocks, block_size, -1)
+        if logits is None:
+            logits = self.lm_head(
+                draft_block_hidden_states.reshape(bsz, num_blocks * block_size, hidden_size)
+            ).reshape(bsz, num_blocks, block_size, -1)
         transform = getattr(self.draft_model, "transform_unary_logits", None)
         objective_logits = logits if transform is None else transform(logits)
         probabilities = torch.softmax(objective_logits.float(), dim=-1)

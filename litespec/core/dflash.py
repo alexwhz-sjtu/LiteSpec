@@ -5,7 +5,7 @@ from typing import Optional
 import torch
 
 from litespec.core.attention_masks import FLEX_ATTENTION_AVAILABLE
-from litespec.core.chunking import checkpointed_chunk_reduce
+from litespec.core.chunking import checkpointed_chunk_reduce, is_chunk_recomputing
 from litespec.core.outputs import RatioTerms, TrainingOutput
 
 from ._dflash_common import DFlashMetricTerms, DFlashTrainingBase
@@ -83,6 +83,30 @@ class OnlineDFlashModel(DFlashTrainingBase):
             if target_last_hidden_states is not None and collect_detailed_metrics
             else None
         )
+        metric_totals = None
+
+        def objective_chunk(hidden, ids, weights, predecessors, teacher_hidden):
+            def collect(logits):
+                nonlocal metric_totals
+                # Reuse each chunk's projection before it is released. Logging
+                # never retains its graph or runs again during checkpoint replay.
+                with torch.no_grad():
+                    terms = self._dflash_metric_chunk_terms(
+                        hidden, ids, weights, predecessors, teacher_hidden,
+                        logits=logits,
+                    )
+                    metric_totals = terms if metric_totals is None else DFlashMetricTerms(
+                        *(a + b for a, b in zip(metric_totals, terms))
+                    )
+
+            return self._dflash_objective_chunk_terms(
+                hidden, ids, weights, predecessors,
+                metrics_callback=(
+                    collect if collect_detailed_metrics and not is_chunk_recomputing()
+                    else None
+                ),
+            )
+
         (
             ce_loss_num,
             loss_den,
@@ -95,11 +119,12 @@ class OnlineDFlashModel(DFlashTrainingBase):
             selector_weight_den,
             selector_covered_num,
         ) = checkpointed_chunk_reduce(
-            self._dflash_objective_chunk_terms,
+            objective_chunk,
             draft_block_hidden_states,
             target_ids,
             weight_mask,
             predecessor_ids,
+            aligned_target_hidden,
             chunk_size=self.objective_chunk_blocks,
             dim=1,
         )
@@ -137,18 +162,8 @@ class OnlineDFlashModel(DFlashTrainingBase):
         candidate_selector = getattr(self.draft_model, "candidate_selector", None)
         sum_metrics = {}
         if collect_detailed_metrics:
-            terms = DFlashMetricTerms(
-                *checkpointed_chunk_reduce(
-                    self._dflash_metric_chunk_terms,
-                    draft_block_hidden_states.detach(),
-                    target_ids,
-                    weight_mask,
-                    predecessor_ids,
-                    aligned_target_hidden,
-                    chunk_size=self.objective_chunk_blocks,
-                    dim=1,
-                )
-            )
+            assert metric_totals is not None
+            terms = metric_totals
             ratio_metrics["hard_label/block_accepted_length"] = (
                 (
                     terms.selector_accepted_length_num

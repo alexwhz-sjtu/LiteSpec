@@ -5,11 +5,31 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import contextmanager, nullcontext
+from contextvars import ContextVar
 from typing import Optional
 
 import torch
 
 ChunkTerms = tuple[torch.Tensor, ...]
+_recomputing = ContextVar("objective_chunk_recomputing", default=False)
+
+
+def is_chunk_recomputing() -> bool:
+    return _recomputing.get()
+
+
+@contextmanager
+def _recompute_context():
+    token = _recomputing.set(True)
+    try:
+        yield
+    finally:
+        _recomputing.reset(token)
+
+
+def _checkpoint_contexts():
+    return nullcontext(), _recompute_context()
 
 
 def checkpointed_chunk_reduce(
@@ -82,6 +102,7 @@ def checkpointed_chunk_reduce(
                 function,
                 *chunk_args,
                 use_reentrant=False,
+                context_fn=_checkpoint_contexts,
             )
         else:
             chunk_terms = function(*chunk_args)
