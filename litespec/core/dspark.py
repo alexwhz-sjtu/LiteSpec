@@ -4,7 +4,6 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from litespec.core.attention_masks import FLEX_ATTENTION_AVAILABLE
 from litespec.core.block_metrics import (
@@ -13,6 +12,11 @@ from litespec.core.block_metrics import (
 )
 from litespec.core.chunking import checkpointed_chunk_reduce
 from litespec.core.outputs import RatioTerms, TrainingOutput
+from litespec.core.losses import (
+    weighted_cross_entropy,
+    weighted_ce_l1,
+    weighted_binary_cross_entropy,
+)
 from litespec.modeling.draft.dflash import DFlashDraftModel
 
 from ._dflash_common import DFlashTrainingBase
@@ -157,15 +161,7 @@ class OnlineDSparkModel(DFlashTrainingBase):
             prev_token_ids=prev_token_ids,
             hidden_states=draft_block_hidden_states,
         )
-        vocab_size = draft_logits.shape[-1]
-        cross_entropy = F.cross_entropy(
-            draft_logits.reshape(-1, vocab_size),
-            target_ids.reshape(-1),
-            reduction="none",
-        ).reshape_as(target_ids)
-        ce_num = (cross_entropy * loss_weights).sum()
-
-        zero = ce_num.new_zeros(())
+        zero = loss_weights.new_zeros(())
         l1_num = zero
         confidence_num = zero
         confidence_error_num = zero
@@ -176,26 +172,29 @@ class OnlineDSparkModel(DFlashTrainingBase):
         tau_den = zero
         accept_probability = None
 
-        draft_probabilities = None
         teacher_ids = None
         if aligned_target_hidden is not None:
             with torch.no_grad():
                 target_logits = self.lm_head(
                     aligned_target_hidden.reshape(
-                        bsz,
-                        num_blocks * block_size,
-                        hidden_size,
+                        bsz, num_blocks * block_size, hidden_size
                     )
                 ).reshape_as(draft_logits)
-                target_probabilities = torch.softmax(target_logits.float(), dim=-1)
                 teacher_ids = target_logits.argmax(dim=-1)
-            draft_probabilities = torch.softmax(draft_logits.float(), dim=-1)
-            l1_per_token = (
-                (draft_probabilities - target_probabilities).abs().sum(dim=-1)
+            ce_num, l1_objective, _, l1_per_token, target_top1, draft_top1 = (
+                weighted_ce_l1(
+                    draft_logits,
+                    target_ids,
+                    target_logits,
+                    loss_weights,
+                    diagnostics=True,
+                )
             )
             accept_probability = (1.0 - 0.5 * l1_per_token).clamp(0.0, 1.0)
             if self.dspark_l1_loss_alpha > 0:
-                l1_num = (l1_per_token * loss_weights).sum()
+                l1_num = l1_objective
+        else:
+            ce_num, _ = weighted_cross_entropy(draft_logits, target_ids, loss_weights)
 
         confidence_pred = self.draft_model.predict_confidence(
             draft_block_hidden_states,
@@ -206,12 +205,11 @@ class OnlineDSparkModel(DFlashTrainingBase):
                 raise ValueError(
                     "DSpark confidence loss requires target_last_hidden_states"
                 )
-            confidence_per_token = F.binary_cross_entropy_with_logits(
+            confidence_num = weighted_binary_cross_entropy(
                 confidence_pred.float(),
                 accept_probability.detach(),
-                reduction="none",
+                loss_weights,
             )
-            confidence_num = (confidence_per_token * loss_weights).sum()
             confidence_error_num = (
                 (confidence_pred.float().sigmoid() - accept_probability).abs()
                 * loss_weights
@@ -229,16 +227,12 @@ class OnlineDSparkModel(DFlashTrainingBase):
             )
             prefix_num, prefix_den = prefix.numerator, prefix.denominator
             if aligned_target_hidden is not None:
-                assert draft_probabilities is not None and teacher_ids is not None
+                assert teacher_ids is not None
                 teacher_agreement_num = (
                     (predicted_ids == teacher_ids).float() * eval_mask
                 ).sum()
-                teacher_top1_num = (
-                    target_probabilities.max(dim=-1).values * eval_mask
-                ).sum()
-                draft_top1_num = (
-                    draft_probabilities.max(dim=-1).values * eval_mask
-                ).sum()
+                teacher_top1_num = (target_top1 * eval_mask).sum()
+                draft_top1_num = (draft_top1 * eval_mask).sum()
                 expected_terms = expected_accept_len_terms(
                     accept_probability[..., 1:], eval_mask[..., 1:]
                 )
@@ -391,11 +385,13 @@ class OnlineDSparkModel(DFlashTrainingBase):
             raise ValueError(
                 "flex_attention is not available on this device; use sdpa/eager."
             )
-        anchor_positions, block_keep_mask, draft_hidden_states = self._forward_draft_blocks(
-            input_ids=input_ids,
-            target_context_hidden=hidden_states,
-            loss_mask=loss_mask,
-            max_valid_anchors=max_valid_anchors,
+        anchor_positions, block_keep_mask, draft_hidden_states = (
+            self._forward_draft_blocks(
+                input_ids=input_ids,
+                target_context_hidden=hidden_states,
+                loss_mask=loss_mask,
+                max_valid_anchors=max_valid_anchors,
+            )
         )
 
         (

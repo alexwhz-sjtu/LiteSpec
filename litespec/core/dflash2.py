@@ -2,7 +2,6 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ._dflash_common import (
     SelectorTerms,
@@ -10,6 +9,7 @@ from ._dflash_common import (
     _DFlashUnaryDiagnostics,
 )
 from .dflash import OnlineDFlashModel
+from .losses import weighted_cross_entropy
 
 
 class OnlineDFlash2Model(OnlineDFlashModel):
@@ -55,15 +55,12 @@ class OnlineDFlash2Model(OnlineDFlashModel):
             hidden_states=draft_block_hidden_states,
             predecessor_ids=predecessor_ids,
         )
-        selector_ce = F.cross_entropy(
-            selector_logits.float().reshape(-1, selector_logits.shape[-1]),
-            target_candidate_index.reshape(-1),
-            reduction="none",
-        ).reshape_as(target_ids)
-        selector_probability = torch.exp(-selector_ce)
         selector_loss_weights = loss_weights * target_is_candidate.float()
         selector_metric_mask = weight_mask * target_is_candidate.float()
-        ce_num = (selector_ce * selector_loss_weights).sum()
+        ce_num, selector_ce = weighted_cross_entropy(
+            selector_logits.float(), target_candidate_index, selector_loss_weights
+        )
+        selector_probability = torch.exp(-selector_ce)
         probability_num = (selector_probability.detach() * selector_metric_mask).sum()
         weight_den = selector_loss_weights.sum()
         covered_num = selector_metric_mask.sum()

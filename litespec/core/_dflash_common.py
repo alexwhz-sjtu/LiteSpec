@@ -5,7 +5,6 @@ from typing import Dict, NamedTuple, Optional, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from litespec.core.attention_masks import BlockMask
 from litespec.core.attention_masks import (
@@ -20,6 +19,7 @@ from litespec.core.block_metrics import (
     hard_label_prefix_counts,
     sparse_distribution_acceptance_probability,
 )
+from litespec.core.losses import weighted_cross_entropy
 from litespec.modeling.draft.dflash import DFlashDraftModel
 from litespec.modeling.draft.flex_attention import flex_kernel_options
 
@@ -522,13 +522,6 @@ class DFlashTrainingBase(nn.Module):
             if candidate_selector is not None
             else logits
         )
-        neg_log_q = F.cross_entropy(
-            objective_logits.reshape(-1, objective_logits.shape[-1]),
-            target_ids.reshape(-1),
-            reduction="none",
-        ).reshape_as(target_ids)
-
-        target_probability = torch.exp(-neg_log_q)
         loss_weights = weight_mask
         if self.loss_decay_gamma is not None and self.loss_decay_gamma > 0:
             positions = torch.arange(
@@ -541,7 +534,10 @@ class DFlashTrainingBase(nn.Module):
             loss_weights = loss_weights * decay_weights
         loss_den = loss_weights.sum()
 
-        ce_loss_num = (neg_log_q * loss_weights).sum()
+        ce_loss_num, neg_log_q = weighted_cross_entropy(
+            objective_logits, target_ids, loss_weights
+        )
+        target_probability = torch.exp(-neg_log_q)
         target_probability_num = (target_probability.detach() * weight_mask).sum()
 
         selector_terms = SelectorTerms.zeros(ce_loss_num)

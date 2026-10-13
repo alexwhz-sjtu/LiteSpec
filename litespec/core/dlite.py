@@ -26,6 +26,7 @@ from litespec.core.block_training import (
     sample_sorted_anchors,
 )
 from litespec.core.outputs import RatioTerms, TrainingOutput
+from litespec.core.losses import weighted_cross_entropy, weighted_ce_l1, weighted_kl
 from litespec.modeling.draft.dlite import DLiteDraftModel
 from litespec.modeling.draft.flex_attention import flex_kernel_options
 
@@ -511,10 +512,6 @@ class OnlineDLiteModel(nn.Module):
                 f"max={int(active_ce_labels.max().item())}, "
                 f"vocab_size={final_logits.size(-1)}."
             )
-        final_ce_values = F.cross_entropy(
-            final_logits.float(), active_ce_labels, reduction="none"
-        )
-        final_ce_numerator = (final_ce_values * active_final_weights).sum()
         final_denominator = active_final_weights.sum()
         if active_target_logits.size(-1) < final_logits.size(-1):
             active_target_logits = F.pad(
@@ -526,21 +523,23 @@ class OnlineDLiteModel(nn.Module):
             raise ValueError("Target and draft vocab sizes do not match.")
         if self.base_lm_ce_weight > 0:
             assert base_logits is not None
-            base_ce_values = F.cross_entropy(
-                base_logits.float(), active_ce_labels, reduction="none"
+            base_ce_numerator, _ = weighted_cross_entropy(
+                base_logits.float(), active_ce_labels, active_base_weights
             )
-            base_ce_numerator = (base_ce_values * active_base_weights).sum()
             base_denominator = active_base_weights.sum()
         else:
             base_ce_numerator = prediction_hidden.new_zeros((), dtype=torch.float32)
             base_denominator = final_denominator
         if self.l1_loss_weight > 0:
-            target_probs = F.softmax(active_target_logits.float(), dim=-1)
-            final_probs = F.softmax(final_logits.float(), dim=-1)
-            l1_values = (final_probs - target_probs).abs().sum(dim=-1)
-            active_acceptance = (1.0 - 0.5 * l1_values.detach()).clamp(0.0, 1.0)
-            l1_numerator = (l1_values * active_final_weights).sum()
+            final_ce_numerator, l1_numerator, _, l1_values = weighted_ce_l1(
+                final_logits.float(), active_ce_labels, active_target_logits,
+                active_final_weights,
+            )
+            active_acceptance = (1.0 - 0.5 * l1_values).clamp(0.0, 1.0)
         else:
+            final_ce_numerator, _ = weighted_cross_entropy(
+                final_logits.float(), active_ce_labels, active_final_weights
+            )
             l1_numerator = prediction_hidden.new_zeros((), dtype=torch.float32)
             active_acceptance = distribution_acceptance_probability(
                 active_target_logits, final_logits
@@ -749,14 +748,9 @@ def compute_stage1_distillation_loss(
         )
     active_weights = weights[active_positions].float()
     denominator = active_weights.sum()
-    with torch.no_grad():
-        teacher_log_probs = F.log_softmax(
-            teacher_serial_logits.detach().float(), dim=-1
-        )
-        teacher_probs = teacher_log_probs.exp()
-    student_log_probs = F.log_softmax(student_serial_logits.float(), dim=-1)
-    kl_values = (teacher_probs * (teacher_log_probs - student_log_probs)).sum(dim=-1)
-    kl_numerator = (kl_values * active_weights).sum()
+    kl_numerator = weighted_kl(
+        student_serial_logits, teacher_serial_logits, active_weights
+    )
     kl_loss = fsdp_global_weighted_mean(kl_numerator, denominator, process_group)
     loss_numerator = float(kl_weight) * kl_numerator
     return float(kl_weight) * kl_loss, kl_loss, loss_numerator, denominator.detach()

@@ -1,0 +1,10 @@
+Set TORCH_CUDA_ARCH_LIST to 9.0
+dflash chunk_size=1: {'forward': {'objective_enter': 2, 'draft_projection': 2, 'cross_entropy/grad': 2, 'objective_complete': 2}, 'backward_replay': {'objective_enter': 2, 'draft_projection': 2, 'cross_entropy/grad': 2}}
+dflash chunk_size=0: {'forward': {'objective_enter': 1, 'draft_projection': 1, 'cross_entropy/grad': 1, 'objective_complete': 1}, 'backward_replay': {}}
+dflash: loss and hidden gradient match
+dflash2 chunk_size=1: {'forward': {'objective_enter': 2, 'draft_projection': 2, 'cross_entropy/grad': 4, 'objective_complete': 2}, 'backward_replay': {'objective_enter': 2, 'draft_projection': 2, 'cross_entropy/grad': 4}}
+dflash2 chunk_size=0: {'forward': {'objective_enter': 1, 'draft_projection': 1, 'cross_entropy/grad': 2, 'objective_complete': 1}, 'backward_replay': {}}
+dflash2: loss and hidden gradient match
+dspark chunk_size=1: {'forward': {'objective_enter': 2, 'draft_projection': 2, 'teacher_projection': 2, 'cross_entropy/grad': 2, 'softmax/grad': 4, 'binary_cross_entropy_with_logits/grad': 2, 'objective_complete': 2}, 'backward_replay': {'objective_enter': 2, 'draft_projection': 2, 'teacher_projection': 2, 'cross_entropy/grad': 2, 'softmax/grad': 4, 'binary_cross_entropy_with_logits/grad': 2}}
+dspark chunk_size=0: {'forward': {'objective_enter': 1, 'draft_projection': 1, 'teacher_projection': 1, 'cross_entropy/grad': 1, 'softmax/grad': 2, 'binary_cross_entropy_with_logits/grad': 1, 'objective_complete': 1}, 'backward_replay': {}}
+dspark: loss and hidden gradient match
