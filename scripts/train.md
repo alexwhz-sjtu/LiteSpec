@@ -13,6 +13,20 @@ Each YAML has a `launcher` section for paths and torchrun settings, plus an
 `arguments` section whose keys map directly to training CLI options. Set  
 exactly one of `launcher.train_data` and `launcher.train_hidden_states`.
 
+Set `arguments.weight_decay` (default `0.0`) to control AdamW weight decay
+when `use_muon: false`. For example, append `--no-use-muon --weight-decay 0.1`
+to a training command. With Muon enabled, this field is ignored; use
+`muon_weight_decay` and `muon_adamw_weight_decay` for the two parameter groups.
+
+`bash tests/run_dlite_optimizer_sweep.sh --dry-run` previews the five DLite
+optimizer experiments without starting training or keeper scripts. Remove
+`--dry-run` to run them sequentially, stopping on the first failure and restoring
+the keeper when the queue exits. Keeper scripts default to the repository's
+parent directory (`KEEPER_DIR` overrides it). Set a fresh `SWEEP_ID` for each
+queue; all nodes of a distributed job must use the same ID and experiment order.
+Each experiment has separate model output and logs. Experiment 5 inherits its
+learning rate from the baseline YAML, not from experiment 2.
+
 All YAML-launched workflows (DLite SFT/teacher/two-stage, DFlash, DFlash2,
 and DSpark) save `training_config.yaml` beside the model in every checkpoint
 directory, including final and phase-boundary saves. This is the original YAML

@@ -803,6 +803,7 @@ def build_training_session(args, adapter):
             else adapter.optimizer_parameters(session)
         ),
         lr=args.learning_rate,
+        weight_decay=args.weight_decay,
         max_grad_norm=args.max_grad_norm,
         warmup_ratio=args.warmup_ratio,
         total_steps=session.total_steps,

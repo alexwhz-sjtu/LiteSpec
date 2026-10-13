@@ -6,7 +6,7 @@ import copy
 import pytest
 import torch
 
-from litespec.training.config import add_common_args
+from litespec.training.config import add_common_args, validate_common_args
 from litespec.training.fsdp_layout import ParameterSpec, local_layouts
 from litespec.training.muon import (
     ShardedMuon,
@@ -296,3 +296,40 @@ def test_checkpoint_rejects_changed_layout_and_mode():
         opt.load_state_dict(adam.state_dict())
     with pytest.raises(ValueError, match="configuration"):
         adam.load_state_dict(opt.state_dict())
+
+
+@pytest.mark.parametrize("weight_decay", [0.0, 0.1])
+def test_plain_adamw_weight_decay_updates_master_and_model(weight_decay):
+    model = torch.nn.Linear(3, 2)
+    opt = BF16Optimizer(model, lr=0.1, weight_decay=weight_decay, warmup_ratio=0)
+    before = [p.detach().clone() for p in model.parameters()]
+    lr = opt.optimizer.param_groups[0]["lr"]
+    for p in model.parameters():
+        p.grad = torch.zeros_like(p)
+    opt.step()
+    for initial, master, parameter in zip(before, opt.fp32_params, model.parameters()):
+        expected = initial * (1 - lr * weight_decay)
+        torch.testing.assert_close(master, expected)
+        torch.testing.assert_close(parameter, expected)
+    assert opt.optimizer_config["weight_decay"] == weight_decay
+
+
+@pytest.mark.parametrize("value", ["-0.1", "nan", "inf"])
+def test_plain_adamw_rejects_invalid_weight_decay(value):
+    parser = argparse.ArgumentParser()
+    add_common_args(parser)
+    args = parser.parse_args([
+        "--target-model-path", "target", "--output-dir", "out",
+        "--train-data-path", "data.jsonl", f"--weight-decay={value}",
+    ])
+    with pytest.raises(SystemExit):
+        validate_common_args(parser, args)
+
+
+def test_plain_weight_decay_does_not_override_hybrid_settings():
+    opt = BF16Optimizer(
+        ToyHybrid(), lr=0.1, weight_decay=0.7,
+        muon_config={"weight_decay": 0.02, "adamw_weight_decay": 0.03},
+    )
+    assert opt.optimizer.param_groups[0]["weight_decay"] == 0.03
+    assert opt.optimizer_config["muon"]["weight_decay"] == 0.02

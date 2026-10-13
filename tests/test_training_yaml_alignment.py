@@ -44,6 +44,7 @@ COMMON_ARGUMENT_KEYS = (
     "dist_timeout",
     "num_anchors",
     "learning_rate",
+    "weight_decay",
     "warmup_ratio",
     "max_grad_norm",
     "use_muon",
@@ -159,6 +160,14 @@ def test_muon_yaml_roundtrip_and_cli_override(name):
         mode, argv=base + arguments_to_cli(args) + ["--use-muon", "--muon-lr", "0.03"]
     )
     assert muon_config_from_args(parsed)["lr"] == 0.03
+    assert args["weight_decay"] == 0.0
+    parsed = adapter.parse_args(
+        mode,
+        argv=base + arguments_to_cli(args)
+        + ["--no-use-muon", "--weight-decay", "0.1"],
+    )
+    assert muon_config_from_args(parsed) is None
+    assert parsed.weight_decay == 0.1
 
 
 @pytest.mark.parametrize(("name", "script"), SCRIPTS.items())
