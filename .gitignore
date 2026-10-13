@@ -245,3 +245,4 @@ slurm-*.out
 # Local project notes
 /Flow.md
 /Archetecture.md
+whz_mtp_logs/
