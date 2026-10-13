@@ -60,12 +60,14 @@ def load_yaml_config(
     identity_key: str,
     identity_value: str,
     extra_launcher_keys: Sequence[str] = (),
-) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+) -> tuple[Mapping[str, Any], Mapping[str, Any], str]:
+    """Parse and snapshot the same YAML read, preserving comments and newlines."""
     if not path.is_file():
         raise ConfigError(f"config does not exist: {path}")
     try:
-        config = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as exc:
+        source = path.read_bytes().decode("utf-8")
+        config = yaml.safe_load(source)
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
         raise ConfigError(f"failed to read {path}: {exc}") from exc
     config = _mapping(config, "config")
     unknown = sorted(set(config) - {identity_key, "launcher", "arguments"})
@@ -92,7 +94,7 @@ def load_yaml_config(
         )
 
     arguments = _mapping(config.get("arguments", {}), "arguments")
-    return launcher, arguments
+    return launcher, arguments, source
 
 
 def validate_common_settings(
@@ -185,8 +187,12 @@ def validate_common_settings(
         )
 
 
-def launcher_environment(launcher: Mapping[str, Any]) -> dict[str, str]:
+def launcher_environment(
+    launcher: Mapping[str, Any], *, yaml_snapshot: str
+) -> dict[str, str]:
     env = {
+        # torchrun workers inherit the launch-time contents, never a mutable path.
+        "LITESPEC_TRAINING_YAML": yaml_snapshot,
         "TARGET_MODEL": str(launcher["target_model"]),
         "OUTPUT_DIR": str(launcher["output_dir"]),
         "NPROC_PER_NODE": str(launcher.get("nproc_per_node", 8)),

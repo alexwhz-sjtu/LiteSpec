@@ -152,6 +152,7 @@ def save_session(session, name):
         optimizer=session.optimizer,
         metadata=session_metadata(session),
         training_args=session.args,
+        training_yaml=session.training_yaml,
         process_group=session.process_group,
         coordinator_global_rank=session.coordinator_rank,
     )
@@ -352,6 +353,7 @@ def save_checkpoint(
     optimizer,
     metadata: dict,
     training_args,
+    training_yaml: str | None = None,
     process_group=None,
     coordinator_global_rank: int = 0,
 ) -> str:
@@ -384,6 +386,10 @@ def save_checkpoint(
         )
         if group_rank == 0:
             export_draft(draft_model, save_dir, state_dict=draft_state)
+            if training_yaml is not None:
+                Path(save_dir, "training_config.yaml").write_bytes(
+                    training_yaml.encode("utf-8")
+                )
     dist.barrier(group=process_group)
     if dist.get_rank() == coordinator_global_rank:
         print(f"Saved checkpoint to {save_dir}", flush=True)

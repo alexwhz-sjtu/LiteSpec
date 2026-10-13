@@ -13,6 +13,15 @@ Each YAML has a `launcher` section for paths and torchrun settings, plus an
 `arguments` section whose keys map directly to training CLI options. Set  
 exactly one of `launcher.train_data` and `launcher.train_hidden_states`.
 
+All YAML-launched workflows (DLite SFT/teacher/two-stage, DFlash, DFlash2,
+and DSpark) save `training_config.yaml` beside the model in every checkpoint
+directory, including final and phase-boundary saves. This is the original YAML
+captured when the launcher reads it, preserving comments and formatting; later
+edits or deletion of the source file do not affect it. CLI overrides are not
+merged into this source snapshot. Direct CLI runs without a YAML launcher do
+not create a source YAML snapshot. A resumed YAML launch records its new launch
+snapshot in the new checkpoints.
+
 Use `launcher.train_data` for online target-model prefill, or  
 `launcher.train_hidden_states` for offline training. Set only one. Offline mode  
 requires `tp_size: 1` and `shard_draft_by_tp: false`.

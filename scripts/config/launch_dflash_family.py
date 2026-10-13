@@ -30,10 +30,10 @@ ALGORITHMS = {"dflash", "dflash2", "dspark"}
 def load_config(path: Path, algorithm: str) -> tuple[dict[str, str], list[str]]:
     if algorithm not in ALGORITHMS:
         raise ConfigError(f"unsupported algorithm: {algorithm}")
-    launcher, arguments = load_yaml_config(
+    launcher, arguments, yaml_snapshot = load_yaml_config(
         path, identity_key="algorithm", identity_value=algorithm
     )
-    env = launcher_environment(launcher)
+    env = launcher_environment(launcher, yaml_snapshot=yaml_snapshot)
     cli = arguments_to_cli(arguments)
     return env, cli
 

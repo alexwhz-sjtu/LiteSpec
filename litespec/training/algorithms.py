@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
@@ -97,6 +98,10 @@ class TrainingSession:
     total_steps: int = 0
     tp_draft_rank: int | None = None
     teacher_identity: str | None = None
+    # Capture once per run, including resume; checkpoint saves never reread YAML.
+    training_yaml: str | None = field(
+        default_factory=lambda: os.environ.get("LITESPEC_TRAINING_YAML")
+    )
 
     @property
     def process_group(self) -> ProcessGroup | None:

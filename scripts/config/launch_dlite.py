@@ -35,13 +35,13 @@ SCRIPTS = {
 def load_config(path: Path, mode: str) -> tuple[dict[str, str], list[str]]:
     if mode not in MODES:
         raise ConfigError(f"unsupported DLite mode: {mode}")
-    launcher, arguments = load_yaml_config(
+    launcher, arguments, yaml_snapshot = load_yaml_config(
         path,
         identity_key="mode",
         identity_value=mode,
         extra_launcher_keys=("teacher_draft",),
     )
-    env = launcher_environment(launcher)
+    env = launcher_environment(launcher, yaml_snapshot=yaml_snapshot)
     if launcher.get("teacher_draft"):
         env["TEACHER_DRAFT_PATH"] = str(launcher["teacher_draft"])
     cli = arguments_to_cli(arguments)

@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER_PATH = ROOT / "scripts" / "config" / "launch_dlite.py"
@@ -20,14 +21,25 @@ SPEC.loader.exec_module(launcher)
     ],
 )
 def test_repository_dlite_yaml_loads(mode, filename, port):
-    env, cli = launcher.load_config(ROOT / "scripts/config" / filename, mode)
+    path = ROOT / "scripts/config" / filename
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    env, cli = launcher.load_config(path, mode)
 
-    assert env["TARGET_MODEL"] == "Qwen/Qwen3-4B"
-    assert env["TRAIN_DATA_PATH"] == "/path/to/train.jsonl"
-    assert env["NPROC_PER_NODE"] == "8"
+    assert env["TARGET_MODEL"] == str(raw["launcher"]["target_model"])
+    if raw["launcher"].get("train_data"):
+        assert env["TRAIN_DATA_PATH"] == str(raw["launcher"]["train_data"])
+        assert "TRAIN_HIDDEN_STATES_PATH" not in env
+    else:
+        assert env["TRAIN_HIDDEN_STATES_PATH"] == str(
+            raw["launcher"]["train_hidden_states"]
+        )
+        assert "TRAIN_DATA_PATH" not in env
+    assert env["NPROC_PER_NODE"] == str(raw["launcher"]["nproc_per_node"])
     assert env["MASTER_PORT"] == port
-    assert cli[cli.index("--accumulation-steps") + 1] == "1"
-    assert cli[cli.index("--wandb-project") + 1] == "dlite-training"
+    assert cli[cli.index("--accumulation-steps") + 1] == str(
+        raw["arguments"]["accumulation_steps"]
+    )
+    assert cli[cli.index("--wandb-project") + 1] == raw["arguments"]["wandb_project"]
 
 
 def test_two_stage_emits_training_arguments():
