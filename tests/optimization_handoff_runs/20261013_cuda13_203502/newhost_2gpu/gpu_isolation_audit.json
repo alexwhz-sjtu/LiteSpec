@@ -1,0 +1,110 @@
+{
+  "passed": true,
+  "phases": {
+    "torch_a": {
+      "passed": true,
+      "stable_samples": 30,
+      "max_sample_gap_seconds": 1.0973095893859863,
+      "expected_driver_pids": {
+        "GPU-26762b14-c49f-6897-9084-53d1ad30e502": [
+          3232994
+        ],
+        "GPU-898f5fd1-d68d-9e13-b5c8-73f7f413f9bd": [
+          3232995
+        ]
+      },
+      "violations": [],
+      "sm_clock_mhz": {
+        "GPU-26762b14-c49f-6897-9084-53d1ad30e502": {
+          "min": 1785.0,
+          "max": 1980.0,
+          "mean": 1952.5
+        },
+        "GPU-898f5fd1-d68d-9e13-b5c8-73f7f413f9bd": {
+          "min": 1755.0,
+          "max": 1980.0,
+          "mean": 1955.5
+        }
+      }
+    },
+    "auto_b": {
+      "passed": true,
+      "stable_samples": 14,
+      "max_sample_gap_seconds": 1.0949831008911133,
+      "expected_driver_pids": {
+        "GPU-26762b14-c49f-6897-9084-53d1ad30e502": [
+          3242672
+        ],
+        "GPU-898f5fd1-d68d-9e13-b5c8-73f7f413f9bd": [
+          3242673
+        ]
+      },
+      "violations": [],
+      "sm_clock_mhz": {
+        "GPU-26762b14-c49f-6897-9084-53d1ad30e502": {
+          "min": 1620.0,
+          "max": 1980.0,
+          "mean": 1880.357142857143
+        },
+        "GPU-898f5fd1-d68d-9e13-b5c8-73f7f413f9bd": {
+          "min": 1740.0,
+          "max": 1980.0,
+          "mean": 1916.7857142857142
+        }
+      }
+    },
+    "auto_b_repeat": {
+      "passed": true,
+      "stable_samples": 14,
+      "max_sample_gap_seconds": 1.1096768379211426,
+      "expected_driver_pids": {
+        "GPU-26762b14-c49f-6897-9084-53d1ad30e502": [
+          3249946
+        ],
+        "GPU-898f5fd1-d68d-9e13-b5c8-73f7f413f9bd": [
+          3249947
+        ]
+      },
+      "violations": [],
+      "sm_clock_mhz": {
+        "GPU-26762b14-c49f-6897-9084-53d1ad30e502": {
+          "min": 1710.0,
+          "max": 1980.0,
+          "mean": 1879.2857142857142
+        },
+        "GPU-898f5fd1-d68d-9e13-b5c8-73f7f413f9bd": {
+          "min": 1680.0,
+          "max": 1980.0,
+          "mean": 1886.7857142857142
+        }
+      }
+    },
+    "torch_a_repeat": {
+      "passed": true,
+      "stable_samples": 14,
+      "max_sample_gap_seconds": 1.0891780853271484,
+      "expected_driver_pids": {
+        "GPU-26762b14-c49f-6897-9084-53d1ad30e502": [
+          3257532
+        ],
+        "GPU-898f5fd1-d68d-9e13-b5c8-73f7f413f9bd": [
+          3257533
+        ]
+      },
+      "violations": [],
+      "sm_clock_mhz": {
+        "GPU-26762b14-c49f-6897-9084-53d1ad30e502": {
+          "min": 1710.0,
+          "max": 1980.0,
+          "mean": 1905.0
+        },
+        "GPU-898f5fd1-d68d-9e13-b5c8-73f7f413f9bd": {
+          "min": 1695.0,
+          "max": 1980.0,
+          "mean": 1921.0714285714287
+        }
+      }
+    }
+  },
+  "limitation": "Sampling cannot rule out activity shorter than the sampling interval."
+}

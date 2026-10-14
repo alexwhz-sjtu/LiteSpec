@@ -1,0 +1,56 @@
+[
+  {
+    "name": "torch_a",
+    "backend": "torch",
+    "steps": 60,
+    "trace_step": null,
+    "started": 1791906834.8553445,
+    "ended": 1791906912.2122552,
+    "exit_code": 0
+  },
+  {
+    "name": "auto_b",
+    "backend": "auto",
+    "steps": 60,
+    "trace_step": null,
+    "started": 1791906912.27131,
+    "ended": 1791906972.232916,
+    "exit_code": 0
+  },
+  {
+    "name": "auto_b_repeat",
+    "backend": "auto",
+    "steps": 60,
+    "trace_step": null,
+    "started": 1791906972.2890553,
+    "ended": 1791907033.4139855,
+    "exit_code": 0
+  },
+  {
+    "name": "torch_a_repeat",
+    "backend": "torch",
+    "steps": 60,
+    "trace_step": null,
+    "started": 1791907033.6662438,
+    "ended": 1791907094.1138325,
+    "exit_code": 0
+  },
+  {
+    "name": "profile_auto",
+    "backend": "auto",
+    "steps": 12,
+    "trace_step": 10,
+    "started": 1791907094.2565727,
+    "ended": 1791907144.285017,
+    "exit_code": 0
+  },
+  {
+    "name": "stability_auto",
+    "backend": "auto",
+    "steps": 450,
+    "trace_step": null,
+    "started": 1791907144.3463066,
+    "ended": 1791907314.0180647,
+    "exit_code": 0
+  }
+]

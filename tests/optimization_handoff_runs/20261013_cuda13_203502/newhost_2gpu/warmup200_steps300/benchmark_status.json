@@ -1,0 +1,38 @@
+[
+  {
+    "name": "torch_a",
+    "backend": "torch",
+    "steps": 300,
+    "trace_step": null,
+    "started": 1791911326.376635,
+    "ended": 1791911507.67343,
+    "exit_code": 0
+  },
+  {
+    "name": "auto_b",
+    "backend": "auto",
+    "steps": 300,
+    "trace_step": null,
+    "started": 1791911507.7405229,
+    "ended": 1791911630.4846838,
+    "exit_code": 0
+  },
+  {
+    "name": "auto_b_repeat",
+    "backend": "auto",
+    "steps": 300,
+    "trace_step": null,
+    "started": 1791911630.5438008,
+    "ended": 1791911749.7113523,
+    "exit_code": 0
+  },
+  {
+    "name": "torch_a_repeat",
+    "backend": "torch",
+    "steps": 300,
+    "trace_step": null,
+    "started": 1791911749.7708743,
+    "ended": 1791911870.6180167,
+    "exit_code": 0
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "completed": true,
+  "world_size": 2,
+  "steps_per_trial": 300,
+  "warmup_steps": 200,
+  "measurement_step_range": [
+    201,
+    300
+  ],
+  "common_normal_steps": 98,
+  "gpu_isolation_passed": true,
+  "source": "formal regen_full",
+  "numerical_trajectory_equivalence_unverified": true
+}

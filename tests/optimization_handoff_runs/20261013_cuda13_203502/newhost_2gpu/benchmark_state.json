@@ -1,0 +1,10 @@
+{
+  "name": "complete",
+  "updated": 1791907314.0401819,
+  "host": "dsw-540652-5d64c98d65-cxjkw",
+  "controller_pid": 2693904,
+  "world_size": 2,
+  "dataset": "formal regen_full",
+  "abba_steps": 60,
+  "stability_steps": 450
+}

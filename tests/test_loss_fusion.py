@@ -162,3 +162,34 @@ def test_compiled_loss_boundary_gradients(monkeypatch, case):
     torch.testing.assert_close(outputs[1][0], outputs[0][0], rtol=3e-5, atol=3e-5)
     torch.testing.assert_close(outputs[1][1], outputs[0][1], rtol=3e-5, atol=2e-5)
     torch.testing.assert_close(outputs[1][2], outputs[0][2], rtol=3e-5, atol=2e-6)
+
+
+@pytest.mark.parametrize("kind", ["ce", "ce_l1"])
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_fp32_loss_preserves_bf16_projection_gradient(monkeypatch, kind):
+    # DLite's BF16 head is cast to FP32 before CE. FP32-close gradients can
+    # straddle a BF16 rounding midpoint and alter the first optimizer update.
+    torch.manual_seed(61)
+    logits = (torch.randn(32, 151936, device="cuda") * 0.25).bfloat16()
+    # Equal distributions make the L1 gradient zero, isolating CE through
+    # both public APIs while still exercising the combined compiled path.
+    teacher = logits.detach().clone()
+    labels = torch.randint(logits.size(-1), (logits.size(0),), device="cuda")
+    weights = torch.rand(logits.size(0), device="cuda")
+    gradients = []
+    values = []
+    for backend in ("torch", "inductor"):
+        monkeypatch.setenv("LITESPEC_LOSS_BACKEND", backend)
+        head_output = logits.detach().clone().requires_grad_(True)
+        if kind == "ce":
+            ce, _ = losses.weighted_cross_entropy(head_output.float(), labels, weights)
+            objective = 0.1 * ce
+        else:
+            ce, l1, *_ = losses.weighted_ce_l1(
+                head_output.float(), labels, teacher, weights
+            )
+            objective = 0.1 * ce + l1
+        values.append(objective.detach())
+        gradients.append(torch.autograd.grad(objective, head_output)[0])
+    torch.testing.assert_close(values[1], values[0], rtol=3e-5, atol=3e-5)
+    torch.testing.assert_close(gradients[1], gradients[0], rtol=0, atol=0)

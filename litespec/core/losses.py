@@ -2,8 +2,9 @@
 
 The eager functions are the numerical reference, including input-dtype CE
 semantics and FP32 distribution losses. CPU and small workloads stay eager.
-Low-precision CE and L1 softmax stay native to preserve rounding/subgradients;
-the eligible reductions use Inductor-generated Triton and first-order autograd.
+CE and L1 softmax stay native to preserve rounding/subgradients, including
+FP32 logits cast from a BF16 head. Eligible distribution reductions use
+Inductor-generated Triton and first-order autograd.
 Set LITESPEC_LOSS_BACKEND=torch to compare an entire run against the reference,
 or inductor to explicitly exercise compilation in numerical/throughput tests.
 """
@@ -38,11 +39,12 @@ def _l1_probs(draft, target, weights, diagnostics=False):
     distance = (draft - target).abs().sum(dim=-1)
     result = ((distance * weights).sum(), distance.detach())
     if diagnostics:
-        return (
-            *result,
-            target.max(dim=-1).values.detach(),
-            draft.max(dim=-1).values.detach(),
-        )
+        # Detached diagnostics must not save autograd state: logging-only
+        # maxima are skipped when the objective is checkpoint-recomputed.
+        with torch.no_grad():
+            target_top1 = target.max(dim=-1).values
+            draft_top1 = draft.max(dim=-1).values
+        return (*result, target_top1, draft_top1)
     return result
 
 
@@ -106,11 +108,11 @@ def _run(function, *args):
 
 def weighted_cross_entropy(logits, labels, weights):
     """Return an additive numerator and detached, unweighted per-token CE."""
-    if logits.dtype != torch.float32:
-        # PyTorch 2.9 Inductor promotes low-precision CE intermediates even
-        # with emulate_precision_casts. Keep native CE's rounding contract.
-        return _ce(logits, labels, weights)
-    return _run(_ce, logits, labels, weights)
+    # FP32 logits may have been cast from a BF16 projection. Compiling CE's
+    # log-softmax can shift its FP32 gradient across BF16 rounding midpoints,
+    # changing model gradients and optimizer updates despite a close loss.
+    _should_compile(logits)  # Validate the configured backend on this path.
+    return _ce(logits, labels, weights)
 
 
 def weighted_ce_l1(logits, labels, teacher_logits, weights, *, diagnostics=False):
@@ -122,11 +124,18 @@ def weighted_ce_l1(logits, labels, teacher_logits, weights, *, diagnostics=False
     # and changing L1's subgradient. Fuse the reduction after this boundary.
     target = torch.softmax(teacher_logits.detach().float(), dim=-1)
     draft = torch.softmax(logits.float(), dim=-1)
-    if logits.dtype != torch.float32:
-        ce, values = _ce(logits, labels, weights)
-        l1 = _run(_l1_probs, draft, target, weights, diagnostics)
-        return ce, l1[0], values, *l1[1:]
-    return _run(_ce_l1_probs, logits, labels, draft, target, weights, diagnostics)
+    # The dtype at this API cannot tell whether logits came from a BF16 head.
+    # Keep native CE forward/backward for every dtype, and compile only L1's
+    # reduction after the native probability boundary.
+    ce, values = _ce(logits, labels, weights)
+    # Keep the training kernel identical on log/non-log steps and checkpoint
+    # replay. Logging-only maxima must not specialize its reduction/backward.
+    l1 = _run(_l1_probs, draft, target, weights, False)
+    result = (ce, l1[0], values, *l1[1:])
+    if diagnostics:
+        with torch.no_grad():
+            return (*result, target.max(dim=-1).values, draft.max(dim=-1).values)
+    return result
 
 
 def weighted_kl(logits, teacher_logits, weights):

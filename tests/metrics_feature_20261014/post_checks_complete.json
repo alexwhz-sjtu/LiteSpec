@@ -1,0 +1,12 @@
+{
+  "complete": true,
+  "checks": [
+    "functional111",
+    "cuda_loss55",
+    "scheduling6",
+    "public_config",
+    "legacy_FP32_rounding_bound_and_BF16_leaf_gradients",
+    "same_cache_training_ABBA"
+  ],
+  "benchmark_summary": "/diancpfs/user/wanghanzhen/LiteSpec/tests/optimization_handoff_runs/20261013_cuda13_203502/newhost_2gpu/logging_metrics_warmup200_steps300/summary.json"
+}

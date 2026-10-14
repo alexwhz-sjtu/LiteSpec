@@ -1,0 +1,1565 @@
+diff --git a/README.md b/README.md
+index 10ca339..2b43705 100644
+--- a/README.md
++++ b/README.md
+@@ -18,8 +18,9 @@ The repository contains the complete training stack. The sibling `DLite/`
+ repository is the smaller inference-only release.
+ 
+ ```bash
+-uv sync --frozen
+-uv run pytest -q tests
++uv sync --frozen --extra cu128  # Use --extra cu130 for CUDA 13.0
++source .venv/bin/activate
++python -m pytest -q tests
+ ```
+ 
+ 
+@@ -29,13 +30,14 @@ uv run pytest -q tests
+ The supported environment is Linux with:
+ 
+ - CPython 3.11 (the repository pins it in `.python-version`);
+-- an NVIDIA GPU with BF16 support and a driver compatible with CUDA 12.8;
+-- a CUDA 12.x toolkit when CUDA extensions must be built from source;
++- an NVIDIA GPU with BF16 support and a driver compatible with the selected CUDA runtime (12.8 or 13.0);
++- a CUDA 12.x or 13.x toolkit matching the selected PyTorch CUDA major version when extensions must be built from source;
+ - a C/C++ compiler and Git;
+ - [uv](https://docs.astral.sh/uv/) 0.11 or newer.
+ 
+-PyTorch 2.9.1 and its CUDA 12.8 runtime libraries are installed from the lock
+-file. The system CUDA toolkit is only used to compile extensions, but its major
++PyTorch 2.9.1 supports both CUDA 12.8 (`cu128`) and CUDA 13.0 (`cu130`).
++Both builds and their runtime libraries are recorded in the lock file.
++The system CUDA toolkit is only used to compile extensions, but its major
+ version must match the PyTorch CUDA build. Check the environment before
+ installing:
+ 
+@@ -50,15 +52,28 @@ Create the complete development and training environment from the checked-in
+ lock file:
+ 
+ ```bash
+-uv sync --frozen
++# CUDA 12.8:
++uv sync --frozen --extra cu128
++# Or, for CUDA 13.0:
++# uv sync --frozen --extra cu130
+ source .venv/bin/activate
+ python -m pytest -q tests
+ ```
+ 
++Select exactly one CUDA extra. For CUDA 13.0, set `CUDA_HOME` to your
++CUDA 13.0 toolkit (for example `/usr/local/cuda-13.0`) and add its `bin`
++directory to `PATH` before syncing. The CUDA extras are mutually exclusive.
++When using `uv run`, pass the same extra, such as `uv run --extra cu130 ...`,
++to preserve the selected build.
++
+ `uv` builds `causal-conv1d` against the lockfile's exact PyTorch ABI, which is
+ required by Qwen3.5's hybrid linear-attention layers. Activate `.venv` before
+-running project commands. The lock file uses the public PyPI registry; a mirror
+-can be selected locally with `UV_DEFAULT_INDEX` without changing project files.
++running project commands. General dependencies use public PyPI; PyTorch
++CUDA builds use its official indexes. The `cu130` extra also selects the
++matching SGLang kernel from its official GitHub release, because its CUDA 13
++index contains stale checksums. Release checksums are recorded in `uv.lock`.
++A PyPI mirror can be selected locally with `UV_DEFAULT_INDEX` without
++changing project files.
+ 
+ FlashAttention is optional. Install the regular dependencies first so PyTorch
+ is available while FlashAttention is built:
+diff --git a/pyproject.toml b/pyproject.toml
+index 09c2be4..3de4317 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -44,6 +44,8 @@ Issues = "https://github.com/alexwhz-sjtu/LiteSpec/issues"
+ 
+ [project.optional-dependencies]
+ fa = ["flash-attn"]
++cu128 = ["torch==2.9.1", "torchaudio==2.9.1", "torchvision==0.24.1"]
++cu130 = ["torch==2.9.1", "torchaudio==2.9.1", "torchvision==0.24.1", "sgl-kernel==0.3.21"]
+ 
+ [dependency-groups]
+ dev = [
+@@ -60,6 +62,7 @@ version = {file = "version.txt"}
+ 
+ [tool.uv]
+ preview = true
++conflicts = [[{ extra = "cu128" }, { extra = "cu130" }]]
+ 
+ [[tool.uv.index]]
+ name = "pypi"
+@@ -69,3 +72,23 @@ default = true
+ [tool.uv.extra-build-dependencies]
+ # This CUDA extension must use the exact PyTorch C++ ABI selected by the lock.
+ causal-conv1d = [{ requirement = "torch", match-runtime = true }]
++
++[[tool.uv.index]]
++name = "pytorch-cu128"
++url = "https://download.pytorch.org/whl/cu128"
++explicit = true
++
++[[tool.uv.index]]
++name = "pytorch-cu130"
++url = "https://download.pytorch.org/whl/cu130"
++explicit = true
++
++[tool.uv.sources]
++# The upstream CUDA 13 index has stale hashes; use verified release assets.
++sgl-kernel = [
++    { url = "https://github.com/sgl-project/whl/releases/download/v0.3.21/sgl_kernel-0.3.21%2Bcu130-cp310-abi3-manylinux2014_x86_64.whl", extra = "cu130", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
++    { url = "https://github.com/sgl-project/whl/releases/download/v0.3.21/sgl_kernel-0.3.21%2Bcu130-cp310-abi3-manylinux2014_aarch64.whl", extra = "cu130", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" },
++]
++torch = [{ index = "pytorch-cu128", extra = "cu128" }, { index = "pytorch-cu130", extra = "cu130" }]
++torchaudio = [{ index = "pytorch-cu128", extra = "cu128" }, { index = "pytorch-cu130", extra = "cu130" }]
++torchvision = [{ index = "pytorch-cu128", extra = "cu128" }, { index = "pytorch-cu130", extra = "cu130" }]
+diff --git a/tests/benchmark_loss_fusion.py b/tests/benchmark_loss_fusion.py
+index ae2ae99..73c11f3 100644
+--- a/tests/benchmark_loss_fusion.py
++++ b/tests/benchmark_loss_fusion.py
+@@ -8,6 +8,8 @@ import gc
+ import json
+ import os
+ import statistics
++import subprocess
++import time
+ from pathlib import Path
+ 
+ import torch
+@@ -32,6 +34,15 @@ def main():
+     )
+     parser.add_argument("--dtype", choices=("float32", "bfloat16"), default="float32")
+     args = parser.parse_args()
++    def visible_gpu_processes():
++        query = subprocess.run(
++            ["nvidia-smi", "--query-compute-apps=pid,gpu_uuid", "--format=csv,noheader,nounits"],
++            capture_output=True, text=True, check=True,
++        )
++        return [(int(pid.strip()), uuid.strip()) for pid, uuid in
++                (line.split(",", 1) for line in query.stdout.splitlines() if line.strip())]
++
++    before_context = visible_gpu_processes()
+     torch.manual_seed(17)
+     dtype = getattr(torch, args.dtype)
+     x = torch.randn(
+@@ -40,9 +51,20 @@ def main():
+     target = torch.randn_like(x)
+     labels = torch.randint(args.vocab, (args.rows,), device="cuda")
+     weights = torch.rand(args.rows, device="cuda")
++    gpu_uuid = str(torch.cuda.get_device_properties(x.device).uuid)
++    if not gpu_uuid.startswith("GPU-"):
++        gpu_uuid = "GPU-" + gpu_uuid
++    after_context = visible_gpu_processes()
++    preexisting = [pid for pid, uuid in before_context if uuid == gpu_uuid]
++    own_candidates = [pid for pid, uuid in after_context if uuid == gpu_uuid]
++    if preexisting or len(own_candidates) != 1:
++        raise RuntimeError(f"Cannot verify an initially idle, single-process GPU: {before_context}, {after_context}")
++    pid_mapping = {"container_pid": os.getpid(), "driver_pid": own_candidates[0],
++                   "gpu_uuid": gpu_uuid, "method": "empty before CUDA allocation; exactly one driver process after allocation"}
+     results = {}
+     for kind in ("ce", "ce_l1", "kl"):
+         steps = {}
++        warmups = {}
+         for backend in ("torch", "inductor"):
+             os.environ["LITESPEC_LOSS_BACKEND"] = backend
+ 
+@@ -57,10 +79,22 @@ def main():
+                     loss = weighted_kl(x, target, weights)
+                 loss.backward()
+ 
+-            for _ in range(3):
++            torch.cuda.synchronize()
++            warmup_started = time.perf_counter()
++            step()
++            torch.cuda.synchronize()
++            first_step_ms = (time.perf_counter() - warmup_started) * 1000
++            for _ in range(2):
+                 step()
+             torch.cuda.synchronize()
++            warmups[backend] = {
++                "first_step_wall_ms": first_step_ms,
++                "three_step_warmup_wall_ms": (time.perf_counter() - warmup_started) * 1000,
++            }
+             steps[backend] = step
++        from torch._dynamo.utils import counters
++
++        graphs_before_timing = counters["stats"]["unique_graphs"]
+         times = {name: [] for name in steps}
+         peaks = {name: [] for name in steps}
+         for trial in range(args.trials):
+@@ -82,11 +116,16 @@ def main():
+                 peaks[backend].append(
+                     (torch.cuda.max_memory_allocated() - base) / 2**20
+                 )
++        graphs_after_timing = counters["stats"]["unique_graphs"]
++        if graphs_after_timing != graphs_before_timing:
++            raise RuntimeError("New graphs compiled inside the measured trials")
+         for backend in steps:
+             result = {
+                 "ms": statistics.median(times[backend]),
+                 "trials_ms": times[backend],
+                 "extra_peak_mib": max(peaks[backend]),
++                "warmup": warmups[backend],
++                "new_graphs_during_trials": graphs_after_timing - graphs_before_timing,
+             }
+             results[f"{kind}/{backend}"] = result
+             print(json.dumps({f"{kind}/{backend}": result}), flush=True)
+@@ -95,6 +134,9 @@ def main():
+             k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()
+         },
+         "torch": torch.__version__,
++        "cuda": torch.version.cuda,
++        "gpu_process_identity": pid_mapping,
++        "inductor_cache_dir": os.environ.get("TORCHINDUCTOR_CACHE_DIR"),
+         "gpu": torch.cuda.get_device_name(),
+         "results": results,
+     }
+diff --git a/tests/training_optimization_handoff.md b/tests/training_optimization_handoff.md
+index 1950ff1..f405a6e 100644
+--- a/tests/training_optimization_handoff.md
++++ b/tests/training_optimization_handoff.md
+@@ -1,6 +1,6 @@
+ # LiteSpec 训练优化交接文档
+ 
+-记录日期：2026-10-13。源码位置：`/data/wanghanzhen/projects/SpecDecoding/LiteSpec`。
++记录日期：2026-10-13。
+ 
+ 本文对应当前工作树，供迁移机器后继续实验、检查数值和修改代码使用。实现及小规模正确性检查已完成，**最终实现的可靠性能测量尚未完成**：旧机器存在其他任务占用，已有 GPU 计时受干扰，而且旧测量早于最后一次 L1 精度修正。
+ 
+@@ -263,3 +263,91 @@ LITESPEC_LOSS_BACKEND=auto .venv/bin/python scripts/config/launch_dflash_family.
+ - 接收机器 `223.76.225.211:56780` 此前从当前环境探测返回 TCP `Connection refused`，未进入 SSH 密钥验证阶段；连接和认证均未完成。该记录只代表当时的探测结果，不是持续监控结论。
+ 
+ 交接完成的标准：新机器能复现正确性检查，并为最终代码生成可信的独占 GPU 微基准和真实训练测量；在此之前，不承诺吞吐提升比例或长程训练完全一致。
++
++
++## 9. 新机器接续验证记录（CUDA 13.0）
++
++2026-10-13 在 `/diancpfs/user/wanghanzhen/LiteSpec` 接续。当前 HEAD 为
++`97e65478e6425cd81915b34b50d53914bc3e804a`，已确认 `afbb9ed` 是其祖先；
++两者之间没有公共 loss/core 的变化。已有 CUDA 12.8/13.0 安装配置修改继续保留。
++
++当前环境为 Python 3.11.17、PyTorch 2.9.1+cu130、CUDA runtime/toolkit 13.0，
++8 张 NVIDIA L20Z（计算能力 9.0）。目标模型为
++`/diancpfs/user/wanghanzhen/artifacts/models/Qwen3-8B`。该模型实际有 **36 层**、
++hidden size 4096、vocab size 151936；final-norm ID 是 **35**，不能由
++`target_layer_ids` 中的 31 推断最后一层。
++
++本次结果目录：`tests/optimization_handoff_runs/20261013_cuda13_203502`。
++
++- `loss-tests.log`：31 passed，重新验证了相等/近似相等分布的梯度、混合精度和 checkpoint 边界。
++- `framework-tests.log`：47 passed，覆盖计算复用、训练重构和 DFlash 系列。
++- `recompute.log`：当前 CPU 重算计数与梯度对照通过。
++- `fsdp-loss.log`：双卡 FSDP、梯度累积和恢复 PASS，观测 max master error=0。
++- `muon.log`：matrices_per_rank=1、2 均 PASS，观测 max master error=0。
++
++### 新微基准
++
++`verified_microbench/` 覆盖 rows=128/512/2048、vocab=32768/151936 和
++FP32/BF16，共 12 组，30 iterations × 7 trials。第一次未加入 PID 映射的
++测量保留在结果根目录，汇总使用 `verified_microbench/` 的复测结果。
++新脚本记录首次调用和三次预热的 wall time，并断言计时轮次没有新增编译图。
++
++为处理容器与驱动 PID 不一致，先观察 CUDA 上下文建立前 GPU 没有计算进程，
++再将分配后唯一的驱动 PID 与本次 benchmark PID 对应。测量期间持续采样，
++核对同一 GPU UUID 上没有其他可见进程。采样实际最大间隔约 2.43 秒，
++不排除采样间隔内的短暂外部活动。原始记录见 `gpu-monitor.jsonl`；
++每组核对结果、原始时间和显存记录见 `microbench_summary.json`。
++
++shape [512,151936] 的 FP32 CE/CE+L1/KL，eager→inductor 中位数分别为
++0.964→0.454 ms、3.953→2.888 ms、2.661→1.643 ms。
++BF16 CE 仍为原生路径，0.513→0.515 ms；BF16 CE+L1 为
++3.974→3.463 ms，KL 为 3.297→1.705 ms。
++最终 CE+L1 的额外 allocated 峰值基本不变，不能沿用旧版本的显存下降结论。
++
++这些数据只覆盖 loss 前向+反向，不能解释为真实训练 step 加速比。
++小 shape（尤其 [128,32768]）存在明显编译回退收益不足，当前 auto 门槛仍待校准；
++部分 BF16 CE 原生对照也有波动，应加长测量后再设新阈值。
++公共 loss 数值保护保持原样，尚未因性能结果修改生产路径。
++
++### 正式数据和 full cache
++
++用户指定输入：`cache/data/prompts/wildchat_chinese_turns_le2.jsonl`，
++4,586 条记录、5,794 个用户回合。已验证物理 JSONL 行能正确解析；
++不能用 `str.splitlines()` 拆分这份输入，因为用户文本包含 Unicode 行分隔符。
++
++按照用户选择保存 0、8、16、24、31 层，并另外自动保存第 35 层 final-norm；
++max_length=10240，TP=1，batch=1，shard_size=512。先以 Qwen3-8B
++生成 assistant 回答（temperature=0.7、top-k=15、max_tokens=4096、thinking 关闭），
++恢复输入记录顺序后再生成 `regen_full`。5 条 probe 的生成、缓存、训练读取器
++checksum 和 tensor shape 检查通过。全量阶段状态和命令保存在
++`cache_pipeline/state.json`；缓存生成中，尚未记为完成。
++
++预定输出：
++
++- token-only：`cache/data/regen_token_only/wildchat_chinese_turns_le2_qwen3_8b_temp0.7_topk15_max4096.jsonl`；
++- full cache：`cache/data/regen_full/wildchat_chinese_turns_le2_qwen3_8b`。
++
++先前在线 fixture 训练启动被 SSH 断开导致的 SIGHUP 中断，未据此得出训练失败或数值结论。
++后续数据 pipeline 使用独立 session，子任务也使用 `start_new_session=True`，
++避免 SSH 断开终止 torchrun。用户已要求先完成正式 full cache，后续真实训练
++对照将使用该缓存；offline 吞吐不能与旧 online/48-rank 配置直接比较。
++
++### 更换服务器并恢复打包（2026-10-13）
++
++用户将 SSH 地址改为 `root@47.237.165.176 -p 971`，并确认旧服务器已经停止或释放。
++两台服务器共享 `/diancpfs`。新机器有 2 张 NVIDIA L20Z；原 `.venv` 指向旧机器
++的本地 `/root/.cache/uv`，已在新机器本地按相同锁文件重建，未更换共享 `.venv` 链接。
++PyTorch 2.9.1+cu130、BF16、causal-conv1d 前向/反向、SGLang Engine、
++sgl-kernel 和 flashinfer rmsnorm 检查通过，`uv pip check` 通过。
++安装和验证记录保存在 `tests/environment-setup/newhost-uv-sync.log`。
++
++全量回答生成已经完成：4,586 条记录，0 错误。原隐藏状态生成任务在最后打包阶段
++中断，已有 8 个完整分片；暂存文件与已提交分片的样本索引合起来完整覆盖
++0..4585，错误日志为空。使用仓库 `finalize_staging` 恢复最后 490 条的打包，
++不重新生成回答或隐藏状态。恢复状态见 `cache_pipeline/recovery_state.json`；
++最终读取器校验结果将写入 `cache_pipeline/full_validation.json`。
++
++后续正式数据 smoke 和吞吐/稳定性对照采用单机 2 rank、TP=1 的 offline DLite。
++保持 batch=1、accumulation=1、seed=42、num_anchors=512、block_size=8 和
++原 loss/Muon 设置。结果放在 `newhost_2gpu/`；不能据此宣称旧 48-rank online
++配置约 400 步故障已修复。
+diff --git a/uv.lock b/uv.lock
+index b887d22..9991159 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -1,11 +1,25 @@
+ version = 1
+-revision = 3
++revision = 5
+ requires-python = "==3.11.*"
+ resolution-markers = [
+-    "sys_platform == 'win32'",
+-    "sys_platform == 'emscripten'",
+-    "sys_platform != 'emscripten' and sys_platform != 'win32'",
+-]
++    "sys_platform == 'win32' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "sys_platform == 'emscripten' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')",
++    "platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')",
++    "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform == 'win32' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform == 'emscripten' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++]
++conflicts = [[
++    { package = "litespec", extra = "cu128" },
++    { package = "litespec", extra = "cu130" },
++]]
+ 
+ [[package]]
+ name = "accelerate"
+@@ -18,7 +32,9 @@ dependencies = [
+     { name = "psutil" },
+     { name = "pyyaml" },
+     { name = "safetensors" },
+-    { name = "torch" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/ca/14/787e5498cd062640f0f3d92ef4ae4063174f76f9afd29d13fc52a319daae/accelerate-1.13.0.tar.gz", hash = "sha256:d631b4e0f5b3de4aff2d7e9e6857d164810dfc3237d54d017f075122d057b236", size = 402835, upload-time = "2026-03-04T19:34:12.359Z" }
+ wheels = [
+@@ -209,7 +225,7 @@ name = "build"
+ version = "1.5.0"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "colorama", marker = "os_name == 'nt'" },
++    { name = "colorama", marker = "(os_name == 'nt' and platform_machine != 'aarch64' and platform_machine != 'x86_64') or (os_name == 'nt' and platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (os_name == 'nt' and platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and extra != 'extra-8-litespec-cu130') or (os_name == 'nt' and platform_machine == 'x86_64' and extra == 'extra-8-litespec-cu128') or (os_name == 'nt' and platform_machine == 'x86_64' and extra != 'extra-8-litespec-cu130') or (os_name == 'nt' and platform_machine == 'aarch64' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (os_name == 'nt' and sys_platform != 'linux') or (os_name != 'nt' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "packaging" },
+     { name = "pyproject-hooks" },
+ ]
+@@ -225,7 +241,9 @@ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+     { name = "ninja" },
+     { name = "packaging" },
+-    { name = "torch" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/f4/d1/eba27735f31bd5527d39a3c7f693e6ded7b844cab275db719a15ad37b6cd/causal_conv1d-1.7.0.tar.gz", hash = "sha256:3202758494eaa7b597ce1c282dfa188889506bfcb92cad3c407d26736bfcd32b", size = 30328, upload-time = "2026-08-20T10:54:15.808Z" }
+ 
+@@ -243,7 +261,7 @@ name = "cffi"
+ version = "2.0.0"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
++    { name = "pycparser", marker = "implementation_name != 'PyPy' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/eb/56/b1ba7935a17738ae8453301356628e8147c79dbb825bcbc73dc7401f9846/cffi-2.0.0.tar.gz", hash = "sha256:44d1b5909021139fe36001ae048dbdde8214afa20200eda0f64c068cac5d5529", size = 523588, upload-time = "2025-09-08T23:24:04.541Z" }
+ wheels = [
+@@ -301,7 +319,7 @@ name = "click"
+ version = "8.4.1"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "colorama", marker = "sys_platform == 'win32'" },
++    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/9b/98/518d8e5081007684232226f475082b30087d0f585e8457db087298259f49/click-8.4.1.tar.gz", hash = "sha256:918b5633eddf6b41c32d4f454bf0de810065c74e3f7dbf8ee5452f8be88d3e96", size = 353007, upload-time = "2026-05-22T04:08:37.769Z" }
+ wheels = [
+@@ -333,7 +351,9 @@ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+     { name = "loguru" },
+     { name = "pydantic" },
+-    { name = "torch" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
+     { name = "transformers" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/41/1b/c3c4a98ec5f2727656336f07a0c35862195c310d8eb0b2fa5b4be6848680/compressed_tensors-0.15.0.1.tar.gz", hash = "sha256:a8e93054e8a5ec49c980b09ed36c4c1249b4a8ee167920a8e461c4da26e78d99", size = 229412, upload-time = "2026-04-10T14:23:54.708Z" }
+@@ -526,7 +546,9 @@ version = "2.8.3"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+     { name = "einops" },
+-    { name = "torch" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/3b/b2/8d76c41ad7974ee264754709c22963447f7f8134613fd9ce80984ed0dab7/flash_attn-2.8.3.tar.gz", hash = "sha256:1e71dd64a9e0280e0447b8a0c2541bad4bf6ac65bdeaa2f90e51a9e57de0370d", size = 8447812, upload-time = "2025-08-15T08:28:12.911Z" }
+ 
+@@ -572,7 +594,9 @@ dependencies = [
+     { name = "packaging" },
+     { name = "requests" },
+     { name = "tabulate" },
+-    { name = "torch" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
+     { name = "tqdm" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/d6/aa/c564313b42dee7573da4ed0e441844f0c2bd827aecc9f29ea02c3838ffae/flashinfer_python-0.6.3.tar.gz", hash = "sha256:84a762538247a86bc52ff31d9505d161ce1ec059174c1821c87c3ed1e44670fc", size = 5181963, upload-time = "2026-02-06T00:28:23.294Z" }
+@@ -786,7 +810,7 @@ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+     { name = "filelock" },
+     { name = "fsspec" },
+-    { name = "hf-xet", marker = "platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'" },
++    { name = "hf-xet", marker = "platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "packaging" },
+     { name = "pyyaml" },
+     { name = "requests" },
+@@ -839,12 +863,12 @@ name = "ipython"
+ version = "9.13.0"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "colorama", marker = "sys_platform == 'win32'" },
++    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "decorator" },
+     { name = "ipython-pygments-lexers" },
+     { name = "jedi" },
+     { name = "matplotlib-inline" },
+-    { name = "pexpect", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
++    { name = "pexpect", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "prompt-toolkit" },
+     { name = "psutil" },
+     { name = "pygments" },
+@@ -955,6 +979,76 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/82/3d/14ce75ef66813643812f3093ab17e46d3a206942ce7376d31ec2d36229e7/lark-1.3.1-py3-none-any.whl", hash = "sha256:c629b661023a014c37da873b4ff58a817398d12635d3bbb2c5a03be7fe5d1e12", size = 113151, upload-time = "2025-10-27T18:25:54.882Z" },
+ ]
+ 
++[[package]]
++name = "litespec"
++source = { editable = "." }
++dependencies = [
++    { name = "accelerate" },
++    { name = "causal-conv1d" },
++    { name = "datasets" },
++    { name = "flash-linear-attention", extra = ["conv1d"] },
++    { name = "huggingface-hub" },
++    { name = "loguru" },
++    { name = "ninja" },
++    { name = "numpy" },
++    { name = "openai-harmony" },
++    { name = "packaging" },
++    { name = "psutil" },
++    { name = "pydantic" },
++    { name = "pyyaml" },
++    { name = "qwen-vl-utils" },
++    { name = "rich" },
++    { name = "safetensors" },
++    { name = "sglang" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
++    { name = "torchaudio", version = "2.9.1", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchaudio", version = "2.9.1", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchaudio", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torchaudio", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchaudio", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "tqdm" },
++    { name = "transformers" },
++    { name = "typing-extensions" },
++    { name = "wandb" },
++    { name = "yunchang" },
++]
++
++[package.optional-dependencies]
++cu128 = [
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" } },
++    { name = "torchaudio", version = "2.9.1", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchaudio", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++cu130 = [
++    { name = "sgl-kernel", version = "0.3.21", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'x86_64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu130')" },
++    { name = "sgl-kernel", version = "0.3.21", source = { url = "https://github.com/sgl-project/whl/releases/download/v0.3.21/sgl_kernel-0.3.21%2Bcu130-cp310-abi3-manylinux2014_aarch64.whl" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "sgl-kernel", version = "0.3.21", source = { url = "https://github.com/sgl-project/whl/releases/download/v0.3.21/sgl_kernel-0.3.21%2Bcu130-cp310-abi3-manylinux2014_x86_64.whl" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'x86_64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" } },
++    { name = "torchaudio", version = "2.9.1", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchaudio", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++fa = [
++    { name = "flash-attn" },
++]
++
++[package.dev-dependencies]
++dev = [
++    { name = "build" },
++    { name = "pre-commit" },
++    { name = "pytest" },
++]
++
+ [[package]]
+ name = "llguidance"
+ version = "0.7.30"
+@@ -975,8 +1069,8 @@ name = "loguru"
+ version = "0.7.3"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "colorama", marker = "sys_platform == 'win32'" },
+-    { name = "win32-setctime", marker = "sys_platform == 'win32'" },
++    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "win32-setctime", marker = "sys_platform == 'win32' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/3a/05/a1dae3dffd1116099471c643b8924f5aa6524411dc6c63fdae648c4f1aca/loguru-0.7.3.tar.gz", hash = "sha256:19480589e77d47b8d85b2c827ad95d49bf31b0dcde16593892eb51dd18706eb6", size = 63559, upload-time = "2024-12-06T11:20:56.608Z" }
+ wheels = [
+@@ -1070,12 +1164,14 @@ name = "mlx"
+ version = "0.31.2"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "mlx-metal" },
++    { name = "mlx-metal", marker = "sys_platform == 'darwin' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/94/89/1e77ec3ff380e8fb9e7258047374d31452a0f9828a0e370f127b07dd8288/mlx-0.31.2-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:4a3f181b367d404e44a6bd68ef5eb573930809ac60cacd51d0c851c629b1b651", size = 586911, upload-time = "2026-04-22T03:14:29.675Z" },
+     { url = "https://files.pythonhosted.org/packages/6a/41/c1907f05f8a3fc54025fb78ad68d3c4a4b931664d03c0a24f7f431cc4087/mlx-0.31.2-cp311-cp311-macosx_15_0_arm64.whl", hash = "sha256:70297cbef7479429f69c966bfed10da20a6f0c2aa997eec2b4f6ba1a07caf2ef", size = 586915, upload-time = "2026-04-22T03:14:31.403Z" },
+     { url = "https://files.pythonhosted.org/packages/97/b0/61ac2c14773c786fecbda28067b0207a0c654cb4d10c548808c51284d700/mlx-0.31.2-cp311-cp311-macosx_26_0_arm64.whl", hash = "sha256:c0ff158b7ac93a4b5659adbc70053498b30a5964fc45f78596398e056a96c36a", size = 587030, upload-time = "2026-04-22T03:14:32.961Z" },
++    { url = "https://files.pythonhosted.org/packages/de/53/e12feb7078ee472983555fcb1da4749a2bbbc8fc5b29b78c205b96d37d1e/mlx-0.31.2-cp311-cp311-manylinux_2_35_aarch64.whl", hash = "sha256:cd5d42b0b2bee7efe1b0680a7e302943dd33b92c879cffa0358ffdb5a4a8d27b", size = 652994, upload-time = "2026-04-22T03:14:34.691Z" },
++    { url = "https://files.pythonhosted.org/packages/c5/40/f92c8cdc9595bf24c7e483a3156bfe0cc99a5cf5545d8dba8e7fe000c10b/mlx-0.31.2-cp311-cp311-manylinux_2_35_x86_64.whl", hash = "sha256:b368f7ede4238cc44076e4843820338c453c21ee50bd3ee26d4b182c179fd8e1", size = 692086, upload-time = "2026-04-22T03:14:36.45Z" },
+ ]
+ 
+ [[package]]
+@@ -1083,13 +1179,13 @@ name = "mlx-lm"
+ version = "0.29.1"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "jinja2" },
+-    { name = "mlx" },
+-    { name = "numpy" },
+-    { name = "protobuf" },
+-    { name = "pyyaml" },
+-    { name = "sentencepiece" },
+-    { name = "transformers" },
++    { name = "jinja2", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "mlx", marker = "sys_platform == 'darwin' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "numpy", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "protobuf", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "pyyaml", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "sentencepiece", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "transformers", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/e3/62/f46e1355256a114808517947f8e83ad6be310c7288c551db0fa678f47923/mlx_lm-0.29.1.tar.gz", hash = "sha256:b99180d8f33d33a077b814e550bfb2d8a59ae003d668fd1f4b3fff62a381d34b", size = 232302, upload-time = "2025-12-16T16:58:27.959Z" }
+ wheels = [
+@@ -1270,12 +1366,34 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/15/ce/e5ec180bc41812edcd8daeb8639d205622c0e8c02259d8ab25a0201b3c2a/numpy-2.4.6-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:2803abfebfc990042cd494d8ce2d5f82e9d847af6d35ec486923aa19dbad5e73", size = 12504263, upload-time = "2026-05-18T23:37:09.715Z" },
+ ]
+ 
++[[package]]
++name = "nvidia-cublas"
++version = "13.0.0.19"
++source = { registry = "https://pypi.org/simple" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/02/99/8447b9ee9f070522ee66604ee819d632ab4568c68b3134cebd3837a015cd/nvidia_cublas-13.0.0.19-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:381b1a0ca636fdcb6920a871e8fc89dbfd1f6157f421ed0a6f2673e14cffd3bd", size = 539001158, upload-time = "2025-08-04T10:19:50.761Z" },
++    { url = "https://files.pythonhosted.org/packages/5a/99/210e113dde53955e97042bd76dc4ad927eca04c5b4645ec157cc59f4f3ae/nvidia_cublas-13.0.0.19-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:f6723af2e8e2600a11dc384037d90d9bf93070e346c24ef2e8f9001658c99896", size = 419392356, upload-time = "2025-08-04T10:20:19.449Z" },
++    { url = "https://files.pythonhosted.org/packages/52/e3/347dfb7dcea98730efb34428534452ace9350173b21db88bbe7031542ff0/nvidia_cublas-13.0.0.19-py3-none-win_amd64.whl", hash = "sha256:e6ecde441aaf0bb74ed538cfb3b18aa374f452aebf0162088bcb10942f7bbc33", size = 400515981, upload-time = "2025-08-04T10:29:54.83Z" },
++]
++
+ [[package]]
+ name = "nvidia-cublas-cu12"
+ version = "12.8.4.1"
+ source = { registry = "https://pypi.org/simple" }
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/29/99/db44d685f0e257ff0e213ade1964fc459b4a690a73293220e98feb3307cf/nvidia_cublas_cu12-12.8.4.1-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:b86f6dd8935884615a0683b663891d43781b819ac4f2ba2b0c9604676af346d0", size = 590537124, upload-time = "2025-03-07T01:43:53.556Z" },
+     { url = "https://files.pythonhosted.org/packages/dc/61/e24b560ab2e2eaeb3c839129175fb330dfcfc29e5203196e5541a4c44682/nvidia_cublas_cu12-12.8.4.1-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:8ac4e771d5a348c551b2a426eda6193c19aa630236b418086020df5ba9667142", size = 594346921, upload-time = "2025-03-07T01:44:31.254Z" },
++    { url = "https://files.pythonhosted.org/packages/70/61/7d7b3c70186fb651d0fbd35b01dbfc8e755f69fd58f817f3d0f642df20c3/nvidia_cublas_cu12-12.8.4.1-py3-none-win_amd64.whl", hash = "sha256:47e9b82132fa8d2b4944e708049229601448aaad7e6f296f630f2d1a32de35af", size = 567544208, upload-time = "2025-03-07T01:53:30.535Z" },
++]
++
++[[package]]
++name = "nvidia-cuda-cupti"
++version = "13.0.48"
++source = { registry = "https://pypi.org/simple" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/72/63/e9c12c3ae07c1f3a0821536bc188d7bf76e1b633b3bcd2bd393b00bb3426/nvidia_cuda_cupti-13.0.48-py3-none-manylinux_2_25_aarch64.whl", hash = "sha256:67c22627ef436afcf080b48e4ad17b3f83d9e7c0d990ad0c6c0627b01fb92ccc", size = 10171189, upload-time = "2025-08-04T10:16:24.39Z" },
++    { url = "https://files.pythonhosted.org/packages/ba/28/e37d62ff27b4462953fdd5713d8a78760578dfa12685c30b71b55fab57b1/nvidia_cuda_cupti-13.0.48-py3-none-manylinux_2_25_x86_64.whl", hash = "sha256:417699e216b23d81bc0bbcb7032352f81b9c5372ef73c097a01abb83125a3d09", size = 10718148, upload-time = "2025-08-04T10:16:33.605Z" },
++    { url = "https://files.pythonhosted.org/packages/7e/ec/a2c11d70bc7dce659c484f16a8b565cc3c533f1af21374b7287736ff08e8/nvidia_cuda_cupti-13.0.48-py3-none-win_amd64.whl", hash = "sha256:c0f0266d5674afad541888d4383bd172b7f90ff6df62df83ef9f5431a3c2c3b1", size = 7737757, upload-time = "2025-08-04T10:27:41.412Z" },
+ ]
+ 
+ [[package]]
+@@ -1283,7 +1401,19 @@ name = "nvidia-cuda-cupti-cu12"
+ version = "12.8.90"
+ source = { registry = "https://pypi.org/simple" }
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/d5/1f/b3bd73445e5cb342727fd24fe1f7b748f690b460acadc27ea22f904502c8/nvidia_cuda_cupti_cu12-12.8.90-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:4412396548808ddfed3f17a467b104ba7751e6b58678a4b840675c56d21cf7ed", size = 9533318, upload-time = "2025-03-07T01:40:10.421Z" },
+     { url = "https://files.pythonhosted.org/packages/f8/02/2adcaa145158bf1a8295d83591d22e4103dbfd821bcaf6f3f53151ca4ffa/nvidia_cuda_cupti_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:ea0cb07ebda26bb9b29ba82cda34849e73c166c18162d3913575b0c9db9a6182", size = 10248621, upload-time = "2025-03-07T01:40:21.213Z" },
++    { url = "https://files.pythonhosted.org/packages/41/bc/83f5426095d93694ae39fe1311431b5d5a9bb82e48bf0dd8e19be2765942/nvidia_cuda_cupti_cu12-12.8.90-py3-none-win_amd64.whl", hash = "sha256:bb479dcdf7e6d4f8b0b01b115260399bf34154a1a2e9fe11c85c517d87efd98e", size = 7015759, upload-time = "2025-03-07T01:51:11.355Z" },
++]
++
++[[package]]
++name = "nvidia-cuda-nvrtc"
++version = "13.0.48"
++source = { registry = "https://pypi.org/simple" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/be/5b/f7636b3d66caefade6a0a0dc5b705c259a2062c20ad18b432b3129d348e0/nvidia_cuda_nvrtc-13.0.48-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:87e13d186905a35e7c04ad553a2abded0fba22f93b43d02e5da6f6cf73fb4d0a", size = 90214268, upload-time = "2025-08-04T10:18:09.305Z" },
++    { url = "https://files.pythonhosted.org/packages/c0/bd/eb18593b43dae42312612ffbac24b8e68149e590102c3b6cc2e3d3792069/nvidia_cuda_nvrtc-13.0.48-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:6ccf1ef1b90a0763ac7536f3c17046659d89869d76b98ac358efc2e09b348365", size = 43013627, upload-time = "2025-08-04T10:17:57.338Z" },
++    { url = "https://files.pythonhosted.org/packages/d1/2f/1c8a0e63ba252ce11b719e448d334676e441f47d60c49161d5b620e226b6/nvidia_cuda_nvrtc-13.0.48-py3-none-win_amd64.whl", hash = "sha256:9f10c41c3822a9d44a19e9150a05c99425514b691b342c6db6729072c5b88edd", size = 76808363, upload-time = "2025-08-04T10:28:33.413Z" },
+ ]
+ 
+ [[package]]
+@@ -1292,6 +1422,18 @@ version = "12.8.93"
+ source = { registry = "https://pypi.org/simple" }
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/05/6b/32f747947df2da6994e999492ab306a903659555dddc0fbdeb9d71f75e52/nvidia_cuda_nvrtc_cu12-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:a7756528852ef889772a84c6cd89d41dfa74667e24cca16bb31f8f061e3e9994", size = 88040029, upload-time = "2025-03-07T01:42:13.562Z" },
++    { url = "https://files.pythonhosted.org/packages/eb/d1/e50d0acaab360482034b84b6e27ee83c6738f7d32182b987f9c7a4e32962/nvidia_cuda_nvrtc_cu12-12.8.93-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:fc1fec1e1637854b4c0a65fb9a8346b51dd9ee69e61ebaccc82058441f15bce8", size = 43106076, upload-time = "2025-03-07T01:41:59.817Z" },
++    { url = "https://files.pythonhosted.org/packages/45/51/52a3d84baa2136cc8df15500ad731d74d3a1114d4c123e043cb608d4a32b/nvidia_cuda_nvrtc_cu12-12.8.93-py3-none-win_amd64.whl", hash = "sha256:7a4b6b2904850fe78e0bd179c4b655c404d4bb799ef03ddc60804247099ae909", size = 73586838, upload-time = "2025-03-07T01:52:13.483Z" },
++]
++
++[[package]]
++name = "nvidia-cuda-runtime"
++version = "13.0.48"
++source = { registry = "https://pypi.org/simple" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/55/3b/c5e5d8aafd355e2ff9922472ba71251331af6cc866e5b04a3b1dc8f58977/nvidia_cuda_runtime-13.0.48-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:b807c0bb925a307bfa667a24f24d253aef8eda3ac4be66b333f2c9d357557008", size = 2260687, upload-time = "2025-08-04T10:15:41.292Z" },
++    { url = "https://files.pythonhosted.org/packages/cc/78/edb119083ca2ff0f09ab0cd597e97775ac3f575b8aa0caf10d68ed49e032/nvidia_cuda_runtime-13.0.48-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:5b54d12087a1abff81a4cbfa6556876e3afea1fc60da2e0816da374619810c89", size = 2242632, upload-time = "2025-08-04T10:15:49.339Z" },
++    { url = "https://files.pythonhosted.org/packages/b2/dc/43b84c49f938817626370ce2c7dbb9d6f9a3a0f9d9764e5902501e106e82/nvidia_cuda_runtime-13.0.48-py3-none-win_amd64.whl", hash = "sha256:03e581c7584b13e42ce175c774f46e1219e9c574f27fe88c2ccc75dd3f926ed7", size = 2926656, upload-time = "2025-08-04T10:27:32.179Z" },
+ ]
+ 
+ [[package]]
+@@ -1299,7 +1441,9 @@ name = "nvidia-cuda-runtime-cu12"
+ version = "12.8.90"
+ source = { registry = "https://pypi.org/simple" }
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/7c/75/f865a3b236e4647605ea34cc450900854ba123834a5f1598e160b9530c3a/nvidia_cuda_runtime_cu12-12.8.90-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:52bf7bbee900262ffefe5e9d5a2a69a30d97e2bc5bb6cc866688caa976966e3d", size = 965265, upload-time = "2025-03-07T01:39:43.533Z" },
+     { url = "https://files.pythonhosted.org/packages/0d/9b/a997b638fcd068ad6e4d53b8551a7d30fe8b404d6f1804abf1df69838932/nvidia_cuda_runtime_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:adade8dcbd0edf427b7204d480d6066d33902cab2a4707dcfc48a2d0fd44ab90", size = 954765, upload-time = "2025-03-07T01:40:01.615Z" },
++    { url = "https://files.pythonhosted.org/packages/30/a5/a515b7600ad361ea14bfa13fb4d6687abf500adc270f19e89849c0590492/nvidia_cuda_runtime_cu12-12.8.90-py3-none-win_amd64.whl", hash = "sha256:c0c6027f01505bfed6c3b21ec546f69c687689aad5f1a377554bc6ca4aa993a8", size = 944318, upload-time = "2025-03-07T01:51:01.794Z" },
+ ]
+ 
+ [[package]]
+@@ -1307,10 +1451,25 @@ name = "nvidia-cudnn-cu12"
+ version = "9.10.2.21"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "nvidia-cublas-cu12" },
++    { name = "nvidia-cublas-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/fa/41/e79269ce215c857c935fd86bcfe91a451a584dfc27f1e068f568b9ad1ab7/nvidia_cudnn_cu12-9.10.2.21-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:c9132cc3f8958447b4910a1720036d9eff5928cc3179b0a51fb6d167c6cc87d8", size = 705026878, upload-time = "2025-06-06T21:52:51.348Z" },
+     { url = "https://files.pythonhosted.org/packages/ba/51/e123d997aa098c61d029f76663dedbfb9bc8dcf8c60cbd6adbe42f76d049/nvidia_cudnn_cu12-9.10.2.21-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:949452be657fa16687d0930933f032835951ef0892b37d2d53824d1a84dc97a8", size = 706758467, upload-time = "2025-06-06T21:54:08.597Z" },
++    { url = "https://files.pythonhosted.org/packages/3d/90/0bd6e586701b3a890fd38aa71c387dab4883d619d6e5ad912ccbd05bfd67/nvidia_cudnn_cu12-9.10.2.21-py3-none-win_amd64.whl", hash = "sha256:c6288de7d63e6cf62988f0923f96dc339cea362decb1bf5b3141883392a7d65e", size = 692992268, upload-time = "2025-06-06T21:55:18.114Z" },
++]
++
++[[package]]
++name = "nvidia-cudnn-cu13"
++version = "9.13.0.50"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "nvidia-cublas", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/8a/9c/9e99c00dc23db324244ec257d1e84d79539202ee2f185dee2c1fa97c9549/nvidia_cudnn_cu13-9.13.0.50-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:33f0aa0b64230101b348648fd0693342188071d3f8a137c0cf50051c24b3584b", size = 412337597, upload-time = "2025-09-04T20:22:31.535Z" },
++    { url = "https://files.pythonhosted.org/packages/cf/68/2712854561170b2a81bea7b6b35cc1ae264d9794c0c218986e5c685d45f7/nvidia_cudnn_cu13-9.13.0.50-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:2150b4850725d30653ec3e365f0732e3e2e3eb8633cf3bd2d3117628dea8b4f9", size = 348571624, upload-time = "2025-09-04T20:23:26.544Z" },
++    { url = "https://files.pythonhosted.org/packages/ab/7d/56b72861ce51edcac0aca0d3ed2604214bb7709e508975553b61de8bc1b5/nvidia_cudnn_cu13-9.13.0.50-py3-none-win_amd64.whl", hash = "sha256:216f6af23842823dfa84a32c3b91c9180aca9c036eebce0b8e05489c6bfc4b5c", size = 338660585, upload-time = "2025-09-04T20:24:38.337Z" },
+ ]
+ 
+ [[package]]
+@@ -1323,15 +1482,39 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/a7/bf/fa08a8bd953ad8db7ea3f64676b30f1cb2846f6518595a6faf7fb3558db4/nvidia_cudnn_frontend-1.24.0-cp311-cp311-win_amd64.whl", hash = "sha256:b461259b85b7a7e3a1c41b02c33ce4fde0dbcde7e0a227a968dedb74d311e2c3", size = 2764877, upload-time = "2026-05-20T05:04:21.965Z" },
+ ]
+ 
++[[package]]
++name = "nvidia-cufft"
++version = "12.0.0.15"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "nvidia-nvjitlink", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/9b/e9/4e49b1baf6899e42eeec324a49d7aa2219fec42076327c4e468000dd375a/nvidia_cufft-12.0.0.15-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:1885731254835797572ff075f3daf43a2a0a2801210dea26971940dae7e1a367", size = 214053580, upload-time = "2025-08-04T10:20:45.781Z" },
++    { url = "https://files.pythonhosted.org/packages/9b/9f/e298b66e584ad25bd78ad4a45b061fe7bb57a1ec011128089404ce3fcc7d/nvidia_cufft-12.0.0.15-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:9f160b1f018e80bcb0d7c0fa50564b042fa26b13edc1b1ff14b6375a9edd2812", size = 214085489, upload-time = "2025-08-04T10:21:02.975Z" },
++    { url = "https://files.pythonhosted.org/packages/c8/63/ce8f9aed13a9f9060acaec40769934ddc3600e3e6ad1cf407323990df7a1/nvidia_cufft-12.0.0.15-py3-none-win_amd64.whl", hash = "sha256:ff2083e7c4f5bc063d37ec8399277e514ca97b554e069aa6f7eb7ce6d727dc7b", size = 213342124, upload-time = "2025-08-04T10:30:27.682Z" },
++]
++
+ [[package]]
+ name = "nvidia-cufft-cu12"
+ version = "11.3.3.83"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "nvidia-nvjitlink-cu12" },
++    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/60/bc/7771846d3a0272026c416fbb7e5f4c1f146d6d80704534d0b187dd6f4800/nvidia_cufft_cu12-11.3.3.83-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:848ef7224d6305cdb2a4df928759dca7b1201874787083b6e7550dd6765ce69a", size = 193109211, upload-time = "2025-03-07T01:44:56.873Z" },
+     { url = "https://files.pythonhosted.org/packages/1f/13/ee4e00f30e676b66ae65b4f08cb5bcbb8392c03f54f2d5413ea99a5d1c80/nvidia_cufft_cu12-11.3.3.83-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:4d2dd21ec0b88cf61b62e6b43564355e5222e4a3fb394cac0db101f2dd0d4f74", size = 193118695, upload-time = "2025-03-07T01:45:27.821Z" },
++    { url = "https://files.pythonhosted.org/packages/7d/ec/ce1629f1e478bb5ccd208986b5f9e0316a78538dd6ab1d0484f012f8e2a1/nvidia_cufft_cu12-11.3.3.83-py3-none-win_amd64.whl", hash = "sha256:7a64a98ef2a7c47f905aaf8931b69a3a43f27c55530c698bb2ed7c75c0b42cb7", size = 192216559, upload-time = "2025-03-07T01:53:57.106Z" },
++]
++
++[[package]]
++name = "nvidia-cufile"
++version = "1.15.0.42"
++source = { registry = "https://pypi.org/simple" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/ad/0a/4adf0c9bb1241cd1314fc923fde00f3749c7fc785b1e3b3f4a104cd3090c/nvidia_cufile-1.15.0.42-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:c8f9813eff24d61586699c615e39817e2b4e4f642cace32733c2ab6f663a7eab", size = 1223104, upload-time = "2025-08-04T10:21:31.131Z" },
++    { url = "https://files.pythonhosted.org/packages/bf/a5/636baa43399ea10d22b63e7454f22a92ace4a7eaa3c45b94607250857e2d/nvidia_cufile-1.15.0.42-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:bced4036b5a8dbf57e4d78cd4fafefec58ad754b784a9eaa272b011896754c62", size = 1136527, upload-time = "2025-08-04T10:21:22.441Z" },
+ ]
+ 
+ [[package]]
+@@ -1340,6 +1523,17 @@ version = "1.13.1.3"
+ source = { registry = "https://pypi.org/simple" }
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/bb/fe/1bcba1dfbfb8d01be8d93f07bfc502c93fa23afa6fd5ab3fc7c1df71038a/nvidia_cufile_cu12-1.13.1.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:1d069003be650e131b21c932ec3d8969c1715379251f8d23a1860554b1cb24fc", size = 1197834, upload-time = "2025-03-07T01:45:50.723Z" },
++    { url = "https://files.pythonhosted.org/packages/1e/f5/5607710447a6fe9fd9b3283956fceeee8a06cda1d2f56ce31371f595db2a/nvidia_cufile_cu12-1.13.1.3-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:4beb6d4cce47c1a0f1013d72e02b0994730359e17801d395bdcbf20cfb3bb00a", size = 1120705, upload-time = "2025-03-07T01:45:41.434Z" },
++]
++
++[[package]]
++name = "nvidia-curand"
++version = "10.4.0.35"
++source = { registry = "https://pypi.org/simple" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/1e/72/7c2ae24fb6b63a32e6ae5d241cc65263ea18d08802aaae087d9f013335a2/nvidia_curand-10.4.0.35-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:133df5a7509c3e292aaa2b477afd0194f06ce4ea24d714d616ff36439cee349a", size = 61962106, upload-time = "2025-08-04T10:21:41.128Z" },
++    { url = "https://files.pythonhosted.org/packages/a5/9f/be0a41ca4a4917abf5cb9ae0daff1a6060cc5de950aec0396de9f3b52bc5/nvidia_curand-10.4.0.35-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:1aee33a5da6e1db083fe2b90082def8915f30f3248d5896bcec36a579d941bfc", size = 59544258, upload-time = "2025-08-04T10:22:03.992Z" },
++    { url = "https://files.pythonhosted.org/packages/99/27/72103153b1ffc00e09fdc40ac970235343dcd1ea8bd762e84d2d73219ffa/nvidia_curand-10.4.0.35-py3-none-win_amd64.whl", hash = "sha256:65b1710aa6961d326b411e314b374290904c5ddf41dc3f766ebc3f1d7d4ca69f", size = 55242481, upload-time = "2025-08-04T10:30:41.831Z" },
+ ]
+ 
+ [[package]]
+@@ -1347,7 +1541,24 @@ name = "nvidia-curand-cu12"
+ version = "10.3.9.90"
+ source = { registry = "https://pypi.org/simple" }
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/45/5e/92aa15eca622a388b80fbf8375d4760738df6285b1e92c43d37390a33a9a/nvidia_curand_cu12-10.3.9.90-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:dfab99248034673b779bc6decafdc3404a8a6f502462201f2f31f11354204acd", size = 63625754, upload-time = "2025-03-07T01:46:10.735Z" },
+     { url = "https://files.pythonhosted.org/packages/fb/aa/6584b56dc84ebe9cf93226a5cde4d99080c8e90ab40f0c27bda7a0f29aa1/nvidia_curand_cu12-10.3.9.90-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:b32331d4f4df5d6eefa0554c565b626c7216f87a06a4f56fab27c3b68a830ec9", size = 63619976, upload-time = "2025-03-07T01:46:23.323Z" },
++    { url = "https://files.pythonhosted.org/packages/b9/75/70c05b2f3ed5be3bb30b7102b6eb78e100da4bbf6944fd6725c012831cab/nvidia_curand_cu12-10.3.9.90-py3-none-win_amd64.whl", hash = "sha256:f149a8ca457277da854f89cf282d6ef43176861926c7ac85b2a0fbd237c587ec", size = 62765309, upload-time = "2025-03-07T01:54:20.478Z" },
++]
++
++[[package]]
++name = "nvidia-cusolver"
++version = "12.0.3.29"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "nvidia-cublas", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cusparse", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nvjitlink", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/a7/bb/2e60de9bb1f0c3395eabd91ccad00f4ba3ef736dc9190a158a9d268419f5/nvidia_cusolver-12.0.3.29-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:3bb6e65ce0beaeafdd069b320246e8f17c1cd30ddb27a0539143a3706733a4d8", size = 193104180, upload-time = "2025-08-04T10:22:19.821Z" },
++    { url = "https://files.pythonhosted.org/packages/a5/87/e3c9ee227b750e5b61572e7509f586cc8d494a4f7874b5163e734ed852c2/nvidia_cusolver-12.0.3.29-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:6f54c2eed5edab54c224dd1852dde80ba76b2b78e6d3ce7344fef5dfc66d16ab", size = 193474165, upload-time = "2025-08-04T10:22:47.976Z" },
++    { url = "https://files.pythonhosted.org/packages/d2/4d/bbafef08108d5fe2147940a94dc8f976988438502a383d5e85068a02f25e/nvidia_cusolver-12.0.3.29-py3-none-win_amd64.whl", hash = "sha256:103fa9e99d63e4be4d04e4a9cb7dfaec5d86f486bb59838cb72803cabb1690a4", size = 186023595, upload-time = "2025-08-04T10:31:08.639Z" },
+ ]
+ 
+ [[package]]
+@@ -1355,12 +1566,27 @@ name = "nvidia-cusolver-cu12"
+ version = "11.7.3.90"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "nvidia-cublas-cu12" },
+-    { name = "nvidia-cusparse-cu12" },
+-    { name = "nvidia-nvjitlink-cu12" },
++    { name = "nvidia-cublas-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cusparse-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/c8/32/f7cd6ce8a7690544d084ea21c26e910a97e077c9b7f07bf5de623ee19981/nvidia_cusolver_cu12-11.7.3.90-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:db9ed69dbef9715071232caa9b69c52ac7de3a95773c2db65bdba85916e4e5c0", size = 267229841, upload-time = "2025-03-07T01:46:54.356Z" },
+     { url = "https://files.pythonhosted.org/packages/85/48/9a13d2975803e8cf2777d5ed57b87a0b6ca2cc795f9a4f59796a910bfb80/nvidia_cusolver_cu12-11.7.3.90-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:4376c11ad263152bd50ea295c05370360776f8c3427b30991df774f9fb26c450", size = 267506905, upload-time = "2025-03-07T01:47:16.273Z" },
++    { url = "https://files.pythonhosted.org/packages/13/c0/76ca8551b8a84146ffa189fec81c26d04adba4bc0dbe09cd6e6fd9b7de04/nvidia_cusolver_cu12-11.7.3.90-py3-none-win_amd64.whl", hash = "sha256:4a550db115fcabc4d495eb7d39ac8b58d4ab5d8e63274d3754df1c0ad6a22d34", size = 256720438, upload-time = "2025-03-07T01:54:39.898Z" },
++]
++
++[[package]]
++name = "nvidia-cusparse"
++version = "12.6.2.49"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "nvidia-nvjitlink", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/fc/30/f32023427f2ef4ec27e8293dfddb5068de566912cd0a45eccfd400017a62/nvidia_cusparse-12.6.2.49-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:5d3269c19283a0057fb5ebfb003ae2a10c97a28a6958f4238354826b055827c7", size = 155888587, upload-time = "2025-08-04T10:23:04.091Z" },
++    { url = "https://files.pythonhosted.org/packages/ba/e8/b3f7a87cc719dca926c7baee92f2544de8909573a4126c85a9f1625431e8/nvidia_cusparse-12.6.2.49-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:efcf0b01e3a0827c144feff5391456b8a06e9ce63dcd51c0943e32e605251952", size = 140247612, upload-time = "2025-08-04T10:23:29.844Z" },
++    { url = "https://files.pythonhosted.org/packages/f6/56/14475d58b3db5e0f4b0a5f15d0f4f1a19c277b5aafbea8906d19e4e177b8/nvidia_cusparse-12.6.2.49-py3-none-win_amd64.whl", hash = "sha256:b48237614131dedf9cd00d99ce950d8e1b2945ab9d29337fbdc1e014f0ee9830", size = 137913018, upload-time = "2025-08-04T10:31:25.447Z" },
+ ]
+ 
+ [[package]]
+@@ -1368,10 +1594,12 @@ name = "nvidia-cusparse-cu12"
+ version = "12.5.8.93"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "nvidia-nvjitlink-cu12" },
++    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/bc/f7/cd777c4109681367721b00a106f491e0d0d15cfa1fd59672ce580ce42a97/nvidia_cusparse_cu12-12.5.8.93-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:9b6c161cb130be1a07a27ea6923df8141f3c295852f4b260c65f18f3e0a091dc", size = 288117129, upload-time = "2025-03-07T01:47:40.407Z" },
+     { url = "https://files.pythonhosted.org/packages/c2/f5/e1854cb2f2bcd4280c44736c93550cc300ff4b8c95ebe370d0aa7d2b473d/nvidia_cusparse_cu12-12.5.8.93-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:1ec05d76bbbd8b61b06a80e1eaf8cf4959c3d4ce8e711b65ebd0443bb0ebb13b", size = 288216466, upload-time = "2025-03-07T01:48:13.779Z" },
++    { url = "https://files.pythonhosted.org/packages/62/07/f3b2ad63f8e3d257a599f422ae34eb565e70c41031aecefa3d18b62cabd1/nvidia_cusparse_cu12-12.5.8.93-py3-none-win_amd64.whl", hash = "sha256:9a33604331cb2cac199f2e7f5104dfbb8a5a898c367a53dfda9ff2acb6b6b4dd", size = 284937404, upload-time = "2025-03-07T01:55:07.742Z" },
+ ]
+ 
+ [[package]]
+@@ -1379,7 +1607,19 @@ name = "nvidia-cusparselt-cu12"
+ version = "0.7.1"
+ source = { registry = "https://pypi.org/simple" }
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/73/b9/598f6ff36faaece4b3c50d26f50e38661499ff34346f00e057760b35cc9d/nvidia_cusparselt_cu12-0.7.1-py3-none-manylinux2014_aarch64.whl", hash = "sha256:8878dce784d0fac90131b6817b607e803c36e629ba34dc5b433471382196b6a5", size = 283835557, upload-time = "2025-02-26T00:16:54.265Z" },
+     { url = "https://files.pythonhosted.org/packages/56/79/12978b96bd44274fe38b5dde5cfb660b1d114f70a65ef962bcbbed99b549/nvidia_cusparselt_cu12-0.7.1-py3-none-manylinux2014_x86_64.whl", hash = "sha256:f1bb701d6b930d5a7cea44c19ceb973311500847f81b634d802b7b539dc55623", size = 287193691, upload-time = "2025-02-26T00:15:44.104Z" },
++    { url = "https://files.pythonhosted.org/packages/2f/d8/a6b0d0d0c2435e9310f3e2bb0d9c9dd4c33daef86aa5f30b3681defd37ea/nvidia_cusparselt_cu12-0.7.1-py3-none-win_amd64.whl", hash = "sha256:f67fbb5831940ec829c9117b7f33807db9f9678dc2a617fbe781cac17b4e1075", size = 271020911, upload-time = "2025-02-26T00:14:47.204Z" },
++]
++
++[[package]]
++name = "nvidia-cusparselt-cu13"
++version = "0.8.0"
++source = { registry = "https://pypi.org/simple" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/46/10/8dcd1175260706a2fc92a16a52e306b71d4c1ea0b0cc4a9484183399818a/nvidia_cusparselt_cu13-0.8.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:400c6ed1cf6780fc6efedd64ec9f1345871767e6a1a0a552a1ea0578117ea77c", size = 220791277, upload-time = "2025-08-13T19:22:40.982Z" },
++    { url = "https://files.pythonhosted.org/packages/fd/53/43b0d71f4e702fa9733f8b4571fdca50a8813f1e450b656c239beff12315/nvidia_cusparselt_cu13-0.8.0-py3-none-manylinux2014_x86_64.whl", hash = "sha256:25e30a8a7323935d4ad0340b95a0b69926eee755767e8e0b1cf8dd85b197d3fd", size = 169884119, upload-time = "2025-08-13T19:23:41.967Z" },
++    { url = "https://files.pythonhosted.org/packages/57/de/8f0578928b9b1246d7b1324db0528e6b9f9fb54496a49f40bf71f09f1a27/nvidia_cusparselt_cu13-0.8.0-py3-none-win_amd64.whl", hash = "sha256:e80212ed7b1afc97102fbb2b5c82487aa73f6a0edfa6d26c5a152593e520bb8f", size = 156459710, upload-time = "2025-08-13T19:24:18.043Z" },
+ ]
+ 
+ [[package]]
+@@ -1410,15 +1650,37 @@ name = "nvidia-nccl-cu12"
+ version = "2.27.5"
+ source = { registry = "https://pypi.org/simple" }
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/bb/1c/857979db0ef194ca5e21478a0612bcdbbe59458d7694361882279947b349/nvidia_nccl_cu12-2.27.5-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:31432ad4d1fb1004eb0c56203dc9bc2178a1ba69d1d9e02d64a6938ab5e40e7a", size = 322400625, upload-time = "2025-06-26T04:11:04.496Z" },
+     { url = "https://files.pythonhosted.org/packages/6e/89/f7a07dc961b60645dbbf42e80f2bc85ade7feb9a491b11a1e973aa00071f/nvidia_nccl_cu12-2.27.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:ad730cf15cb5d25fe849c6e6ca9eb5b76db16a80f13f425ac68d8e2e55624457", size = 322348229, upload-time = "2025-06-26T04:11:28.385Z" },
+ ]
+ 
++[[package]]
++name = "nvidia-nccl-cu13"
++version = "2.27.7"
++source = { registry = "https://pypi.org/simple" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/49/61/2c7762da6febee96341ea17d1f7309ac7559ac3cab00f3f7e1e7bd0e5d00/nvidia_nccl_cu13-2.27.7-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:5e3cc863e52bf9dd1e3ab1941bddb414098f489ae7342f6b3a274602303da123", size = 194014855, upload-time = "2025-09-23T16:30:27.56Z" },
++    { url = "https://files.pythonhosted.org/packages/f1/3a/dabb10684e60edfaf1a1c9984d12a668bc1091582099d4e03ac5b9983b51/nvidia_nccl_cu13-2.27.7-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:b28a524abd8389b76a4a3f133c76a7aaa7005e47fcaa9d9603b90103927a3f93", size = 193901479, upload-time = "2025-09-23T16:30:41.165Z" },
++]
++
++[[package]]
++name = "nvidia-nvjitlink"
++version = "13.0.39"
++source = { registry = "https://pypi.org/simple" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/95/39/726edebeb76f3efc25c79f885429fa1227c9d200e20ea219bf724b382e19/nvidia_nvjitlink-13.0.39-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:bc3179be558329ef9687884c6faa27cdc0659bdbc642432ec8cc6cc00d182627", size = 40709605, upload-time = "2025-08-04T10:25:04.129Z" },
++    { url = "https://files.pythonhosted.org/packages/bc/7a/0fb4c4413b3b14519f8934edd4dcd9f411c4e14e2a2c0ae58709e4dda255/nvidia_nvjitlink-13.0.39-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:ce0d63fa5ebedf542056e7491c49feed2297c900980aa6269b6a55f478056ad7", size = 38767126, upload-time = "2025-08-04T10:24:53.05Z" },
++    { url = "https://files.pythonhosted.org/packages/fb/fe/0a4a510f83ab75def397e1e3b0ea1f1b909b40765c8cf912f0506e1e6ec6/nvidia_nvjitlink-13.0.39-py3-none-win_amd64.whl", hash = "sha256:478d06d3783b1c26a9bea308b972737a9fb2bb832d2254aa51fe753713b4a583", size = 36034311, upload-time = "2025-08-04T10:32:25.179Z" },
++]
++
+ [[package]]
+ name = "nvidia-nvjitlink-cu12"
+ version = "12.8.93"
+ source = { registry = "https://pypi.org/simple" }
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/f6/74/86a07f1d0f42998ca31312f998bd3b9a7eff7f52378f4f270c8679c77fb9/nvidia_nvjitlink_cu12-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:81ff63371a7ebd6e6451970684f916be2eab07321b73c9d244dc2b4da7f73b88", size = 39254836, upload-time = "2025-03-07T01:49:55.661Z" },
++    { url = "https://files.pythonhosted.org/packages/2a/a2/8cee5da30d13430e87bf99bb33455d2724d0a4a9cb5d7926d80ccb96d008/nvidia_nvjitlink_cu12-12.8.93-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:adccd7161ace7261e01bb91e44e88da350895c270d23f744f0820c818b7229e7", size = 38386204, upload-time = "2025-03-07T01:49:43.612Z" },
++    { url = "https://files.pythonhosted.org/packages/ed/d7/34f02dad2e30c31b10a51f6b04e025e5dd60e5f936af9045a9b858a05383/nvidia_nvjitlink_cu12-12.8.93-py3-none-win_amd64.whl", hash = "sha256:bd93fbeeee850917903583587f4fc3a4eafa022e34572251368238ab5e6bd67f", size = 268553710, upload-time = "2025-03-07T01:56:24.13Z" },
+ ]
+ 
+ [[package]]
+@@ -1426,15 +1688,37 @@ name = "nvidia-nvshmem-cu12"
+ version = "3.3.20"
+ source = { registry = "https://pypi.org/simple" }
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/92/9d/3dd98852568fb845ec1f7902c90a22b240fe1cbabda411ccedf2fd737b7b/nvidia_nvshmem_cu12-3.3.20-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:0b0b960da3842212758e4fa4696b94f129090b30e5122fea3c5345916545cff0", size = 124484616, upload-time = "2025-08-04T20:24:59.172Z" },
+     { url = "https://files.pythonhosted.org/packages/3b/6c/99acb2f9eb85c29fc6f3a7ac4dccfd992e22666dd08a642b303311326a97/nvidia_nvshmem_cu12-3.3.20-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:d00f26d3f9b2e3c3065be895e3059d6479ea5c638a3f38c9fec49b1b9dd7c1e5", size = 124657145, upload-time = "2025-08-04T20:25:19.995Z" },
+ ]
+ 
++[[package]]
++name = "nvidia-nvshmem-cu13"
++version = "3.3.24"
++source = { registry = "https://pypi.org/simple" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/b1/7e/b8797780e442eabd9046cd6eb54100b8d0cb047ebc2f70931710cb03bcfe/nvidia_nvshmem_cu13-3.3.24-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:28ae82a4d14b322b93409535de62df6b7b83f4f7672ca97fc89107c2d40ce2c2", size = 60168129, upload-time = "2025-08-22T19:56:28.818Z" },
++    { url = "https://files.pythonhosted.org/packages/6f/e9/8530afb8ed38d16bbc89cec80a4dd6a52dbf59bc93e546c3658cfa8b1f9b/nvidia_nvshmem_cu13-3.3.24-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:c14d09571697d2e57cb079c8daec88ab1c68cb3586532bfbd4886125a08339b7", size = 60390470, upload-time = "2025-08-22T19:56:49.848Z" },
++]
++
++[[package]]
++name = "nvidia-nvtx"
++version = "13.0.39"
++source = { registry = "https://pypi.org/simple" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/38/37/0d103c84e7884382a79a569b720965141f83dd1c5df9e3e00cbc02d7099c/nvidia_nvtx-13.0.39-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:cc113127785c96db8a0fe715df92db9788777b4b3d1bd713d42f75969201b5ce", size = 147197, upload-time = "2025-08-04T10:18:39.829Z" },
++    { url = "https://files.pythonhosted.org/packages/86/91/8b486ba85f71a2859dd705a4ec6aab38c37a389b8b7f94343db027732999/nvidia_nvtx-13.0.39-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:cddd2e08b35144f1000631c3880c9ebbcb8a2863d762e76f92d47d30ecaf87cc", size = 148037, upload-time = "2025-08-04T10:18:31.763Z" },
++    { url = "https://files.pythonhosted.org/packages/89/22/ba0099049970dc2271a4745a1bd6ab37e93b1c21f42c33c2f904a0265bbb/nvidia_nvtx-13.0.39-py3-none-win_amd64.whl", hash = "sha256:14e4e4cf8976ce9544ec5e70e39dca8a7cc62af4692f20d8dc85266709d2e641", size = 136327, upload-time = "2025-08-04T10:28:56.323Z" },
++]
++
+ [[package]]
+ name = "nvidia-nvtx-cu12"
+ version = "12.8.90"
+ source = { registry = "https://pypi.org/simple" }
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/10/c0/1b303feea90d296f6176f32a2a70b5ef230f9bdeb3a72bddb0dc922dc137/nvidia_nvtx_cu12-12.8.90-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:d7ad891da111ebafbf7e015d34879f7112832fc239ff0d7d776b6cb685274615", size = 91161, upload-time = "2025-03-07T01:42:23.922Z" },
+     { url = "https://files.pythonhosted.org/packages/a2/eb/86626c1bbc2edb86323022371c39aa48df6fd8b0a1647bc274577f72e90b/nvidia_nvtx_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:5b17e2001cc0d751a5bc2c6ec6d26ad95913324a4adb86788c944f8ce9ba441f", size = 89954, upload-time = "2025-03-07T01:42:44.131Z" },
++    { url = "https://files.pythonhosted.org/packages/9f/99/4c9c0c329bf9fc125008c3b54c7c94c0023518d06fc025ae36431375e1fe/nvidia_nvtx_cu12-12.8.90-py3-none-win_amd64.whl", hash = "sha256:619c8304aedc69f02ea82dd244541a83c3d9d40993381b3b590f1adaed3db41e", size = 56492, upload-time = "2025-03-07T01:52:24.69Z" },
+ ]
+ 
+ [[package]]
+@@ -1522,7 +1806,9 @@ dependencies = [
+     { name = "pydantic" },
+     { name = "referencing" },
+     { name = "requests" },
+-    { name = "torch" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
+     { name = "tqdm" },
+     { name = "typing-extensions" },
+ ]
+@@ -1565,7 +1851,7 @@ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+     { name = "numpy" },
+     { name = "python-dateutil" },
+-    { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32'" },
++    { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/f8/87/4341c6252d1c47b08768c3d25ac487362bf403f0313ddae4a2a26c9b1b4c/pandas-3.0.3.tar.gz", hash = "sha256:696a4a00a2a2a35d4e5deb3fc946641b96c944f02230e4f76137fe35d806c4fc", size = 4651414, upload-time = "2026-05-11T18:54:29.21Z" }
+ wheels = [
+@@ -1602,7 +1888,7 @@ name = "pexpect"
+ version = "4.9.0"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "ptyprocess" },
++    { name = "ptyprocess", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
+ wheels = [
+@@ -1946,7 +2232,7 @@ name = "pytest"
+ version = "9.1.1"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "colorama", marker = "sys_platform == 'win32'" },
++    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "iniconfig" },
+     { name = "packaging" },
+     { name = "pluggy" },
+@@ -2013,7 +2299,7 @@ name = "pyzmq"
+ version = "27.1.0"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "cffi", marker = "implementation_name == 'pypy'" },
++    { name = "cffi", marker = "implementation_name == 'pypy' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/04/0b/3c9baedbdf613ecaa7aa07027780b8867f57b6293b6ee50de316c9f3222b/pyzmq-27.1.0.tar.gz", hash = "sha256:ac0765e3d44455adb6ddbf4417dcce460fc40a05978c08efdf2948072f6db540", size = 281750, upload-time = "2025-09-08T23:10:18.157Z" }
+ wheels = [
+@@ -2051,7 +2337,9 @@ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+     { name = "apache-tvm-ffi" },
+     { name = "nvidia-cutlass-dsl" },
+-    { name = "torch" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
+     { name = "torch-c-dlpack-ext" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/9c/a9/f474f3a45193784b2a17f3403554855da9787824c620db8b4eb992d49297/quack_kernels-0.2.4.tar.gz", hash = "sha256:719ea9584af3e55bc1d4da00374ffea68ba4342fbaa6db7e380801c21d7df59a", size = 149411, upload-time = "2025-12-31T23:14:08.546Z" }
+@@ -2281,11 +2569,46 @@ wheels = [
+ name = "sgl-kernel"
+ version = "0.3.21"
+ source = { registry = "https://pypi.org/simple" }
++resolution-markers = [
++    "sys_platform == 'win32' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "sys_platform == 'emscripten' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')",
++    "sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')",
++    "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform == 'win32' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform == 'emscripten' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/eb/2b/f1aeca98bc856c14d870f1dcf38bca35cf84ffe58874c67402b0f862ed18/sgl_kernel-0.3.21-cp310-abi3-manylinux2014_aarch64.whl", hash = "sha256:bafdcc26e9ce1e9102b99e4186d652fefbafe5c22ea2cbb5ffe07b331e83be1f", size = 626572173, upload-time = "2026-01-15T03:48:32.615Z" },
+     { url = "https://files.pythonhosted.org/packages/36/9f/f836e126002c7cfcfe35418f6cff5a63fe3f529c609b334ca4775354b4d5/sgl_kernel-0.3.21-cp310-abi3-manylinux2014_x86_64.whl", hash = "sha256:57dfb3a2a3cd759f499c32e2bad5f6489b7c58f7f9a84ee00c53ec92d303aaab", size = 535601072, upload-time = "2026-01-14T05:41:11.594Z" },
+ ]
+ 
++[[package]]
++name = "sgl-kernel"
++version = "0.3.21"
++source = { url = "https://github.com/sgl-project/whl/releases/download/v0.3.21/sgl_kernel-0.3.21%2Bcu130-cp310-abi3-manylinux2014_aarch64.whl" }
++resolution-markers = [
++    "platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux'",
++    "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
++]
++wheels = [
++    { url = "https://github.com/sgl-project/whl/releases/download/v0.3.21/sgl_kernel-0.3.21%2Bcu130-cp310-abi3-manylinux2014_aarch64.whl", hash = "sha256:8155ef98d155331827c458ca7b8b25a68b2a2b7403f013f0de0f0731666dac8d" },
++]
++
++[[package]]
++name = "sgl-kernel"
++version = "0.3.21"
++source = { url = "https://github.com/sgl-project/whl/releases/download/v0.3.21/sgl_kernel-0.3.21%2Bcu130-cp310-abi3-manylinux2014_x86_64.whl" }
++resolution-markers = [
++    "platform_machine == 'x86_64' and sys_platform == 'linux'",
++]
++wheels = [
++    { url = "https://github.com/sgl-project/whl/releases/download/v0.3.21/sgl_kernel-0.3.21%2Bcu130-cp310-abi3-manylinux2014_x86_64.whl", hash = "sha256:9926bf2ccbfcbcec7d5ac2a1c13a5baa57bf2a3d3dd12095419a9398e2282a32" },
++]
++
+ [[package]]
+ name = "sglang"
+ version = "0.5.9"
+@@ -2294,7 +2617,7 @@ dependencies = [
+     { name = "aiohttp" },
+     { name = "anthropic" },
+     { name = "apache-tvm-ffi" },
+-    { name = "av", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'arm64' and sys_platform == 'linux') or (platform_machine == 'armv7l' and sys_platform == 'linux')" },
++    { name = "av", marker = "(platform_machine != 'aarch64' and platform_machine != 'arm64' and platform_machine != 'armv7l' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'arm64' and sys_platform == 'linux') or (platform_machine == 'armv7l' and sys_platform == 'linux') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "blobfile" },
+     { name = "build" },
+     { name = "compressed-tensors" },
+@@ -2339,17 +2662,29 @@ dependencies = [
+     { name = "scipy" },
+     { name = "sentencepiece" },
+     { name = "setproctitle" },
+-    { name = "sgl-kernel" },
++    { name = "sgl-kernel", version = "0.3.21", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64') or (platform_machine == 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'aarch64' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'x86_64' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and extra != 'extra-8-litespec-cu130') or sys_platform != 'linux'" },
++    { name = "sgl-kernel", version = "0.3.21", source = { url = "https://github.com/sgl-project/whl/releases/download/v0.3.21/sgl_kernel-0.3.21%2Bcu130-cp310-abi3-manylinux2014_aarch64.whl" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "sgl-kernel", version = "0.3.21", source = { url = "https://github.com/sgl-project/whl/releases/download/v0.3.21/sgl_kernel-0.3.21%2Bcu130-cp310-abi3-manylinux2014_x86_64.whl" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'x86_64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "smg-grpc-proto" },
+     { name = "soundfile" },
+     { name = "tiktoken" },
+     { name = "timm" },
+-    { name = "torch" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
+     { name = "torch-memory-saver" },
+     { name = "torchao" },
+-    { name = "torchaudio" },
+-    { name = "torchcodec", marker = "(platform_machine != 'aarch64' and platform_machine != 'arm64' and platform_machine != 'armv7l') or sys_platform != 'linux'" },
+-    { name = "torchvision" },
++    { name = "torchaudio", version = "2.9.1", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchaudio", version = "2.9.1", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchaudio", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torchaudio", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchaudio", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchcodec", marker = "(platform_machine != 'aarch64' and platform_machine != 'arm64' and platform_machine != 'armv7l') or (platform_machine == 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'arm64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'armv7l' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or sys_platform != 'linux'" },
++    { name = "torchvision", version = "0.24.1", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "tqdm" },
+     { name = "transformers" },
+     { name = "uvicorn" },
+@@ -2420,87 +2755,6 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/14/e9/6b761de83277f2f02ded7e7ea6f07828ec78e4b229b80e4ca55dd205b9dc/soundfile-0.13.1-py2.py3-none-win_amd64.whl", hash = "sha256:1e70a05a0626524a69e9f0f4dd2ec174b4e9567f4d8b6c11d38b5c289be36ee9", size = 1019162, upload-time = "2025-01-25T09:16:59.573Z" },
+ ]
+ 
+-[[package]]
+-name = "litespec"
+-source = { editable = "." }
+-dependencies = [
+-    { name = "accelerate" },
+-    { name = "causal-conv1d" },
+-    { name = "datasets" },
+-    { name = "flash-linear-attention", extra = ["conv1d"] },
+-    { name = "huggingface-hub" },
+-    { name = "loguru" },
+-    { name = "ninja" },
+-    { name = "numpy" },
+-    { name = "openai-harmony" },
+-    { name = "packaging" },
+-    { name = "psutil" },
+-    { name = "pydantic" },
+-    { name = "pyyaml" },
+-    { name = "qwen-vl-utils" },
+-    { name = "rich" },
+-    { name = "safetensors" },
+-    { name = "sglang" },
+-    { name = "torch" },
+-    { name = "torchaudio" },
+-    { name = "torchvision" },
+-    { name = "tqdm" },
+-    { name = "transformers" },
+-    { name = "typing-extensions" },
+-    { name = "wandb" },
+-    { name = "yunchang" },
+-]
+-
+-[package.optional-dependencies]
+-fa = [
+-    { name = "flash-attn" },
+-]
+-
+-[package.dev-dependencies]
+-dev = [
+-    { name = "build" },
+-    { name = "pre-commit" },
+-    { name = "pytest" },
+-]
+-
+-[package.metadata]
+-requires-dist = [
+-    { name = "accelerate" },
+-    { name = "causal-conv1d", specifier = "==1.7.0" },
+-    { name = "datasets" },
+-    { name = "flash-attn", marker = "extra == 'fa'" },
+-    { name = "flash-linear-attention", extras = ["conv1d"], specifier = "==0.5.2" },
+-    { name = "huggingface-hub" },
+-    { name = "loguru" },
+-    { name = "ninja" },
+-    { name = "numpy" },
+-    { name = "openai-harmony" },
+-    { name = "packaging" },
+-    { name = "psutil" },
+-    { name = "pydantic" },
+-    { name = "pyyaml", specifier = ">=6.0" },
+-    { name = "qwen-vl-utils", specifier = "==0.0.11" },
+-    { name = "rich" },
+-    { name = "safetensors" },
+-    { name = "sglang", specifier = "==0.5.9" },
+-    { name = "torch", specifier = "==2.9.1" },
+-    { name = "torchaudio", specifier = "==2.9.1" },
+-    { name = "torchvision", specifier = "==0.24.1" },
+-    { name = "tqdm" },
+-    { name = "transformers", specifier = "==4.57.1" },
+-    { name = "typing-extensions" },
+-    { name = "wandb" },
+-    { name = "yunchang" },
+-]
+-provides-extras = ["fa"]
+-
+-[package.metadata.requires-dev]
+-dev = [
+-    { name = "build" },
+-    { name = "pre-commit" },
+-    { name = "pytest" },
+-]
+-
+ [[package]]
+ name = "stack-data"
+ version = "0.6.3"
+@@ -2576,8 +2830,14 @@ dependencies = [
+     { name = "huggingface-hub" },
+     { name = "pyyaml" },
+     { name = "safetensors" },
+-    { name = "torch" },
+-    { name = "torchvision" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
++    { name = "torchvision", version = "0.24.1", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torchvision", version = "0.24.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/94/f6/4d7a8c261341fa6ad281920618739f2a650f41043afcedb570f24e99a776/timm-1.0.16.tar.gz", hash = "sha256:a3b8130dd2cb8dc3b9f5e3d09ab6d677a6315a8695fd5264eb6d52a4a46c1044", size = 2339999, upload-time = "2025-06-26T17:09:44.208Z" }
+ wheels = [
+@@ -2614,29 +2874,34 @@ wheels = [
+ name = "torch"
+ version = "2.9.1"
+ source = { registry = "https://pypi.org/simple" }
++resolution-markers = [
++    "sys_platform == 'win32'",
++    "sys_platform == 'emscripten'",
++    "sys_platform != 'emscripten' and sys_platform != 'win32'",
++]
+ dependencies = [
+-    { name = "filelock" },
+-    { name = "fsspec" },
+-    { name = "jinja2" },
+-    { name = "networkx" },
+-    { name = "nvidia-cublas-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-cuda-cupti-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-cuda-nvrtc-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-cuda-runtime-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-cudnn-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-cufft-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-cufile-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-curand-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-cusolver-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-cusparse-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-cusparselt-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-nccl-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-nvjitlink-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-nvshmem-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "nvidia-nvtx-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "sympy" },
+-    { name = "triton", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+-    { name = "typing-extensions" },
++    { name = "filelock", marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "fsspec", marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "jinja2", marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "networkx", marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cublas-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cuda-cupti-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cuda-nvrtc-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cuda-runtime-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cudnn-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cufft-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cufile-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-curand-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cusolver-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cusparse-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cusparselt-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nccl-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nvshmem-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nvtx-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "sympy", marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "typing-extensions", marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
+ ]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/15/db/c064112ac0089af3d2f7a2b5bfbabf4aa407a78b74f87889e524b91c5402/torch-2.9.1-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:62b3fd888277946918cba4478cf849303da5359f0fb4e3bfb86b0533ba2eaf8d", size = 104220430, upload-time = "2025-11-12T15:20:31.705Z" },
+@@ -2645,12 +2910,96 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/1e/ce/7d251155a783fb2c1bb6837b2b7023c622a2070a0a72726ca1df47e7ea34/torch-2.9.1-cp311-none-macosx_11_0_arm64.whl", hash = "sha256:52347912d868653e1528b47cafaf79b285b98be3f4f35d5955389b1b95224475", size = 74463887, upload-time = "2025-11-12T15:20:36.611Z" },
+ ]
+ 
++[[package]]
++name = "torch"
++version = "2.9.1+cu128"
++source = { registry = "https://download.pytorch.org/whl/cu128" }
++resolution-markers = [
++    "sys_platform == 'win32'",
++    "sys_platform == 'emscripten'",
++    "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
++    "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
++]
++dependencies = [
++    { name = "filelock", marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "fsspec", marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "jinja2", marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "networkx", marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "nvidia-cublas-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cuda-cupti-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cuda-nvrtc-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cuda-runtime-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cudnn-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cufft-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cufile-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-curand-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cusolver-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cusparse-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cusparselt-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nccl-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nvshmem-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nvtx-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "sympy", marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "triton", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "typing-extensions", marker = "extra == 'extra-8-litespec-cu128'" },
++]
++wheels = [
++    { url = "https://download-r2.pytorch.org/whl/cu128/torch-2.9.1%2Bcu128-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:cf4ad82430824a80a9f398e29369524ed26c152cf00c2c12002e5400b35e260d", upload-time = "2026-01-26T16:53:53Z" },
++    { url = "https://download-r2.pytorch.org/whl/cu128/torch-2.9.1%2Bcu128-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:2a1da940f0757621d098c9755f7504d791a72a40920ec85a4fd98b20253fca4e", upload-time = "2026-01-26T16:53:57Z" },
++    { url = "https://download-r2.pytorch.org/whl/cu128/torch-2.9.1%2Bcu128-cp311-cp311-win_amd64.whl", hash = "sha256:633005a3700e81b5be0df2a7d3c1d48aced23ed927653797a3bd2b144a3aeeb6", upload-time = "2026-01-26T16:54:12Z" },
++]
++
++[[package]]
++name = "torch"
++version = "2.9.1+cu130"
++source = { registry = "https://download.pytorch.org/whl/cu130" }
++resolution-markers = [
++    "sys_platform == 'win32'",
++    "sys_platform == 'emscripten'",
++    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
++    "platform_machine == 'x86_64' and sys_platform == 'linux'",
++    "platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux'",
++    "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
++]
++dependencies = [
++    { name = "filelock", marker = "extra == 'extra-8-litespec-cu130'" },
++    { name = "fsspec", marker = "extra == 'extra-8-litespec-cu130'" },
++    { name = "jinja2", marker = "extra == 'extra-8-litespec-cu130'" },
++    { name = "networkx", marker = "extra == 'extra-8-litespec-cu130'" },
++    { name = "nvidia-cublas", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cuda-cupti", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cuda-nvrtc", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cuda-runtime", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cudnn-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cufft", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cufile", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-curand", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cusolver", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cusparse", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-cusparselt-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nccl-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nvjitlink", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nvshmem-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "nvidia-nvtx", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "sympy", marker = "extra == 'extra-8-litespec-cu130'" },
++    { name = "triton", marker = "(sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "typing-extensions", marker = "extra == 'extra-8-litespec-cu130'" },
++]
++wheels = [
++    { url = "https://download-r2.pytorch.org/whl/cu130/torch-2.9.1%2Bcu130-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:fd6c7d297e21758a7fa07624f2b5bb15607ee3b1dcc52519e8e796c6d4fcf960", upload-time = "2026-01-26T16:37:18Z" },
++    { url = "https://download-r2.pytorch.org/whl/cu130/torch-2.9.1%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:f40778951ca1533dc634b3842392641fa0b641181ff2f71d62728ef33cc36a5c", upload-time = "2026-01-26T16:37:22Z" },
++    { url = "https://download-r2.pytorch.org/whl/cu130/torch-2.9.1%2Bcu130-cp311-cp311-win_amd64.whl", hash = "sha256:8db2814e63f2b365bda88526587ca75a6083a0b957a24b2b0d45ddc5ee350176", upload-time = "2026-01-26T16:37:38Z" },
++]
++
+ [[package]]
+ name = "torch-c-dlpack-ext"
+ version = "0.1.5"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "torch" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/37/de/921b6491efce5c389a5ef9bbed3d2d6660005840dae488124173180859ab/torch_c_dlpack_ext-0.1.5.tar.gz", hash = "sha256:d06f0357d575d22a168cc77acb9020fc4bae30968ceb6718a055dcbe92bacabe", size = 12913, upload-time = "2026-01-12T11:25:08.484Z" }
+ wheels = [
+@@ -2678,12 +3027,45 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/db/72/01f755514fb61eadc80b974eb4bd4f22f3009b35457773523e3bd497c511/torchao-0.9.0-py3-none-any.whl", hash = "sha256:ea5603c32762f1a9ade1a4dc7b00f5246623b24a28e49e666f614c79a408712a", size = 712541, upload-time = "2025-02-28T13:54:13.671Z" },
+ ]
+ 
++[[package]]
++name = "torchaudio"
++version = "2.9.1"
++source = { registry = "https://download.pytorch.org/whl/cu128" }
++resolution-markers = [
++    "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
++]
++dependencies = [
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://download-r2.pytorch.org/whl/cu128/torchaudio-2.9.1-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:ddb720f4abf3dd284a932b61eaf5fbc0f224195380be98551aef710a4fe34e91", upload-time = "2025-11-11T19:17:09Z" },
++]
++
++[[package]]
++name = "torchaudio"
++version = "2.9.1"
++source = { registry = "https://download.pytorch.org/whl/cu130" }
++resolution-markers = [
++    "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
++]
++dependencies = [
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://download-r2.pytorch.org/whl/cu130/torchaudio-2.9.1-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:493421d061375074ce84840ca619605f625892e16dead63ec97181ef02da3357", upload-time = "2025-11-11T19:17:11Z" },
++]
++
+ [[package]]
+ name = "torchaudio"
+ version = "2.9.1"
+ source = { registry = "https://pypi.org/simple" }
++resolution-markers = [
++    "sys_platform == 'win32'",
++    "sys_platform == 'emscripten'",
++    "sys_platform != 'emscripten' and sys_platform != 'win32'",
++]
+ dependencies = [
+-    { name = "torch" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
+ ]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/3f/6b/34e489fcb4adc4b571a166f2670cc7f156cbe3337867a892fade0a1a5224/torchaudio-2.9.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:6e3f5943135701168d30196e2befd46290180cdbb9ee508b167730d51f43208f", size = 807349, upload-time = "2025-11-12T15:25:57.843Z" },
+@@ -2692,6 +3074,42 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/c3/ef/0ec42e783774bd1dda8bc2489e18b3e9c0a250384e0131cec9f35949f385/torchaudio-2.9.1-cp311-cp311-win_amd64.whl", hash = "sha256:b41339a71b186bad238d94cfb68d4c202db0033088a7b824ce5484674bf67057", size = 664681, upload-time = "2025-11-12T15:25:59.08Z" },
+ ]
+ 
++[[package]]
++name = "torchaudio"
++version = "2.9.1+cu128"
++source = { registry = "https://download.pytorch.org/whl/cu128" }
++resolution-markers = [
++    "sys_platform == 'win32'",
++    "sys_platform == 'emscripten'",
++    "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
++]
++dependencies = [
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://download-r2.pytorch.org/whl/cu128/torchaudio-2.9.1%2Bcu128-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:430c22ecddd9b184117bf64d41d5f4d8d3f0353bb684f3182363bf8180e3e8a5", upload-time = "2025-11-11T19:17:09Z" },
++    { url = "https://download-r2.pytorch.org/whl/cu128/torchaudio-2.9.1%2Bcu128-cp311-cp311-win_amd64.whl", hash = "sha256:c91eea923573e7b02611a324232e4adb7aad5f828aa875b1f48241c228980899", upload-time = "2025-11-11T19:17:09Z" },
++]
++
++[[package]]
++name = "torchaudio"
++version = "2.9.1+cu130"
++source = { registry = "https://download.pytorch.org/whl/cu130" }
++resolution-markers = [
++    "sys_platform == 'win32'",
++    "sys_platform == 'emscripten'",
++    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
++    "platform_machine == 'x86_64' and sys_platform == 'linux'",
++    "platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux'",
++]
++dependencies = [
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://download-r2.pytorch.org/whl/cu130/torchaudio-2.9.1%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:1023bb6598fa6312e1990fdc78660f4b4ef128d8942a1f10c5827aea23d6bd7e", upload-time = "2025-11-11T19:17:10Z" },
++    { url = "https://download-r2.pytorch.org/whl/cu130/torchaudio-2.9.1%2Bcu130-cp311-cp311-win_amd64.whl", hash = "sha256:817e2660d35a3c9a2638dd80d63c7a488cbbe87446ddbb564a5cf88b9de632f7", upload-time = "2025-11-11T19:17:10Z" },
++]
++
+ [[package]]
+ name = "torchcodec"
+ version = "0.8.0"
+@@ -2702,14 +3120,51 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/1f/a7/304deb5c8004eb80a68929cb919246912e2fb52349444f6182aa3e498478/torchcodec-0.8.0-cp311-cp311-win_amd64.whl", hash = "sha256:aeea99b2518d3ac1fbafcb84eb22d202faeac8b61581d14d3fdd14357ac4f560", size = 2065643, upload-time = "2025-10-16T14:43:20.724Z" },
+ ]
+ 
++[[package]]
++name = "torchvision"
++version = "0.24.1"
++source = { registry = "https://download.pytorch.org/whl/cu128" }
++resolution-markers = [
++    "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
++]
++dependencies = [
++    { name = "numpy", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "pillow", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://download-r2.pytorch.org/whl/cu128/torchvision-0.24.1-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:61a2d857a2be441cbd5a80b807b70b5d3b580c95166b3a19d4e433e7a85aeb76", upload-time = "2026-01-26T17:33:31Z" },
++]
++
++[[package]]
++name = "torchvision"
++version = "0.24.1"
++source = { registry = "https://download.pytorch.org/whl/cu130" }
++resolution-markers = [
++    "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
++]
++dependencies = [
++    { name = "numpy", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "pillow", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu130') or (platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.1-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:d4ba2532440a93c23a99c41423a765a0cdd47556afa3acf7c318dd1d3d6793e9", upload-time = "2025-11-15T18:12:59Z" },
++]
++
+ [[package]]
+ name = "torchvision"
+ version = "0.24.1"
+ source = { registry = "https://pypi.org/simple" }
++resolution-markers = [
++    "sys_platform == 'win32'",
++    "sys_platform == 'emscripten'",
++    "sys_platform != 'emscripten' and sys_platform != 'win32'",
++]
+ dependencies = [
+-    { name = "numpy" },
+-    { name = "pillow" },
+-    { name = "torch" },
++    { name = "numpy", marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "pillow", marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
+ ]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/e7/69/30f5f03752aa1a7c23931d2519b31e557f3f10af5089d787cddf3b903ecf/torchvision-0.24.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:056c525dc875f18fe8e9c27079ada166a7b2755cea5a2199b0bc7f1f8364e600", size = 1891436, upload-time = "2025-11-12T15:25:04.3Z" },
+@@ -2718,12 +3173,52 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/fa/bb/cfc6a6f6ccc84a534ed1fdf029ae5716dd6ff04e57ed9dc2dab38bf652d5/torchvision-0.24.1-cp311-cp311-win_amd64.whl", hash = "sha256:a9308cdd37d8a42e14a3e7fd9d271830c7fecb150dd929b642f3c1460514599a", size = 4037588, upload-time = "2025-11-12T15:25:14.402Z" },
+ ]
+ 
++[[package]]
++name = "torchvision"
++version = "0.24.1+cu128"
++source = { registry = "https://download.pytorch.org/whl/cu128" }
++resolution-markers = [
++    "sys_platform == 'win32'",
++    "sys_platform == 'emscripten'",
++    "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
++]
++dependencies = [
++    { name = "numpy", marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "pillow", marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://download-r2.pytorch.org/whl/cu128/torchvision-0.24.1%2Bcu128-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:1b44f67cbd8f36e2a58bfaa3176d35b37df55604adf5929e89006e531f849faa", upload-time = "2025-11-15T18:12:55Z" },
++    { url = "https://download-r2.pytorch.org/whl/cu128/torchvision-0.24.1%2Bcu128-cp311-cp311-win_amd64.whl", hash = "sha256:6d836745bd3130ef8f3569c9f0d9d70103b5e2e9fa058310bcac5f63bcf2d043", upload-time = "2025-11-15T20:06:12Z" },
++]
++
++[[package]]
++name = "torchvision"
++version = "0.24.1+cu130"
++source = { registry = "https://download.pytorch.org/whl/cu130" }
++resolution-markers = [
++    "sys_platform == 'win32'",
++    "sys_platform == 'emscripten'",
++    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
++    "platform_machine == 'x86_64' and sys_platform == 'linux'",
++    "platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux'",
++]
++dependencies = [
++    { name = "numpy", marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "pillow", marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.1%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:b0cc84c57c1fd54644698a70a74d1ea1eddfa44ee2df3354b7bb2c619a5d2923", upload-time = "2025-11-15T18:12:58Z" },
++    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.1%2Bcu130-cp311-cp311-win_amd64.whl", hash = "sha256:f564b9fdbc336ac187780931331fb4253f8511deae914dde12dca5bf17b3045f", upload-time = "2025-11-15T20:02:26Z" },
++]
++
+ [[package]]
+ name = "tqdm"
+ version = "4.67.3"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "colorama", marker = "sys_platform == 'win32'" },
++    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/09/a9/6ba95a270c6f1fbcd8dac228323f2777d886cb206987444e4bce66338dd4/tqdm-4.67.3.tar.gz", hash = "sha256:7d825f03f89244ef73f1d4ce193cb1774a8179fd96f31d7e1dcde62092b960bb", size = 169598, upload-time = "2026-02-03T17:35:53.048Z" }
+ wheels = [
+@@ -2765,6 +3260,7 @@ name = "triton"
+ version = "3.5.1"
+ source = { registry = "https://pypi.org/simple" }
+ wheels = [
++    { url = "https://files.pythonhosted.org/packages/dc/dc/6ce44d055f2fc2403c4ec6b3cfd3a9b25f57b7d95efadccdea91497f8e81/triton-3.5.1-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:da47169e30a779bade679ce78df4810fca6d78a955843d2ddb11f226adc517dc", size = 159928005, upload-time = "2025-11-11T17:51:50.008Z" },
+     { url = "https://files.pythonhosted.org/packages/b0/72/ec90c3519eaf168f22cb1757ad412f3a2add4782ad3a92861c9ad135d886/triton-3.5.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:61413522a48add32302353fdbaaf92daaaab06f6b5e3229940d21b5207f47579", size = 170425802, upload-time = "2025-11-11T17:40:53.209Z" },
+ ]
+ 
+@@ -2901,13 +3397,15 @@ name = "xgrammar"
+ version = "0.1.27"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "mlx-lm", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
++    { name = "mlx-lm", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'darwin' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "ninja" },
+     { name = "numpy" },
+     { name = "pydantic" },
+-    { name = "torch" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
+     { name = "transformers" },
+-    { name = "triton", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
++    { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "typing-extensions" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/62/e1/b522b1e50fddd773d368c2945ef5ed628aa90c0c972027f9aa5a51d6d4f9/xgrammar-0.1.27.tar.gz", hash = "sha256:40af7bb2891f1633ec7f660723c74a92a963307d283aca9e3b4e53a0feaf1d46", size = 2303435, upload-time = "2025-11-04T03:11:53.512Z" }
+@@ -2988,7 +3486,9 @@ name = "yunchang"
+ version = "0.6.4"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "torch" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-8-litespec-cu130'" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/f9/aa/307ef822c4dcd225658fa7a19b1986d6f7ed0c9600e3af0d81574a0bab5f/yunchang-0.6.4.tar.gz", hash = "sha256:9493ba28cd0f0daa3871f0c80a4876b866ead5db48e475708569d476804736f4", size = 40103, upload-time = "2026-01-13T08:14:19.5Z" }
+ wheels = [

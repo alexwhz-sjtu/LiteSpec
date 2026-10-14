@@ -1,0 +1,115 @@
+{
+  "schema_version": 2,
+  "complete": true,
+  "input_identity": {
+    "path": "/diancpfs/user/wanghanzhen/LiteSpec/tests/optimization_handoff_runs/20261013_cuda13_203502/cache_pipeline/probe_generated.jsonl",
+    "size": 33524,
+    "mtime_ns": 1791899754649294493,
+    "sha256": "54092c023ddacf940366b023cc064659713790ea0e81b6f58086d5ff64fe1bfa"
+  },
+  "save_mode": "regen_full",
+  "sample_index_version": 1,
+  "target_model": "/diancpfs/user/wanghanzhen/artifacts/models/Qwen3-8B",
+  "target_backend": "sglang",
+  "chat_template": "qwen",
+  "max_length": 10240,
+  "requested_hidden_layer_ids": [
+    0,
+    8,
+    16,
+    24,
+    31
+  ],
+  "stored_hidden_layer_ids": [
+    0,
+    8,
+    16,
+    24,
+    31,
+    35
+  ],
+  "final_norm_layer_id": 35,
+  "num_hidden_layers": 36,
+  "hidden_size": 4096,
+  "hidden_dtype": "torch.bfloat16",
+  "compressed": false,
+  "shard_size": 512,
+  "successful_samples": 5,
+  "failed_samples": 0,
+  "shards": [
+    {
+      "path": "shards/shard_00000000_00000004.tar",
+      "sample_count": 5,
+      "source_indices": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "sample_metadata": [
+        {
+          "loss_mask_runs": [
+            [
+              55,
+              781
+            ]
+          ],
+          "sequence_length": 781,
+          "supervised_token_count": 726
+        },
+        {
+          "loss_mask_runs": [
+            [
+              53,
+              832
+            ]
+          ],
+          "sequence_length": 832,
+          "supervised_token_count": 779
+        },
+        {
+          "loss_mask_runs": [
+            [
+              23,
+              1366
+            ]
+          ],
+          "sequence_length": 1366,
+          "supervised_token_count": 1343
+        },
+        {
+          "loss_mask_runs": [
+            [
+              28,
+              984
+            ],
+            [
+              1004,
+              2283
+            ]
+          ],
+          "sequence_length": 2283,
+          "supervised_token_count": 2235
+        },
+        {
+          "loss_mask_runs": [
+            [
+              28,
+              1878
+            ],
+            [
+              1894,
+              3303
+            ]
+          ],
+          "sequence_length": 3303,
+          "supervised_token_count": 3259
+        }
+      ],
+      "success_start": 0,
+      "success_end": 4,
+      "sha256": "451d33f41b000f5cbcf4815291627fb89dc6199f907c5ea9fc366f24fbb846fb"
+    }
+  ]
+}

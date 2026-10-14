@@ -1,0 +1,45 @@
+{
+  "world_size": 2,
+  "scope": "450-step offline validation on the formal cache; not a full 6-epoch training run",
+  "ranks": {
+    "0": {
+      "steps": 450,
+      "finite": true,
+      "last_loss": 2.232556284011812,
+      "max_grad_norm": 3.049998832758066,
+      "peak_allocated_gib": 24.643587112426758,
+      "peak_reserved_gib": 32.689453125,
+      "compile_steps": [
+        1,
+        2,
+        8
+      ]
+    },
+    "1": {
+      "steps": 450,
+      "finite": true,
+      "last_loss": 2.232556284011812,
+      "max_grad_norm": 3.049998832758066,
+      "peak_allocated_gib": 24.465438842773438,
+      "peak_reserved_gib": 32.80859375,
+      "compile_steps": [
+        1,
+        2,
+        8
+      ]
+    }
+  },
+  "checkpoint_files": {
+    "flex_attention.py": 6649,
+    "dlite.py": 56293,
+    "model.safetensors": 2127907968,
+    "config.json": 1247,
+    "training_state_rank_00000.pt": 4652203756,
+    "torch_compat.py": 1883,
+    "training_config.yaml": 1819,
+    "training_state_rank_00001.pt": 4256606002,
+    "registry.py": 3983,
+    "training_state.pt": 6977,
+    "sampling.py": 1978
+  }
+}

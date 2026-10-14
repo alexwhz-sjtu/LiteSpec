@@ -1,0 +1,11 @@
+{
+  "records": 4586,
+  "assistant_turns": 5794,
+  "source_metadata_preserved": true,
+  "original_keys": [
+    "category",
+    "conversations",
+    "id",
+    "source"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "litespec/core/_dflash_common.py": {
+    "before_sha256": "ef6740001b73241a7185d790cfec69bd31e77dbf4c7c53e12df90d4044a4bda0",
+    "after_sha256": "4263d4ff8276dc0ff4d1cbefbdcb4a0561524aba2f0e43389db363cc98b36719"
+  },
+  "litespec/core/dflash.py": {
+    "before_sha256": "d223221cc49bfbb7ba8a776513758eb4eaf2f5cc7dfe9413e306dc1524f631fd",
+    "after_sha256": "34e2a856fbb6ed5c3de6d13d10497c71f108d3861f9ef8cb8c0f2295405229d3"
+  },
+  "litespec/core/dflash2.py": {
+    "before_sha256": "6b660ac58a2c23e2af28c005db59c3fe7b5fe4d95bd4a470d21004f97b50c44e",
+    "after_sha256": "3f320ecb62339cb25909f5809c0a663797b4ee6fbc8e4c5abd16e8a96452b35b"
+  },
+  "litespec/core/dlite.py": {
+    "before_sha256": "d132214100d73a1e455b820f510cbe3e6fd871ac9ed57ef00e1a4cdba4ebc677",
+    "after_sha256": "ffb0280bcf4597b9cd324856644b33495db3404c8d2fe987ef841c106570a98f"
+  },
+  "litespec/core/dspark.py": {
+    "before_sha256": "cececad036c9cf89cef5c637d6e80df268232a8f7cf5862e83eb581296a210fe",
+    "after_sha256": "38a87c5d9fa2f9b0fd98e3815c4eb434264be394a4b23834e96e797fe55b4b63"
+  },
+  "litespec/training/recipes/dlite.py": {
+    "before_sha256": "79c3ffb63c21756674d51be0701099de0debc76a3e6bacf863d14e4276fc5f87",
+    "after_sha256": "7cd10a0623cebeb6f61cd59dc1cedb191a792ebd179ec300cfb22f2b015ebc72"
+  },
+  "litespec/training/runner.py": {
+    "before_sha256": "0e46223a98f527d56c42a99fb6e07def7f7029d2f12cc114479ffb25d3657069",
+    "after_sha256": "3ad6601d589ab9e742f8d963ec82b9157648e16b1943716d5428fe0fd8129fb6"
+  }
+}

@@ -101,6 +101,9 @@ class OnlineDFlashModel(DFlashTrainingBase):
 
             return self._dflash_objective_chunk_terms(
                 hidden, ids, weights, predecessors,
+                collect_detailed_metrics=(
+                    collect_detailed_metrics and not is_chunk_recomputing()
+                ),
                 metrics_callback=(
                     collect if collect_detailed_metrics and not is_chunk_recomputing()
                     else None
@@ -158,7 +161,7 @@ class OnlineDFlashModel(DFlashTrainingBase):
                 ce_loss_num.detach(),
                 loss_denominator.detach(),
             ),
-        }
+        } if collect_detailed_metrics else {}
         candidate_selector = getattr(self.draft_model, "candidate_selector", None)
         sum_metrics = {}
         if collect_detailed_metrics:
@@ -264,7 +267,7 @@ class OnlineDFlashModel(DFlashTrainingBase):
                         terms.teacher_selector_greedy_agreement_num,
                         terms.position_den,
                     )
-        if has_selector_objective:
+        if has_selector_objective and collect_detailed_metrics:
             ratio_metrics.update(
                 {
                     "dflash2/objective/weighted_covered_accuracy": (

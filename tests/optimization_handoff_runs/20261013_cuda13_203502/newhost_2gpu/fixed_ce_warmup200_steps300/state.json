@@ -1,0 +1,37 @@
+{
+  "name": "complete",
+  "time": 1791916235.4257772,
+  "controller_pid": 2762892,
+  "comparisons": {
+    "0": {
+      "initial_equal": true,
+      "inputs_and_anchors_equal": true,
+      "final_master_sha256": [
+        "5765842bed9b7b198f8675b56f594fe49d2cb0f5c6cd7c2b725a02ae28b3b2f0",
+        "5765842bed9b7b198f8675b56f594fe49d2cb0f5c6cd7c2b725a02ae28b3b2f0",
+        "5765842bed9b7b198f8675b56f594fe49d2cb0f5c6cd7c2b725a02ae28b3b2f0",
+        "5765842bed9b7b198f8675b56f594fe49d2cb0f5c6cd7c2b725a02ae28b3b2f0"
+      ],
+      "final_masters_exactly_equal": true,
+      "max_loss_abs": 2.5913072132510706e-07,
+      "max_grad_norm_abs": 0.0
+    },
+    "1": {
+      "initial_equal": true,
+      "inputs_and_anchors_equal": true,
+      "final_master_sha256": [
+        "82cfda89999beea139cc894b0b1f92add5a9b4b0589930d0bbb26bf929afc675",
+        "82cfda89999beea139cc894b0b1f92add5a9b4b0589930d0bbb26bf929afc675",
+        "82cfda89999beea139cc894b0b1f92add5a9b4b0589930d0bbb26bf929afc675",
+        "82cfda89999beea139cc894b0b1f92add5a9b4b0589930d0bbb26bf929afc675"
+      ],
+      "final_masters_exactly_equal": true,
+      "max_loss_abs": 2.5913072132510706e-07,
+      "max_grad_norm_abs": 0.0
+    }
+  },
+  "pooled": {
+    "torch": 10666.386032894594,
+    "auto": 10650.627164399666
+  }
+}

@@ -256,6 +256,12 @@ def run_draft(session, *, batch_source=iter_logical_batches, save=None, log=log_
             epoch = state.epoch
             collect_detailed_metrics = (
                 (state.optimizer_step + 1) % args.log_interval == 0
+                # Every microbatch in a final partial window is logged by
+                # update(tail=True), even outside the regular interval.
+                or (
+                    accumulated + cur_phase.batch_count(session.steps_per_epoch)
+                    - state.phase_step
+                ) < args.accumulation_steps
                 or (
                     cur_phase.log_at_schedule_end
                     and state.optimizer_step + 1 == session.total_steps

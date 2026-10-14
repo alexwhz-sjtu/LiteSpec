@@ -195,7 +195,15 @@ the new run.
 The full loop is `training/runner.py:run_draft`, shared by ordinary batches and
 disaggregated packets. One packet counts as one logical batch regardless of its
 draft microbatch subdivision. Accumulation spans epochs, but flushes a tail at
-each stage boundary. Logs aggregate the entire optimizer window. Periodic saves
+each stage boundary. Logs aggregate the entire optimizer window.
+Accuracy, acceptance length, distribution diagnostics, and loss-component
+telemetry are computed only in windows that will be logged, according to
+`log_interval`. Scheduled final logs and forced partial-window tail logs collect
+metrics from every microbatch in that window. Ordinary non-log windows retain
+only the training loss numerator/denominator; CE/L1/KL, selector objectives,
+and DSpark confidence targets are still computed for training. Checkpoint
+replay skips diagnostics. Direct model calls keep `collect_detailed_metrics=True`
+by default; the shared runner passes the logging decision to every recipe. Periodic saves
 retain the logical-step interval and occur only at optimizer boundaries; an
 interval hit inside a pending window is not deferred. Stage-end cursors point to
 the next stage, so resuming does not replay the completed transition.

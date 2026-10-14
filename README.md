@@ -18,8 +18,9 @@ The repository contains the complete training stack. The sibling `DLite/`
 repository is the smaller inference-only release.
 
 ```bash
-uv sync --frozen
-uv run pytest -q tests
+uv sync --frozen --extra cu128  # Use --extra cu130 for CUDA 13.0
+source .venv/bin/activate
+python -m pytest -q tests
 ```
 
 
@@ -29,13 +30,14 @@ uv run pytest -q tests
 The supported environment is Linux with:
 
 - CPython 3.11 (the repository pins it in `.python-version`);
-- an NVIDIA GPU with BF16 support and a driver compatible with CUDA 12.8;
-- a CUDA 12.x toolkit when CUDA extensions must be built from source;
+- an NVIDIA GPU with BF16 support and a driver compatible with the selected CUDA runtime (12.8 or 13.0);
+- a CUDA 12.x or 13.x toolkit matching the selected PyTorch CUDA major version when extensions must be built from source;
 - a C/C++ compiler and Git;
 - [uv](https://docs.astral.sh/uv/) 0.11 or newer.
 
-PyTorch 2.9.1 and its CUDA 12.8 runtime libraries are installed from the lock
-file. The system CUDA toolkit is only used to compile extensions, but its major
+PyTorch 2.9.1 supports both CUDA 12.8 (`cu128`) and CUDA 13.0 (`cu130`).
+Both builds and their runtime libraries are recorded in the lock file.
+The system CUDA toolkit is only used to compile extensions, but its major
 version must match the PyTorch CUDA build. Check the environment before
 installing:
 
@@ -50,15 +52,28 @@ Create the complete development and training environment from the checked-in
 lock file:
 
 ```bash
-uv sync --frozen
+# CUDA 12.8:
+uv sync --frozen --extra cu128
+# Or, for CUDA 13.0:
+# uv sync --frozen --extra cu130
 source .venv/bin/activate
 python -m pytest -q tests
 ```
 
+Select exactly one CUDA extra. For CUDA 13.0, set `CUDA_HOME` to your
+CUDA 13.0 toolkit (for example `/usr/local/cuda-13.0`) and add its `bin`
+directory to `PATH` before syncing. The CUDA extras are mutually exclusive.
+When using `uv run`, pass the same extra, such as `uv run --extra cu130 ...`,
+to preserve the selected build.
+
 `uv` builds `causal-conv1d` against the lockfile's exact PyTorch ABI, which is
 required by Qwen3.5's hybrid linear-attention layers. Activate `.venv` before
-running project commands. The lock file uses the public PyPI registry; a mirror
-can be selected locally with `UV_DEFAULT_INDEX` without changing project files.
+running project commands. General dependencies use public PyPI; PyTorch
+CUDA builds use its official indexes. The `cu130` extra also selects the
+matching SGLang kernel from its official GitHub release, because its CUDA 13
+index contains stale checksums. Release checksums are recorded in `uv.lock`.
+A PyPI mirror can be selected locally with `UV_DEFAULT_INDEX` without
+changing project files.
 
 FlashAttention is optional. Install the regular dependencies first so PyTorch
 is available while FlashAttention is built:

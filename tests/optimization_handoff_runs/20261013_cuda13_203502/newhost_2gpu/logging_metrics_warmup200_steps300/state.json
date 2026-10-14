@@ -1,0 +1,37 @@
+{
+  "name": "complete",
+  "time": 1791946819.9408746,
+  "controller_pid": 3099228,
+  "comparisons": {
+    "0": {
+      "initial_equal": true,
+      "inputs_and_anchors_equal": true,
+      "final_master_sha256": [
+        "6d23709843c7fca963bbdd46597f5946b4979f03a338a17d24f3fa920cbcc7d2",
+        "6d23709843c7fca963bbdd46597f5946b4979f03a338a17d24f3fa920cbcc7d2",
+        "6d23709843c7fca963bbdd46597f5946b4979f03a338a17d24f3fa920cbcc7d2",
+        "6d23709843c7fca963bbdd46597f5946b4979f03a338a17d24f3fa920cbcc7d2"
+      ],
+      "final_masters_exactly_equal": true,
+      "max_loss_abs": 0.0,
+      "max_grad_norm_abs": 0.0
+    },
+    "1": {
+      "initial_equal": true,
+      "inputs_and_anchors_equal": true,
+      "final_master_sha256": [
+        "dc329ea5c8c9ded832e1977beb534921b695c5362a8bf68d2e298f7a9a78c5a9",
+        "dc329ea5c8c9ded832e1977beb534921b695c5362a8bf68d2e298f7a9a78c5a9",
+        "dc329ea5c8c9ded832e1977beb534921b695c5362a8bf68d2e298f7a9a78c5a9",
+        "dc329ea5c8c9ded832e1977beb534921b695c5362a8bf68d2e298f7a9a78c5a9"
+      ],
+      "final_masters_exactly_equal": true,
+      "max_loss_abs": 0.0,
+      "max_grad_norm_abs": 0.0
+    }
+  },
+  "pooled": {
+    "all": 10731.869571541061,
+    "logging": 10932.240436751577
+  }
+}

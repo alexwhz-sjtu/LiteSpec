@@ -1,0 +1,156 @@
+{
+  "world_size": 2,
+  "dataset": "formal regen_full",
+  "compared_steps": 60,
+  "common_normal_steps": [
+    6,
+    7,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60
+  ],
+  "comparisons": {
+    "0": {
+      "initial_state_equal": true,
+      "input_order_equal": true,
+      "anchors_equal": true,
+      "max_loss_abs_difference": 0.00012140464794718753
+    },
+    "1": {
+      "initial_state_equal": true,
+      "input_order_equal": true,
+      "anchors_equal": true,
+      "max_loss_abs_difference": 0.00012140464794718753
+    }
+  },
+  "measurements": {
+    "torch_a": {
+      "normal_steps": 53,
+      "normal_slowest_rank_ms_median": 239.72559696994722,
+      "normal_global_input_tokens_per_s": 9634.840923376512,
+      "normal_global_supervised_tokens_per_s": 9014.024815602008,
+      "logging_steps": [
+        {
+          "step": 50,
+          "slowest_rank_ms": 238.3582389447838
+        }
+      ],
+      "peak_allocated_gib": 28.613166332244873,
+      "peak_reserved_gib": 35.32421875,
+      "excluded_compile_steps": [
+        1,
+        2,
+        8
+      ]
+    },
+    "auto_b": {
+      "normal_steps": 53,
+      "normal_slowest_rank_ms_median": 233.17416803911328,
+      "normal_global_input_tokens_per_s": 9868.394420438837,
+      "normal_global_supervised_tokens_per_s": 9232.529411062693,
+      "logging_steps": [
+        {
+          "step": 50,
+          "slowest_rank_ms": 230.68619007244706
+        }
+      ],
+      "peak_allocated_gib": 24.554248332977295,
+      "peak_reserved_gib": 32.80859375,
+      "excluded_compile_steps": [
+        1,
+        2,
+        8
+      ]
+    },
+    "auto_b_repeat": {
+      "normal_steps": 53,
+      "normal_slowest_rank_ms_median": 232.8598649473861,
+      "normal_global_input_tokens_per_s": 9864.652055515668,
+      "normal_global_supervised_tokens_per_s": 9229.028183532859,
+      "logging_steps": [
+        {
+          "step": 50,
+          "slowest_rank_ms": 231.75820102915168
+        }
+      ],
+      "peak_allocated_gib": 24.554248332977295,
+      "peak_reserved_gib": 32.80859375,
+      "excluded_compile_steps": [
+        1,
+        2,
+        8
+      ]
+    },
+    "torch_a_repeat": {
+      "normal_steps": 53,
+      "normal_slowest_rank_ms_median": 239.8596500279382,
+      "normal_global_input_tokens_per_s": 9647.788727192483,
+      "normal_global_supervised_tokens_per_s": 9026.138334219793,
+      "logging_steps": [
+        {
+          "step": 50,
+          "slowest_rank_ms": 240.24537298828363
+        }
+      ],
+      "peak_allocated_gib": 28.613166332244873,
+      "peak_reserved_gib": 35.37109375,
+      "excluded_compile_steps": [
+        1,
+        2,
+        8
+      ]
+    }
+  },
+  "telemetry_includes_batch_fetch_and_fingerprinting": true,
+  "monitor_audit_pending": false,
+  "monitor_audit_passed": true,
+  "monitor_audit": "gpu_isolation_audit.json"
+}

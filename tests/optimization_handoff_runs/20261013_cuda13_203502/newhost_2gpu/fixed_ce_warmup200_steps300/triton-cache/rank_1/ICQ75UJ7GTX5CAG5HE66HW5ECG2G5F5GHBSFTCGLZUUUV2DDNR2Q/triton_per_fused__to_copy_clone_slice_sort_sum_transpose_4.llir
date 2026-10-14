@@ -1,0 +1,1789 @@
+; ModuleID = 'LLVMDialectModule'
+source_filename = "LLVMDialectModule"
+target datalayout = "e-p3:32:32-p4:32:32-p5:32:32-p6:32:32-p7:32:32-i64:64-i128:128-v16:16-v32:32-n16:32:64"
+
+@global_smem = external addrspace(3) global [0 x i8], align 16
+
+; Function Attrs: nounwind
+define ptx_kernel void @triton_per_fused__to_copy_clone_slice_sort_sum_transpose_4(ptr addrspace(1) %0, ptr addrspace(1) %1, ptr addrspace(1) %2, i32 %3, i32 %4, ptr addrspace(1) readnone captures(none) %5, ptr addrspace(1) readnone captures(none) %6) local_unnamed_addr #0 !dbg !4 {
+  %8 = tail call i32 @llvm.nvvm.read.ptx.sreg.ctaid.x(), !dbg !7
+  %9 = shl i32 %8, 3, !dbg !8
+  %10 = tail call i32 @llvm.nvvm.read.ptx.sreg.tid.x(), !dbg !9
+  %11 = and i32 %10, 24, !dbg !9
+  %12 = lshr i32 %10, 5, !dbg !9
+  %13 = and i32 %10, 7, !dbg !9
+  %14 = lshr i32 %10, 3, !dbg !9
+  %15 = and i32 %14, 7, !dbg !9
+  %16 = or disjoint i32 %9, %13, !dbg !10
+  %17 = or disjoint i32 %15, %9, !dbg !10
+  %18 = icmp slt i32 %16, 52, !dbg !11
+  %19 = icmp slt i32 %17, 52, !dbg !11
+  %20 = or disjoint i32 %15, 8, !dbg !12
+  %21 = or disjoint i32 %15, 16, !dbg !12
+  %22 = or disjoint i32 %15, 24, !dbg !12
+  %23 = shl nuw nsw i32 %13, 2, !dbg !12
+  %24 = mul nuw nsw i32 %15, 53, !dbg !13
+  %25 = mul nuw nsw i32 %20, 53, !dbg !13
+  %26 = mul nuw nsw i32 %21, 53, !dbg !13
+  %27 = mul nuw nsw i32 %22, 53, !dbg !13
+  %28 = add i32 %24, %16, !dbg !14
+  %29 = add i32 %25, %16, !dbg !14
+  %30 = add i32 %26, %16, !dbg !14
+  %31 = add i32 %27, %16, !dbg !14
+  %32 = sext i32 %28 to i64, !dbg !15
+  %33 = getelementptr i32, ptr addrspace(1) %0, i64 %32, !dbg !15
+  %34 = sext i32 %29 to i64, !dbg !15
+  %35 = getelementptr i32, ptr addrspace(1) %0, i64 %34, !dbg !15
+  %36 = sext i32 %30 to i64, !dbg !15
+  %37 = getelementptr i32, ptr addrspace(1) %0, i64 %36, !dbg !15
+  %38 = sext i32 %31 to i64, !dbg !15
+  %39 = getelementptr i32, ptr addrspace(1) %0, i64 %38, !dbg !15
+  %40 = tail call i32 asm sideeffect "mov.u32 $0, 0x0;\0A\09@$2 ld.global.b32 { $0 }, [ $1 + 0 ];", "=r,l,b"(ptr addrspace(1) %33, i1 %18) #5, !dbg !16
+  %41 = tail call i32 asm sideeffect "mov.u32 $0, 0x0;\0A\09@$2 ld.global.b32 { $0 }, [ $1 + 0 ];", "=r,l,b"(ptr addrspace(1) %35, i1 %18) #5, !dbg !16
+  %42 = tail call i32 asm sideeffect "mov.u32 $0, 0x0;\0A\09@$2 ld.global.b32 { $0 }, [ $1 + 0 ];", "=r,l,b"(ptr addrspace(1) %37, i1 %18) #5, !dbg !16
+  %43 = tail call i32 asm sideeffect "mov.u32 $0, 0x0;\0A\09@$2 ld.global.b32 { $0 }, [ $1 + 0 ];", "=r,l,b"(ptr addrspace(1) %39, i1 %18) #5, !dbg !16
+  %44 = lshr i32 %10, 4, !dbg !17
+  %.lobit = and i32 %44, 1, !dbg !17
+  %.lobit1 = and i32 %14, 1, !dbg !17
+  %45 = and i32 %10, 32, !dbg !17
+  %.not = icmp eq i32 %45, 0, !dbg !17
+  %.lobit2 = lshr exact i32 %45, 5, !dbg !17
+  %46 = xor i32 %.lobit1, 1, !dbg !21
+  %47 = xor i32 %.lobit, 1, !dbg !21
+  %48 = xor i32 %.lobit2, 1, !dbg !21
+  %49 = mul nuw nsw i32 %40, %46, !dbg !22
+  %50 = mul nuw nsw i32 %41, %46, !dbg !22
+  %51 = mul nuw nsw i32 %42, %46, !dbg !22
+  %52 = mul nuw nsw i32 %43, %46, !dbg !22
+  %53 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %49, i32 8, i32 31), !dbg !23
+  %54 = add i32 %53, %49, !dbg !26
+  %55 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %50, i32 8, i32 31), !dbg !23
+  %56 = add i32 %55, %50, !dbg !26
+  %57 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %51, i32 8, i32 31), !dbg !23
+  %58 = add i32 %57, %51, !dbg !26
+  %59 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %52, i32 8, i32 31), !dbg !23
+  %60 = add i32 %59, %52, !dbg !26
+  %61 = mul nuw nsw i32 %40, %.lobit1, !dbg !27
+  %62 = mul nuw nsw i32 %41, %.lobit1, !dbg !27
+  %63 = mul nuw nsw i32 %42, %.lobit1, !dbg !27
+  %64 = mul nuw nsw i32 %43, %.lobit1, !dbg !27
+  %65 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %61, i32 8, i32 31), !dbg !23
+  %66 = add i32 %65, %61, !dbg !26
+  %67 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %62, i32 8, i32 31), !dbg !23
+  %68 = add i32 %67, %62, !dbg !26
+  %69 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %63, i32 8, i32 31), !dbg !23
+  %70 = add i32 %69, %63, !dbg !26
+  %71 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %64, i32 8, i32 31), !dbg !23
+  %72 = add i32 %71, %64, !dbg !26
+  %73 = mul nuw nsw i32 %46, %15, !dbg !28
+  %74 = mul nuw nsw i32 %20, %46, !dbg !28
+  %75 = mul nuw nsw i32 %21, %46, !dbg !28
+  %76 = mul nuw nsw i32 %22, %46, !dbg !28
+  %77 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %73, i32 8, i32 31), !dbg !23
+  %78 = add i32 %77, %73, !dbg !26
+  %79 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %74, i32 8, i32 31), !dbg !23
+  %80 = add i32 %79, %74, !dbg !26
+  %81 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %75, i32 8, i32 31), !dbg !23
+  %82 = add i32 %81, %75, !dbg !26
+  %83 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %76, i32 8, i32 31), !dbg !23
+  %84 = add i32 %83, %76, !dbg !26
+  %85 = mul nuw nsw i32 %15, %.lobit1, !dbg !29
+  %86 = mul nuw nsw i32 %20, %.lobit1, !dbg !29
+  %87 = mul nuw nsw i32 %21, %.lobit1, !dbg !29
+  %88 = mul nuw nsw i32 %22, %.lobit1, !dbg !29
+  %89 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %85, i32 8, i32 31), !dbg !23
+  %90 = add i32 %89, %85, !dbg !26
+  %91 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %86, i32 8, i32 31), !dbg !23
+  %92 = add i32 %91, %86, !dbg !26
+  %93 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %87, i32 8, i32 31), !dbg !23
+  %94 = add i32 %93, %87, !dbg !26
+  %95 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %88, i32 8, i32 31), !dbg !23
+  %96 = add i32 %95, %88, !dbg !26
+  %97 = trunc i32 %44 to i1, !dbg !30
+  %98 = icmp sge i32 %54, %66, !dbg !30
+  %99 = icmp ne i32 %54, %66, !dbg !30
+  %100 = icmp sle i32 %78, %90, !dbg !30
+  %101 = or i1 %99, %100, !dbg !30
+  %102 = and i1 %98, %101, !dbg !30
+  %.not3 = xor i1 %102, %97, !dbg !30
+  %103 = icmp sge i32 %56, %68, !dbg !30
+  %104 = icmp ne i32 %56, %68, !dbg !30
+  %105 = icmp sle i32 %80, %92, !dbg !30
+  %106 = or i1 %104, %105, !dbg !30
+  %107 = and i1 %103, %106, !dbg !30
+  %.not4 = xor i1 %107, %97, !dbg !30
+  %108 = icmp sge i32 %58, %70, !dbg !30
+  %109 = icmp ne i32 %58, %70, !dbg !30
+  %110 = icmp sle i32 %82, %94, !dbg !30
+  %111 = or i1 %109, %110, !dbg !30
+  %112 = and i1 %108, %111, !dbg !30
+  %.not5 = xor i1 %112, %97, !dbg !30
+  %113 = icmp sge i32 %60, %72, !dbg !30
+  %114 = icmp ne i32 %60, %72, !dbg !30
+  %115 = icmp sle i32 %84, %96, !dbg !30
+  %116 = or i1 %114, %115, !dbg !30
+  %117 = and i1 %113, %116, !dbg !30
+  %.not6 = xor i1 %117, %97, !dbg !30
+  %118 = xor i32 %66, %54, !dbg !31
+  %119 = xor i32 %68, %56, !dbg !31
+  %120 = xor i32 %70, %58, !dbg !31
+  %121 = xor i32 %72, %60, !dbg !31
+  %122 = select i1 %.not3, i32 0, i32 %118, !dbg !32
+  %123 = select i1 %.not4, i32 0, i32 %119, !dbg !32
+  %124 = select i1 %.not5, i32 0, i32 %120, !dbg !32
+  %125 = select i1 %.not6, i32 0, i32 %121, !dbg !32
+  %126 = xor i32 %122, %40, !dbg !33
+  %127 = xor i32 %123, %41, !dbg !33
+  %128 = xor i32 %124, %42, !dbg !33
+  %129 = xor i32 %125, %43, !dbg !33
+  %130 = xor i32 %90, %78, !dbg !34
+  %131 = xor i32 %92, %80, !dbg !34
+  %132 = xor i32 %94, %82, !dbg !34
+  %133 = xor i32 %96, %84, !dbg !34
+  %134 = select i1 %.not3, i32 0, i32 %130, !dbg !35
+  %135 = select i1 %.not4, i32 0, i32 %131, !dbg !35
+  %136 = select i1 %.not5, i32 0, i32 %132, !dbg !35
+  %137 = select i1 %.not6, i32 0, i32 %133, !dbg !35
+  %138 = xor i32 %134, %15, !dbg !36
+  %139 = xor i32 %135, %20, !dbg !36
+  %140 = xor i32 %136, %21, !dbg !36
+  %141 = xor i32 %137, %22, !dbg !36
+  %142 = mul nuw nsw i32 %126, %47, !dbg !22
+  %143 = mul nuw nsw i32 %127, %47, !dbg !22
+  %144 = mul nuw nsw i32 %128, %47, !dbg !22
+  %145 = mul nuw nsw i32 %129, %47, !dbg !22
+  %146 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %142, i32 16, i32 31), !dbg !23
+  %147 = add i32 %142, %146, !dbg !26
+  %148 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %143, i32 16, i32 31), !dbg !23
+  %149 = add i32 %143, %148, !dbg !26
+  %150 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %144, i32 16, i32 31), !dbg !23
+  %151 = add i32 %144, %150, !dbg !26
+  %152 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %145, i32 16, i32 31), !dbg !23
+  %153 = add i32 %145, %152, !dbg !26
+  %154 = mul nuw nsw i32 %126, %.lobit, !dbg !27
+  %155 = mul nuw nsw i32 %127, %.lobit, !dbg !27
+  %156 = mul nuw nsw i32 %128, %.lobit, !dbg !27
+  %157 = mul nuw nsw i32 %129, %.lobit, !dbg !27
+  %158 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %154, i32 16, i32 31), !dbg !23
+  %159 = add i32 %154, %158, !dbg !26
+  %160 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %155, i32 16, i32 31), !dbg !23
+  %161 = add i32 %155, %160, !dbg !26
+  %162 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %156, i32 16, i32 31), !dbg !23
+  %163 = add i32 %156, %162, !dbg !26
+  %164 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %157, i32 16, i32 31), !dbg !23
+  %165 = add i32 %157, %164, !dbg !26
+  %166 = mul nuw nsw i32 %138, %47, !dbg !28
+  %167 = mul nuw nsw i32 %139, %47, !dbg !28
+  %168 = mul nuw nsw i32 %140, %47, !dbg !28
+  %169 = mul nuw nsw i32 %141, %47, !dbg !28
+  %170 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %166, i32 16, i32 31), !dbg !23
+  %171 = add i32 %170, %166, !dbg !26
+  %172 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %167, i32 16, i32 31), !dbg !23
+  %173 = add i32 %172, %167, !dbg !26
+  %174 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %168, i32 16, i32 31), !dbg !23
+  %175 = add i32 %174, %168, !dbg !26
+  %176 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %169, i32 16, i32 31), !dbg !23
+  %177 = add i32 %176, %169, !dbg !26
+  %178 = mul nuw nsw i32 %138, %.lobit, !dbg !29
+  %179 = mul nuw nsw i32 %139, %.lobit, !dbg !29
+  %180 = mul nuw nsw i32 %140, %.lobit, !dbg !29
+  %181 = mul nuw nsw i32 %141, %.lobit, !dbg !29
+  %182 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %178, i32 16, i32 31), !dbg !23
+  %183 = add i32 %182, %178, !dbg !26
+  %184 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %179, i32 16, i32 31), !dbg !23
+  %185 = add i32 %184, %179, !dbg !26
+  %186 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %180, i32 16, i32 31), !dbg !23
+  %187 = add i32 %186, %180, !dbg !26
+  %188 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %181, i32 16, i32 31), !dbg !23
+  %189 = add i32 %188, %181, !dbg !26
+  %190 = icmp slt i32 %147, %159, !dbg !37
+  %191 = icmp slt i32 %149, %161, !dbg !37
+  %192 = icmp slt i32 %151, %163, !dbg !37
+  %193 = icmp slt i32 %153, %165, !dbg !37
+  %194 = icmp eq i32 %147, %159, !dbg !38
+  %195 = icmp eq i32 %149, %161, !dbg !38
+  %196 = icmp eq i32 %151, %163, !dbg !38
+  %197 = icmp eq i32 %153, %165, !dbg !38
+  %198 = icmp sgt i32 %171, %183, !dbg !39
+  %199 = icmp sgt i32 %173, %185, !dbg !39
+  %200 = icmp sgt i32 %175, %187, !dbg !39
+  %201 = icmp sgt i32 %177, %189, !dbg !39
+  %202 = and i1 %194, %198, !dbg !40
+  %203 = and i1 %195, %199, !dbg !40
+  %204 = and i1 %196, %200, !dbg !40
+  %205 = and i1 %197, %201, !dbg !40
+  %206 = or i1 %190, %202, !dbg !41
+  %207 = or i1 %191, %203, !dbg !41
+  %208 = or i1 %192, %204, !dbg !41
+  %209 = or i1 %193, %205, !dbg !41
+  %210 = zext i1 %206 to i32, !dbg !42
+  %211 = zext i1 %207 to i32, !dbg !42
+  %212 = zext i1 %208 to i32, !dbg !42
+  %213 = zext i1 %209 to i32, !dbg !42
+  %.not7 = icmp eq i32 %.lobit2, %210, !dbg !30
+  %.not8 = icmp eq i32 %.lobit2, %211, !dbg !30
+  %.not9 = icmp eq i32 %.lobit2, %212, !dbg !30
+  %.not10 = icmp eq i32 %.lobit2, %213, !dbg !30
+  %214 = xor i32 %147, %159, !dbg !31
+  %215 = xor i32 %149, %161, !dbg !31
+  %216 = xor i32 %151, %163, !dbg !31
+  %217 = xor i32 %153, %165, !dbg !31
+  %218 = select i1 %.not7, i32 0, i32 %214, !dbg !32
+  %219 = select i1 %.not8, i32 0, i32 %215, !dbg !32
+  %220 = select i1 %.not9, i32 0, i32 %216, !dbg !32
+  %221 = select i1 %.not10, i32 0, i32 %217, !dbg !32
+  %222 = xor i32 %218, %126, !dbg !33
+  %223 = xor i32 %219, %127, !dbg !33
+  %224 = xor i32 %220, %128, !dbg !33
+  %225 = xor i32 %221, %129, !dbg !33
+  %226 = xor i32 %183, %171, !dbg !34
+  %227 = xor i32 %185, %173, !dbg !34
+  %228 = xor i32 %187, %175, !dbg !34
+  %229 = xor i32 %189, %177, !dbg !34
+  %230 = select i1 %.not7, i32 0, i32 %226, !dbg !35
+  %231 = select i1 %.not8, i32 0, i32 %227, !dbg !35
+  %232 = select i1 %.not9, i32 0, i32 %228, !dbg !35
+  %233 = select i1 %.not10, i32 0, i32 %229, !dbg !35
+  %234 = xor i32 %230, %138, !dbg !36
+  %235 = xor i32 %231, %139, !dbg !36
+  %236 = xor i32 %232, %140, !dbg !36
+  %237 = xor i32 %233, %141, !dbg !36
+  %238 = mul nuw nsw i32 %222, %46, !dbg !22
+  %239 = mul nuw nsw i32 %223, %46, !dbg !22
+  %240 = mul nuw nsw i32 %224, %46, !dbg !22
+  %241 = mul nuw nsw i32 %225, %46, !dbg !22
+  %242 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %238, i32 8, i32 31), !dbg !23
+  %243 = add i32 %238, %242, !dbg !26
+  %244 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %239, i32 8, i32 31), !dbg !23
+  %245 = add i32 %239, %244, !dbg !26
+  %246 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %240, i32 8, i32 31), !dbg !23
+  %247 = add i32 %240, %246, !dbg !26
+  %248 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %241, i32 8, i32 31), !dbg !23
+  %249 = add i32 %241, %248, !dbg !26
+  %250 = mul nuw nsw i32 %222, %.lobit1, !dbg !27
+  %251 = mul nuw nsw i32 %223, %.lobit1, !dbg !27
+  %252 = mul nuw nsw i32 %224, %.lobit1, !dbg !27
+  %253 = mul nuw nsw i32 %225, %.lobit1, !dbg !27
+  %254 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %250, i32 8, i32 31), !dbg !23
+  %255 = add i32 %250, %254, !dbg !26
+  %256 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %251, i32 8, i32 31), !dbg !23
+  %257 = add i32 %251, %256, !dbg !26
+  %258 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %252, i32 8, i32 31), !dbg !23
+  %259 = add i32 %252, %258, !dbg !26
+  %260 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %253, i32 8, i32 31), !dbg !23
+  %261 = add i32 %253, %260, !dbg !26
+  %262 = mul nuw nsw i32 %234, %46, !dbg !28
+  %263 = mul nuw nsw i32 %235, %46, !dbg !28
+  %264 = mul nuw nsw i32 %236, %46, !dbg !28
+  %265 = mul nuw nsw i32 %237, %46, !dbg !28
+  %266 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %262, i32 8, i32 31), !dbg !23
+  %267 = add i32 %266, %262, !dbg !26
+  %268 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %263, i32 8, i32 31), !dbg !23
+  %269 = add i32 %268, %263, !dbg !26
+  %270 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %264, i32 8, i32 31), !dbg !23
+  %271 = add i32 %270, %264, !dbg !26
+  %272 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %265, i32 8, i32 31), !dbg !23
+  %273 = add i32 %272, %265, !dbg !26
+  %274 = mul nuw nsw i32 %234, %.lobit1, !dbg !29
+  %275 = mul nuw nsw i32 %235, %.lobit1, !dbg !29
+  %276 = mul nuw nsw i32 %236, %.lobit1, !dbg !29
+  %277 = mul nuw nsw i32 %237, %.lobit1, !dbg !29
+  %278 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %274, i32 8, i32 31), !dbg !23
+  %279 = add i32 %278, %274, !dbg !26
+  %280 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %275, i32 8, i32 31), !dbg !23
+  %281 = add i32 %280, %275, !dbg !26
+  %282 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %276, i32 8, i32 31), !dbg !23
+  %283 = add i32 %282, %276, !dbg !26
+  %284 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %277, i32 8, i32 31), !dbg !23
+  %285 = add i32 %284, %277, !dbg !26
+  %286 = icmp slt i32 %243, %255, !dbg !37
+  %287 = icmp slt i32 %245, %257, !dbg !37
+  %288 = icmp slt i32 %247, %259, !dbg !37
+  %289 = icmp slt i32 %249, %261, !dbg !37
+  %290 = icmp eq i32 %243, %255, !dbg !38
+  %291 = icmp eq i32 %245, %257, !dbg !38
+  %292 = icmp eq i32 %247, %259, !dbg !38
+  %293 = icmp eq i32 %249, %261, !dbg !38
+  %294 = icmp sgt i32 %267, %279, !dbg !39
+  %295 = icmp sgt i32 %269, %281, !dbg !39
+  %296 = icmp sgt i32 %271, %283, !dbg !39
+  %297 = icmp sgt i32 %273, %285, !dbg !39
+  %298 = and i1 %290, %294, !dbg !40
+  %299 = and i1 %291, %295, !dbg !40
+  %300 = and i1 %292, %296, !dbg !40
+  %301 = and i1 %293, %297, !dbg !40
+  %302 = or i1 %286, %298, !dbg !41
+  %303 = or i1 %287, %299, !dbg !41
+  %304 = or i1 %288, %300, !dbg !41
+  %305 = or i1 %289, %301, !dbg !41
+  %306 = zext i1 %302 to i32, !dbg !42
+  %307 = zext i1 %303 to i32, !dbg !42
+  %308 = zext i1 %304 to i32, !dbg !42
+  %309 = zext i1 %305 to i32, !dbg !42
+  %.not11 = icmp eq i32 %.lobit2, %306, !dbg !30
+  %.not12 = icmp eq i32 %.lobit2, %307, !dbg !30
+  %.not13 = icmp eq i32 %.lobit2, %308, !dbg !30
+  %.not14 = icmp eq i32 %.lobit2, %309, !dbg !30
+  %310 = xor i32 %243, %255, !dbg !31
+  %311 = xor i32 %245, %257, !dbg !31
+  %312 = xor i32 %247, %259, !dbg !31
+  %313 = xor i32 %249, %261, !dbg !31
+  %314 = select i1 %.not11, i32 0, i32 %310, !dbg !32
+  %315 = select i1 %.not12, i32 0, i32 %311, !dbg !32
+  %316 = select i1 %.not13, i32 0, i32 %312, !dbg !32
+  %317 = select i1 %.not14, i32 0, i32 %313, !dbg !32
+  %318 = xor i32 %314, %222, !dbg !33
+  %319 = xor i32 %315, %223, !dbg !33
+  %320 = xor i32 %316, %224, !dbg !33
+  %321 = xor i32 %317, %225, !dbg !33
+  %322 = xor i32 %279, %267, !dbg !34
+  %323 = xor i32 %281, %269, !dbg !34
+  %324 = xor i32 %283, %271, !dbg !34
+  %325 = xor i32 %285, %273, !dbg !34
+  %326 = select i1 %.not11, i32 0, i32 %322, !dbg !35
+  %327 = select i1 %.not12, i32 0, i32 %323, !dbg !35
+  %328 = select i1 %.not13, i32 0, i32 %324, !dbg !35
+  %329 = select i1 %.not14, i32 0, i32 %325, !dbg !35
+  %330 = xor i32 %326, %234, !dbg !36
+  %331 = xor i32 %327, %235, !dbg !36
+  %332 = xor i32 %328, %236, !dbg !36
+  %333 = xor i32 %329, %237, !dbg !36
+  %334 = mul nuw nsw i32 %318, %48, !dbg !22
+  %335 = mul nuw nsw i32 %319, %48, !dbg !22
+  %336 = mul nuw nsw i32 %320, %48, !dbg !22
+  %337 = mul nuw nsw i32 %321, %48, !dbg !22
+  %338 = and i32 %12, 1, !dbg !23
+  %339 = shl nuw nsw i32 %10, 5, !dbg !23
+  %340 = and i32 %339, 992, !dbg !23
+  %341 = getelementptr i8, ptr addrspace(3) @global_smem, i32 %340, !dbg !23
+  %342 = getelementptr i32, ptr addrspace(3) %341, i32 %338, !dbg !23
+  %343 = insertelement <1 x i32> poison, i32 %334, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %342, <1 x i32> %343, i1 true) #5, !dbg !23
+  %344 = getelementptr i8, ptr addrspace(3) %341, i32 8, !dbg !23
+  %345 = getelementptr i32, ptr addrspace(3) %344, i32 %338, !dbg !23
+  %346 = insertelement <1 x i32> poison, i32 %335, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %345, <1 x i32> %346, i1 true) #5, !dbg !23
+  %347 = getelementptr i8, ptr addrspace(3) %341, i32 16, !dbg !23
+  %348 = getelementptr i32, ptr addrspace(3) %347, i32 %338, !dbg !23
+  %349 = insertelement <1 x i32> poison, i32 %336, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %348, <1 x i32> %349, i1 true) #5, !dbg !23
+  %350 = getelementptr i8, ptr addrspace(3) %341, i32 24, !dbg !23
+  %351 = getelementptr i32, ptr addrspace(3) %350, i32 %338, !dbg !23
+  %352 = insertelement <1 x i32> poison, i32 %337, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %351, <1 x i32> %352, i1 true) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %353 = icmp samesign ult i32 %10, 256, !dbg !23
+  %354 = getelementptr i32, ptr addrspace(3) @global_smem, i32 %10, !dbg !23
+  %355 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %354, i1 %353) #5, !dbg !23
+  %356 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %355, i32 1, i32 31), !dbg !23
+  %357 = add i32 %356, %355, !dbg !26
+  %358 = and i32 %10, 769, !dbg !23
+  %359 = icmp eq i32 %358, 0, !dbg !23
+  %360 = insertelement <1 x i32> poison, i32 %357, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %354, <1 x i32> %360, i1 %359) #5, !dbg !23
+  %361 = getelementptr i8, ptr addrspace(3) %354, i32 256, !dbg !23
+  %362 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %361, i1 %353) #5, !dbg !23
+  %363 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %362, i32 1, i32 31), !dbg !23
+  %364 = add i32 %363, %362, !dbg !26
+  %365 = insertelement <1 x i32> poison, i32 %364, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %361, <1 x i32> %365, i1 %359) #5, !dbg !23
+  %366 = getelementptr i8, ptr addrspace(3) %354, i32 512, !dbg !23
+  %367 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %366, i1 %353) #5, !dbg !23
+  %368 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %367, i32 1, i32 31), !dbg !23
+  %369 = add i32 %368, %367, !dbg !26
+  %370 = insertelement <1 x i32> poison, i32 %369, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %366, <1 x i32> %370, i1 %359) #5, !dbg !23
+  %371 = getelementptr i8, ptr addrspace(3) %354, i32 768, !dbg !23
+  %372 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %371, i1 %353) #5, !dbg !23
+  %373 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %372, i32 1, i32 31), !dbg !23
+  %374 = add i32 %373, %372, !dbg !26
+  %375 = insertelement <1 x i32> poison, i32 %374, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %371, <1 x i32> %375, i1 %359) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %376 = load i32, ptr addrspace(3) %341, align 16, !dbg !23
+  %377 = load i32, ptr addrspace(3) %344, align 8, !dbg !23
+  %378 = load i32, ptr addrspace(3) %347, align 16, !dbg !23
+  %379 = load i32, ptr addrspace(3) %350, align 8, !dbg !23
+  %380 = mul nuw nsw i32 %318, %.lobit2, !dbg !27
+  %381 = mul nuw nsw i32 %319, %.lobit2, !dbg !27
+  %382 = mul nuw nsw i32 %320, %.lobit2, !dbg !27
+  %383 = mul nuw nsw i32 %321, %.lobit2, !dbg !27
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %384 = insertelement <1 x i32> poison, i32 %380, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %342, <1 x i32> %384, i1 true) #5, !dbg !23
+  %385 = insertelement <1 x i32> poison, i32 %381, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %345, <1 x i32> %385, i1 true) #5, !dbg !23
+  %386 = insertelement <1 x i32> poison, i32 %382, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %348, <1 x i32> %386, i1 true) #5, !dbg !23
+  %387 = insertelement <1 x i32> poison, i32 %383, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %351, <1 x i32> %387, i1 true) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %388 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %354, i1 %353) #5, !dbg !23
+  %389 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %388, i32 1, i32 31), !dbg !23
+  %390 = add i32 %389, %388, !dbg !26
+  %391 = insertelement <1 x i32> poison, i32 %390, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %354, <1 x i32> %391, i1 %359) #5, !dbg !23
+  %392 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %361, i1 %353) #5, !dbg !23
+  %393 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %392, i32 1, i32 31), !dbg !23
+  %394 = add i32 %393, %392, !dbg !26
+  %395 = insertelement <1 x i32> poison, i32 %394, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %361, <1 x i32> %395, i1 %359) #5, !dbg !23
+  %396 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %366, i1 %353) #5, !dbg !23
+  %397 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %396, i32 1, i32 31), !dbg !23
+  %398 = add i32 %397, %396, !dbg !26
+  %399 = insertelement <1 x i32> poison, i32 %398, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %366, <1 x i32> %399, i1 %359) #5, !dbg !23
+  %400 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %371, i1 %353) #5, !dbg !23
+  %401 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %400, i32 1, i32 31), !dbg !23
+  %402 = add i32 %401, %400, !dbg !26
+  %403 = insertelement <1 x i32> poison, i32 %402, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %371, <1 x i32> %403, i1 %359) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %404 = load i32, ptr addrspace(3) %341, align 16, !dbg !23
+  %405 = load i32, ptr addrspace(3) %344, align 8, !dbg !23
+  %406 = load i32, ptr addrspace(3) %347, align 16, !dbg !23
+  %407 = load i32, ptr addrspace(3) %350, align 8, !dbg !23
+  %408 = mul nuw nsw i32 %330, %48, !dbg !28
+  %409 = mul nuw nsw i32 %331, %48, !dbg !28
+  %410 = mul nuw nsw i32 %332, %48, !dbg !28
+  %411 = mul nuw nsw i32 %333, %48, !dbg !28
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %412 = insertelement <1 x i32> poison, i32 %408, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %342, <1 x i32> %412, i1 true) #5, !dbg !23
+  %413 = insertelement <1 x i32> poison, i32 %409, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %345, <1 x i32> %413, i1 true) #5, !dbg !23
+  %414 = insertelement <1 x i32> poison, i32 %410, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %348, <1 x i32> %414, i1 true) #5, !dbg !23
+  %415 = insertelement <1 x i32> poison, i32 %411, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %351, <1 x i32> %415, i1 true) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %416 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %354, i1 %353) #5, !dbg !23
+  %417 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %416, i32 1, i32 31), !dbg !23
+  %418 = add i32 %417, %416, !dbg !26
+  %419 = insertelement <1 x i32> poison, i32 %418, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %354, <1 x i32> %419, i1 %359) #5, !dbg !23
+  %420 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %361, i1 %353) #5, !dbg !23
+  %421 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %420, i32 1, i32 31), !dbg !23
+  %422 = add i32 %421, %420, !dbg !26
+  %423 = insertelement <1 x i32> poison, i32 %422, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %361, <1 x i32> %423, i1 %359) #5, !dbg !23
+  %424 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %366, i1 %353) #5, !dbg !23
+  %425 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %424, i32 1, i32 31), !dbg !23
+  %426 = add i32 %425, %424, !dbg !26
+  %427 = insertelement <1 x i32> poison, i32 %426, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %366, <1 x i32> %427, i1 %359) #5, !dbg !23
+  %428 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %371, i1 %353) #5, !dbg !23
+  %429 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %428, i32 1, i32 31), !dbg !23
+  %430 = add i32 %429, %428, !dbg !26
+  %431 = insertelement <1 x i32> poison, i32 %430, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %371, <1 x i32> %431, i1 %359) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %432 = load i32, ptr addrspace(3) %341, align 16, !dbg !23
+  %433 = load i32, ptr addrspace(3) %344, align 8, !dbg !23
+  %434 = load i32, ptr addrspace(3) %347, align 16, !dbg !23
+  %435 = load i32, ptr addrspace(3) %350, align 8, !dbg !23
+  %436 = mul nuw nsw i32 %330, %.lobit2, !dbg !29
+  %437 = mul nuw nsw i32 %331, %.lobit2, !dbg !29
+  %438 = mul nuw nsw i32 %332, %.lobit2, !dbg !29
+  %439 = mul nuw nsw i32 %333, %.lobit2, !dbg !29
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %440 = insertelement <1 x i32> poison, i32 %436, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %342, <1 x i32> %440, i1 true) #5, !dbg !23
+  %441 = insertelement <1 x i32> poison, i32 %437, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %345, <1 x i32> %441, i1 true) #5, !dbg !23
+  %442 = insertelement <1 x i32> poison, i32 %438, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %348, <1 x i32> %442, i1 true) #5, !dbg !23
+  %443 = insertelement <1 x i32> poison, i32 %439, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %351, <1 x i32> %443, i1 true) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %444 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %354, i1 %353) #5, !dbg !23
+  %445 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %444, i32 1, i32 31), !dbg !23
+  %446 = add i32 %445, %444, !dbg !26
+  %447 = insertelement <1 x i32> poison, i32 %446, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %354, <1 x i32> %447, i1 %359) #5, !dbg !23
+  %448 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %361, i1 %353) #5, !dbg !23
+  %449 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %448, i32 1, i32 31), !dbg !23
+  %450 = add i32 %449, %448, !dbg !26
+  %451 = insertelement <1 x i32> poison, i32 %450, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %361, <1 x i32> %451, i1 %359) #5, !dbg !23
+  %452 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %366, i1 %353) #5, !dbg !23
+  %453 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %452, i32 1, i32 31), !dbg !23
+  %454 = add i32 %453, %452, !dbg !26
+  %455 = insertelement <1 x i32> poison, i32 %454, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %366, <1 x i32> %455, i1 %359) #5, !dbg !23
+  %456 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %371, i1 %353) #5, !dbg !23
+  %457 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %456, i32 1, i32 31), !dbg !23
+  %458 = add i32 %457, %456, !dbg !26
+  %459 = insertelement <1 x i32> poison, i32 %458, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %371, <1 x i32> %459, i1 %359) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %460 = load i32, ptr addrspace(3) %341, align 16, !dbg !23
+  %461 = load i32, ptr addrspace(3) %344, align 8, !dbg !23
+  %462 = load i32, ptr addrspace(3) %347, align 16, !dbg !23
+  %463 = load i32, ptr addrspace(3) %350, align 8, !dbg !23
+  %464 = icmp slt i32 %376, %404, !dbg !37
+  %465 = icmp sge i32 %377, %405, !dbg !37
+  %466 = icmp slt i32 %378, %406, !dbg !37
+  %467 = icmp sge i32 %379, %407, !dbg !37
+  %468 = icmp eq i32 %376, %404, !dbg !38
+  %469 = icmp ne i32 %377, %405, !dbg !38
+  %470 = icmp eq i32 %378, %406, !dbg !38
+  %471 = icmp ne i32 %379, %407, !dbg !38
+  %472 = icmp sgt i32 %432, %460, !dbg !39
+  %473 = icmp sle i32 %433, %461, !dbg !39
+  %474 = icmp sgt i32 %434, %462, !dbg !39
+  %475 = icmp sle i32 %435, %463, !dbg !39
+  %476 = and i1 %468, %472, !dbg !40
+  %.not20 = or i1 %469, %473, !dbg !40
+  %477 = and i1 %470, %474, !dbg !40
+  %.not26 = or i1 %471, %475, !dbg !41
+  %478 = or i1 %464, %476, !dbg !41
+  %.not17 = and i1 %465, %.not20, !dbg !41
+  %479 = or i1 %466, %477, !dbg !41
+  %.not23 = and i1 %467, %.not26, !dbg !42
+  %480 = xor i32 %404, %376, !dbg !31
+  %481 = xor i32 %405, %377, !dbg !31
+  %482 = xor i32 %406, %378, !dbg !31
+  %483 = xor i32 %407, %379, !dbg !31
+  %484 = select i1 %478, i32 %480, i32 0, !dbg !32
+  %485 = select i1 %.not17, i32 %481, i32 0, !dbg !32
+  %486 = select i1 %479, i32 %482, i32 0, !dbg !32
+  %487 = select i1 %.not23, i32 %483, i32 0, !dbg !32
+  %488 = xor i32 %484, %318, !dbg !33
+  %489 = xor i32 %485, %319, !dbg !33
+  %490 = xor i32 %486, %320, !dbg !33
+  %491 = xor i32 %487, %321, !dbg !33
+  %492 = xor i32 %460, %432, !dbg !34
+  %493 = xor i32 %461, %433, !dbg !34
+  %494 = xor i32 %462, %434, !dbg !34
+  %495 = xor i32 %463, %435, !dbg !34
+  %496 = select i1 %478, i32 %492, i32 0, !dbg !35
+  %497 = select i1 %.not17, i32 %493, i32 0, !dbg !35
+  %498 = select i1 %479, i32 %494, i32 0, !dbg !35
+  %499 = select i1 %.not23, i32 %495, i32 0, !dbg !35
+  %500 = xor i32 %496, %330, !dbg !36
+  %501 = xor i32 %497, %331, !dbg !36
+  %502 = xor i32 %498, %332, !dbg !36
+  %503 = xor i32 %499, %333, !dbg !36
+  %504 = mul nuw nsw i32 %488, %47, !dbg !22
+  %505 = mul nuw nsw i32 %489, %47, !dbg !22
+  %506 = mul nuw nsw i32 %490, %47, !dbg !22
+  %507 = mul nuw nsw i32 %491, %47, !dbg !22
+  %508 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %504, i32 16, i32 31), !dbg !23
+  %509 = add i32 %504, %508, !dbg !26
+  %510 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %505, i32 16, i32 31), !dbg !23
+  %511 = add i32 %505, %510, !dbg !26
+  %512 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %506, i32 16, i32 31), !dbg !23
+  %513 = add i32 %506, %512, !dbg !26
+  %514 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %507, i32 16, i32 31), !dbg !23
+  %515 = add i32 %507, %514, !dbg !26
+  %516 = mul nuw nsw i32 %488, %.lobit, !dbg !27
+  %517 = mul nuw nsw i32 %489, %.lobit, !dbg !27
+  %518 = mul nuw nsw i32 %490, %.lobit, !dbg !27
+  %519 = mul nuw nsw i32 %491, %.lobit, !dbg !27
+  %520 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %516, i32 16, i32 31), !dbg !23
+  %521 = add i32 %520, %516, !dbg !26
+  %522 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %517, i32 16, i32 31), !dbg !23
+  %523 = add i32 %522, %517, !dbg !26
+  %524 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %518, i32 16, i32 31), !dbg !23
+  %525 = add i32 %524, %518, !dbg !26
+  %526 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %519, i32 16, i32 31), !dbg !23
+  %527 = add i32 %526, %519, !dbg !26
+  %528 = mul nuw nsw i32 %500, %47, !dbg !28
+  %529 = mul nuw nsw i32 %501, %47, !dbg !28
+  %530 = mul nuw nsw i32 %502, %47, !dbg !28
+  %531 = mul nuw nsw i32 %503, %47, !dbg !28
+  %532 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %528, i32 16, i32 31), !dbg !23
+  %533 = add i32 %532, %528, !dbg !26
+  %534 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %529, i32 16, i32 31), !dbg !23
+  %535 = add i32 %534, %529, !dbg !26
+  %536 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %530, i32 16, i32 31), !dbg !23
+  %537 = add i32 %536, %530, !dbg !26
+  %538 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %531, i32 16, i32 31), !dbg !23
+  %539 = add i32 %538, %531, !dbg !26
+  %540 = mul nuw nsw i32 %500, %.lobit, !dbg !29
+  %541 = mul nuw nsw i32 %501, %.lobit, !dbg !29
+  %542 = mul nuw nsw i32 %502, %.lobit, !dbg !29
+  %543 = mul nuw nsw i32 %503, %.lobit, !dbg !29
+  %544 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %540, i32 16, i32 31), !dbg !23
+  %545 = add i32 %544, %540, !dbg !26
+  %546 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %541, i32 16, i32 31), !dbg !23
+  %547 = add i32 %546, %541, !dbg !26
+  %548 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %542, i32 16, i32 31), !dbg !23
+  %549 = add i32 %548, %542, !dbg !26
+  %550 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %543, i32 16, i32 31), !dbg !23
+  %551 = add i32 %550, %543, !dbg !26
+  %552 = icmp slt i32 %509, %521, !dbg !37
+  %553 = icmp sge i32 %511, %523, !dbg !37
+  %554 = icmp slt i32 %513, %525, !dbg !37
+  %555 = icmp sge i32 %515, %527, !dbg !37
+  %556 = icmp eq i32 %509, %521, !dbg !38
+  %557 = icmp ne i32 %511, %523, !dbg !38
+  %558 = icmp eq i32 %513, %525, !dbg !38
+  %559 = icmp ne i32 %515, %527, !dbg !38
+  %560 = icmp sgt i32 %533, %545, !dbg !39
+  %561 = icmp sle i32 %535, %547, !dbg !39
+  %562 = icmp sgt i32 %537, %549, !dbg !39
+  %563 = icmp sle i32 %539, %551, !dbg !39
+  %564 = and i1 %556, %560, !dbg !40
+  %.not32 = or i1 %557, %561, !dbg !40
+  %565 = and i1 %558, %562, !dbg !40
+  %.not38 = or i1 %559, %563, !dbg !41
+  %566 = or i1 %552, %564, !dbg !41
+  %.not29 = and i1 %553, %.not32, !dbg !41
+  %567 = or i1 %554, %565, !dbg !41
+  %.not35 = and i1 %555, %.not38, !dbg !42
+  %568 = xor i32 %521, %509, !dbg !31
+  %569 = xor i32 %523, %511, !dbg !31
+  %570 = xor i32 %525, %513, !dbg !31
+  %571 = xor i32 %527, %515, !dbg !31
+  %572 = select i1 %566, i32 %568, i32 0, !dbg !32
+  %573 = select i1 %.not29, i32 %569, i32 0, !dbg !32
+  %574 = select i1 %567, i32 %570, i32 0, !dbg !32
+  %575 = select i1 %.not35, i32 %571, i32 0, !dbg !32
+  %576 = xor i32 %572, %488, !dbg !33
+  %577 = xor i32 %573, %489, !dbg !33
+  %578 = xor i32 %574, %490, !dbg !33
+  %579 = xor i32 %575, %491, !dbg !33
+  %580 = xor i32 %545, %533, !dbg !34
+  %581 = xor i32 %547, %535, !dbg !34
+  %582 = xor i32 %549, %537, !dbg !34
+  %583 = xor i32 %551, %539, !dbg !34
+  %584 = select i1 %566, i32 %580, i32 0, !dbg !35
+  %585 = select i1 %.not29, i32 %581, i32 0, !dbg !35
+  %586 = select i1 %567, i32 %582, i32 0, !dbg !35
+  %587 = select i1 %.not35, i32 %583, i32 0, !dbg !35
+  %588 = xor i32 %584, %500, !dbg !36
+  %589 = xor i32 %585, %501, !dbg !36
+  %590 = xor i32 %586, %502, !dbg !36
+  %591 = xor i32 %587, %503, !dbg !36
+  %592 = mul nuw nsw i32 %576, %46, !dbg !22
+  %593 = mul nuw nsw i32 %577, %46, !dbg !22
+  %594 = mul nuw nsw i32 %578, %46, !dbg !22
+  %595 = mul nuw nsw i32 %579, %46, !dbg !22
+  %596 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %592, i32 8, i32 31), !dbg !23
+  %597 = add i32 %592, %596, !dbg !26
+  %598 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %593, i32 8, i32 31), !dbg !23
+  %599 = add i32 %593, %598, !dbg !26
+  %600 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %594, i32 8, i32 31), !dbg !23
+  %601 = add i32 %594, %600, !dbg !26
+  %602 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %595, i32 8, i32 31), !dbg !23
+  %603 = add i32 %595, %602, !dbg !26
+  %604 = mul nuw nsw i32 %576, %.lobit1, !dbg !27
+  %605 = mul nuw nsw i32 %577, %.lobit1, !dbg !27
+  %606 = mul nuw nsw i32 %578, %.lobit1, !dbg !27
+  %607 = mul nuw nsw i32 %579, %.lobit1, !dbg !27
+  %608 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %604, i32 8, i32 31), !dbg !23
+  %609 = add i32 %608, %604, !dbg !26
+  %610 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %605, i32 8, i32 31), !dbg !23
+  %611 = add i32 %610, %605, !dbg !26
+  %612 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %606, i32 8, i32 31), !dbg !23
+  %613 = add i32 %612, %606, !dbg !26
+  %614 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %607, i32 8, i32 31), !dbg !23
+  %615 = add i32 %614, %607, !dbg !26
+  %616 = mul nuw nsw i32 %588, %46, !dbg !28
+  %617 = mul nuw nsw i32 %589, %46, !dbg !28
+  %618 = mul nuw nsw i32 %590, %46, !dbg !28
+  %619 = mul nuw nsw i32 %591, %46, !dbg !28
+  %620 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %616, i32 8, i32 31), !dbg !23
+  %621 = add i32 %620, %616, !dbg !26
+  %622 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %617, i32 8, i32 31), !dbg !23
+  %623 = add i32 %622, %617, !dbg !26
+  %624 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %618, i32 8, i32 31), !dbg !23
+  %625 = add i32 %624, %618, !dbg !26
+  %626 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %619, i32 8, i32 31), !dbg !23
+  %627 = add i32 %626, %619, !dbg !26
+  %628 = mul nuw nsw i32 %588, %.lobit1, !dbg !29
+  %629 = mul nuw nsw i32 %589, %.lobit1, !dbg !29
+  %630 = mul nuw nsw i32 %590, %.lobit1, !dbg !29
+  %631 = mul nuw nsw i32 %591, %.lobit1, !dbg !29
+  %632 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %628, i32 8, i32 31), !dbg !23
+  %633 = add i32 %632, %628, !dbg !26
+  %634 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %629, i32 8, i32 31), !dbg !23
+  %635 = add i32 %634, %629, !dbg !26
+  %636 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %630, i32 8, i32 31), !dbg !23
+  %637 = add i32 %636, %630, !dbg !26
+  %638 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %631, i32 8, i32 31), !dbg !23
+  %639 = add i32 %638, %631, !dbg !26
+  %640 = icmp slt i32 %597, %609, !dbg !37
+  %641 = icmp sge i32 %599, %611, !dbg !37
+  %642 = icmp slt i32 %601, %613, !dbg !37
+  %643 = icmp sge i32 %603, %615, !dbg !37
+  %644 = icmp eq i32 %597, %609, !dbg !38
+  %645 = icmp ne i32 %599, %611, !dbg !38
+  %646 = icmp eq i32 %601, %613, !dbg !38
+  %647 = icmp ne i32 %603, %615, !dbg !38
+  %648 = icmp sgt i32 %621, %633, !dbg !39
+  %649 = icmp sle i32 %623, %635, !dbg !39
+  %650 = icmp sgt i32 %625, %637, !dbg !39
+  %651 = icmp sle i32 %627, %639, !dbg !39
+  %652 = and i1 %644, %648, !dbg !40
+  %.not44 = or i1 %645, %649, !dbg !40
+  %653 = and i1 %646, %650, !dbg !40
+  %.not50 = or i1 %647, %651, !dbg !41
+  %654 = or i1 %640, %652, !dbg !41
+  %.not41 = and i1 %641, %.not44, !dbg !41
+  %655 = or i1 %642, %653, !dbg !41
+  %.not47 = and i1 %643, %.not50, !dbg !42
+  %656 = xor i32 %609, %597, !dbg !31
+  %657 = xor i32 %611, %599, !dbg !31
+  %658 = xor i32 %613, %601, !dbg !31
+  %659 = xor i32 %615, %603, !dbg !31
+  %660 = select i1 %654, i32 %656, i32 0, !dbg !32
+  %661 = select i1 %.not41, i32 %657, i32 0, !dbg !32
+  %662 = select i1 %655, i32 %658, i32 0, !dbg !32
+  %663 = select i1 %.not47, i32 %659, i32 0, !dbg !32
+  %664 = xor i32 %660, %576, !dbg !33
+  %665 = xor i32 %661, %577, !dbg !33
+  %666 = xor i32 %662, %578, !dbg !33
+  %667 = xor i32 %663, %579, !dbg !33
+  %668 = xor i32 %633, %621, !dbg !34
+  %669 = xor i32 %635, %623, !dbg !34
+  %670 = xor i32 %637, %625, !dbg !34
+  %671 = xor i32 %639, %627, !dbg !34
+  %672 = select i1 %654, i32 %668, i32 0, !dbg !35
+  %673 = select i1 %.not41, i32 %669, i32 0, !dbg !35
+  %674 = select i1 %655, i32 %670, i32 0, !dbg !35
+  %675 = select i1 %.not47, i32 %671, i32 0, !dbg !35
+  %676 = xor i32 %672, %588, !dbg !36
+  %677 = xor i32 %673, %589, !dbg !36
+  %678 = xor i32 %674, %590, !dbg !36
+  %679 = xor i32 %675, %591, !dbg !36
+  %680 = icmp slt i32 %664, %665, !dbg !37
+  %681 = icmp sge i32 %666, %667, !dbg !37
+  %682 = icmp eq i32 %664, %665, !dbg !38
+  %683 = icmp ne i32 %666, %667, !dbg !38
+  %684 = icmp sgt i32 %676, %677, !dbg !39
+  %685 = icmp sle i32 %678, %679, !dbg !39
+  %686 = and i1 %682, %684, !dbg !40
+  %.not56 = or i1 %683, %685, !dbg !41
+  %687 = or i1 %680, %686, !dbg !41
+  %.not53 = and i1 %681, %.not56, !dbg !42
+  %688 = xor i32 %665, %664, !dbg !31
+  %689 = xor i32 %667, %666, !dbg !31
+  %690 = select i1 %687, i32 %688, i32 0, !dbg !32
+  %691 = select i1 %.not53, i32 %689, i32 0, !dbg !32
+  %692 = xor i32 %690, %664, !dbg !33
+  %693 = xor i32 %690, %665, !dbg !33
+  %694 = xor i32 %691, %666, !dbg !33
+  %695 = xor i32 %691, %667, !dbg !33
+  %696 = xor i32 %677, %676, !dbg !34
+  %697 = xor i32 %679, %678, !dbg !34
+  %698 = select i1 %687, i32 %696, i32 0, !dbg !35
+  %699 = select i1 %.not53, i32 %697, i32 0, !dbg !35
+  %700 = xor i32 %698, %676, !dbg !36
+  %701 = xor i32 %698, %677, !dbg !36
+  %702 = xor i32 %699, %678, !dbg !36
+  %703 = xor i32 %699, %679, !dbg !36
+  %704 = mul nuw nsw i32 %692, %48, !dbg !22
+  %705 = mul nuw nsw i32 %693, %48, !dbg !22
+  %706 = mul nuw nsw i32 %694, %48, !dbg !22
+  %707 = mul nuw nsw i32 %695, %48, !dbg !22
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %708 = insertelement <1 x i32> poison, i32 %704, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %342, <1 x i32> %708, i1 true) #5, !dbg !23
+  %709 = insertelement <1 x i32> poison, i32 %705, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %345, <1 x i32> %709, i1 true) #5, !dbg !23
+  %710 = insertelement <1 x i32> poison, i32 %706, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %348, <1 x i32> %710, i1 true) #5, !dbg !23
+  %711 = insertelement <1 x i32> poison, i32 %707, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %351, <1 x i32> %711, i1 true) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %712 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %354, i1 %353) #5, !dbg !23
+  %713 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %712, i32 1, i32 31), !dbg !23
+  %714 = add i32 %713, %712, !dbg !26
+  %715 = insertelement <1 x i32> poison, i32 %714, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %354, <1 x i32> %715, i1 %359) #5, !dbg !23
+  %716 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %361, i1 %353) #5, !dbg !23
+  %717 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %716, i32 1, i32 31), !dbg !23
+  %718 = add i32 %717, %716, !dbg !26
+  %719 = insertelement <1 x i32> poison, i32 %718, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %361, <1 x i32> %719, i1 %359) #5, !dbg !23
+  %720 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %366, i1 %353) #5, !dbg !23
+  %721 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %720, i32 1, i32 31), !dbg !23
+  %722 = add i32 %721, %720, !dbg !26
+  %723 = insertelement <1 x i32> poison, i32 %722, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %366, <1 x i32> %723, i1 %359) #5, !dbg !23
+  %724 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %371, i1 %353) #5, !dbg !23
+  %725 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %724, i32 1, i32 31), !dbg !23
+  %726 = add i32 %725, %724, !dbg !26
+  %727 = insertelement <1 x i32> poison, i32 %726, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %371, <1 x i32> %727, i1 %359) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %728 = load i32, ptr addrspace(3) %341, align 16, !dbg !23
+  %729 = load i32, ptr addrspace(3) %344, align 8, !dbg !23
+  %730 = load i32, ptr addrspace(3) %347, align 16, !dbg !23
+  %731 = load i32, ptr addrspace(3) %350, align 8, !dbg !23
+  %732 = mul nuw nsw i32 %692, %.lobit2, !dbg !27
+  %733 = mul nuw nsw i32 %693, %.lobit2, !dbg !27
+  %734 = mul nuw nsw i32 %694, %.lobit2, !dbg !27
+  %735 = mul nuw nsw i32 %695, %.lobit2, !dbg !27
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %736 = insertelement <1 x i32> poison, i32 %732, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %342, <1 x i32> %736, i1 true) #5, !dbg !23
+  %737 = insertelement <1 x i32> poison, i32 %733, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %345, <1 x i32> %737, i1 true) #5, !dbg !23
+  %738 = insertelement <1 x i32> poison, i32 %734, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %348, <1 x i32> %738, i1 true) #5, !dbg !23
+  %739 = insertelement <1 x i32> poison, i32 %735, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %351, <1 x i32> %739, i1 true) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %740 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %354, i1 %353) #5, !dbg !23
+  %741 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %740, i32 1, i32 31), !dbg !23
+  %742 = add i32 %741, %740, !dbg !26
+  %743 = insertelement <1 x i32> poison, i32 %742, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %354, <1 x i32> %743, i1 %359) #5, !dbg !23
+  %744 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %361, i1 %353) #5, !dbg !23
+  %745 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %744, i32 1, i32 31), !dbg !23
+  %746 = add i32 %745, %744, !dbg !26
+  %747 = insertelement <1 x i32> poison, i32 %746, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %361, <1 x i32> %747, i1 %359) #5, !dbg !23
+  %748 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %366, i1 %353) #5, !dbg !23
+  %749 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %748, i32 1, i32 31), !dbg !23
+  %750 = add i32 %749, %748, !dbg !26
+  %751 = insertelement <1 x i32> poison, i32 %750, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %366, <1 x i32> %751, i1 %359) #5, !dbg !23
+  %752 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %371, i1 %353) #5, !dbg !23
+  %753 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %752, i32 1, i32 31), !dbg !23
+  %754 = add i32 %753, %752, !dbg !26
+  %755 = insertelement <1 x i32> poison, i32 %754, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %371, <1 x i32> %755, i1 %359) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %756 = load i32, ptr addrspace(3) %341, align 16, !dbg !23
+  %757 = load i32, ptr addrspace(3) %344, align 8, !dbg !23
+  %758 = load i32, ptr addrspace(3) %347, align 16, !dbg !23
+  %759 = load i32, ptr addrspace(3) %350, align 8, !dbg !23
+  %760 = mul nuw nsw i32 %700, %48, !dbg !28
+  %761 = mul nuw nsw i32 %701, %48, !dbg !28
+  %762 = mul nuw nsw i32 %702, %48, !dbg !28
+  %763 = mul nuw nsw i32 %703, %48, !dbg !28
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %764 = insertelement <1 x i32> poison, i32 %760, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %342, <1 x i32> %764, i1 true) #5, !dbg !23
+  %765 = insertelement <1 x i32> poison, i32 %761, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %345, <1 x i32> %765, i1 true) #5, !dbg !23
+  %766 = insertelement <1 x i32> poison, i32 %762, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %348, <1 x i32> %766, i1 true) #5, !dbg !23
+  %767 = insertelement <1 x i32> poison, i32 %763, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %351, <1 x i32> %767, i1 true) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %768 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %354, i1 %353) #5, !dbg !23
+  %769 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %768, i32 1, i32 31), !dbg !23
+  %770 = add i32 %769, %768, !dbg !26
+  %771 = insertelement <1 x i32> poison, i32 %770, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %354, <1 x i32> %771, i1 %359) #5, !dbg !23
+  %772 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %361, i1 %353) #5, !dbg !23
+  %773 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %772, i32 1, i32 31), !dbg !23
+  %774 = add i32 %773, %772, !dbg !26
+  %775 = insertelement <1 x i32> poison, i32 %774, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %361, <1 x i32> %775, i1 %359) #5, !dbg !23
+  %776 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %366, i1 %353) #5, !dbg !23
+  %777 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %776, i32 1, i32 31), !dbg !23
+  %778 = add i32 %777, %776, !dbg !26
+  %779 = insertelement <1 x i32> poison, i32 %778, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %366, <1 x i32> %779, i1 %359) #5, !dbg !23
+  %780 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %371, i1 %353) #5, !dbg !23
+  %781 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %780, i32 1, i32 31), !dbg !23
+  %782 = add i32 %781, %780, !dbg !26
+  %783 = insertelement <1 x i32> poison, i32 %782, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %371, <1 x i32> %783, i1 %359) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %784 = load i32, ptr addrspace(3) %341, align 16, !dbg !23
+  %785 = load i32, ptr addrspace(3) %344, align 8, !dbg !23
+  %786 = load i32, ptr addrspace(3) %347, align 16, !dbg !23
+  %787 = load i32, ptr addrspace(3) %350, align 8, !dbg !23
+  %788 = mul nuw nsw i32 %700, %.lobit2, !dbg !29
+  %789 = mul nuw nsw i32 %701, %.lobit2, !dbg !29
+  %790 = mul nuw nsw i32 %702, %.lobit2, !dbg !29
+  %791 = mul nuw nsw i32 %703, %.lobit2, !dbg !29
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %792 = insertelement <1 x i32> poison, i32 %788, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %342, <1 x i32> %792, i1 true) #5, !dbg !23
+  %793 = insertelement <1 x i32> poison, i32 %789, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %345, <1 x i32> %793, i1 true) #5, !dbg !23
+  %794 = insertelement <1 x i32> poison, i32 %790, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %348, <1 x i32> %794, i1 true) #5, !dbg !23
+  %795 = insertelement <1 x i32> poison, i32 %791, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %351, <1 x i32> %795, i1 true) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %796 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %354, i1 %353) #5, !dbg !23
+  %797 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %796, i32 1, i32 31), !dbg !23
+  %798 = add i32 %797, %796, !dbg !26
+  %799 = insertelement <1 x i32> poison, i32 %798, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %354, <1 x i32> %799, i1 %359) #5, !dbg !23
+  %800 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %361, i1 %353) #5, !dbg !23
+  %801 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %800, i32 1, i32 31), !dbg !23
+  %802 = add i32 %801, %800, !dbg !26
+  %803 = insertelement <1 x i32> poison, i32 %802, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %361, <1 x i32> %803, i1 %359) #5, !dbg !23
+  %804 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %366, i1 %353) #5, !dbg !23
+  %805 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %804, i32 1, i32 31), !dbg !23
+  %806 = add i32 %805, %804, !dbg !26
+  %807 = insertelement <1 x i32> poison, i32 %806, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %366, <1 x i32> %807, i1 %359) #5, !dbg !23
+  %808 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %371, i1 %353) #5, !dbg !23
+  %809 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %808, i32 1, i32 31), !dbg !23
+  %810 = add i32 %809, %808, !dbg !26
+  %811 = insertelement <1 x i32> poison, i32 %810, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %371, <1 x i32> %811, i1 %359) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %812 = load i32, ptr addrspace(3) %341, align 16, !dbg !23
+  %813 = load i32, ptr addrspace(3) %344, align 8, !dbg !23
+  %814 = load i32, ptr addrspace(3) %347, align 16, !dbg !23
+  %815 = load i32, ptr addrspace(3) %350, align 8, !dbg !23
+  %816 = icmp slt i32 %728, %756, !dbg !37
+  %817 = icmp slt i32 %729, %757, !dbg !37
+  %818 = icmp sge i32 %730, %758, !dbg !37
+  %819 = icmp sge i32 %731, %759, !dbg !37
+  %820 = icmp eq i32 %728, %756, !dbg !38
+  %821 = icmp eq i32 %729, %757, !dbg !38
+  %822 = icmp ne i32 %730, %758, !dbg !38
+  %823 = icmp ne i32 %731, %759, !dbg !38
+  %824 = icmp sgt i32 %784, %812, !dbg !39
+  %825 = icmp sgt i32 %785, %813, !dbg !39
+  %826 = icmp sle i32 %786, %814, !dbg !39
+  %827 = icmp sle i32 %787, %815, !dbg !39
+  %828 = and i1 %820, %824, !dbg !40
+  %829 = and i1 %821, %825, !dbg !40
+  %.not62 = or i1 %822, %826, !dbg !40
+  %.not68 = or i1 %823, %827, !dbg !41
+  %830 = or i1 %816, %828, !dbg !41
+  %831 = or i1 %817, %829, !dbg !41
+  %.not59 = and i1 %818, %.not62, !dbg !41
+  %.not65 = and i1 %819, %.not68, !dbg !42
+  %832 = xor i32 %756, %728, !dbg !31
+  %833 = xor i32 %757, %729, !dbg !31
+  %834 = xor i32 %758, %730, !dbg !31
+  %835 = xor i32 %759, %731, !dbg !31
+  %836 = select i1 %830, i32 %832, i32 0, !dbg !32
+  %837 = select i1 %831, i32 %833, i32 0, !dbg !32
+  %838 = select i1 %.not59, i32 %834, i32 0, !dbg !32
+  %839 = select i1 %.not65, i32 %835, i32 0, !dbg !32
+  %840 = xor i32 %836, %692, !dbg !33
+  %841 = xor i32 %837, %693, !dbg !33
+  %842 = xor i32 %838, %694, !dbg !33
+  %843 = xor i32 %839, %695, !dbg !33
+  %844 = xor i32 %812, %784, !dbg !34
+  %845 = xor i32 %813, %785, !dbg !34
+  %846 = xor i32 %814, %786, !dbg !34
+  %847 = xor i32 %815, %787, !dbg !34
+  %848 = select i1 %830, i32 %844, i32 0, !dbg !35
+  %849 = select i1 %831, i32 %845, i32 0, !dbg !35
+  %850 = select i1 %.not59, i32 %846, i32 0, !dbg !35
+  %851 = select i1 %.not65, i32 %847, i32 0, !dbg !35
+  %852 = xor i32 %848, %700, !dbg !36
+  %853 = xor i32 %849, %701, !dbg !36
+  %854 = xor i32 %850, %702, !dbg !36
+  %855 = xor i32 %851, %703, !dbg !36
+  %856 = mul nuw nsw i32 %840, %47, !dbg !22
+  %857 = mul nuw nsw i32 %841, %47, !dbg !22
+  %858 = mul nuw nsw i32 %842, %47, !dbg !22
+  %859 = mul nuw nsw i32 %843, %47, !dbg !22
+  %860 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %856, i32 16, i32 31), !dbg !23
+  %861 = add i32 %856, %860, !dbg !26
+  %862 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %857, i32 16, i32 31), !dbg !23
+  %863 = add i32 %857, %862, !dbg !26
+  %864 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %858, i32 16, i32 31), !dbg !23
+  %865 = add i32 %858, %864, !dbg !26
+  %866 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %859, i32 16, i32 31), !dbg !23
+  %867 = add i32 %859, %866, !dbg !26
+  %868 = mul nuw nsw i32 %840, %.lobit, !dbg !27
+  %869 = mul nuw nsw i32 %841, %.lobit, !dbg !27
+  %870 = mul nuw nsw i32 %842, %.lobit, !dbg !27
+  %871 = mul nuw nsw i32 %843, %.lobit, !dbg !27
+  %872 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %868, i32 16, i32 31), !dbg !23
+  %873 = add i32 %872, %868, !dbg !26
+  %874 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %869, i32 16, i32 31), !dbg !23
+  %875 = add i32 %874, %869, !dbg !26
+  %876 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %870, i32 16, i32 31), !dbg !23
+  %877 = add i32 %876, %870, !dbg !26
+  %878 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %871, i32 16, i32 31), !dbg !23
+  %879 = add i32 %878, %871, !dbg !26
+  %880 = mul nuw nsw i32 %852, %47, !dbg !28
+  %881 = mul nuw nsw i32 %853, %47, !dbg !28
+  %882 = mul nuw nsw i32 %854, %47, !dbg !28
+  %883 = mul nuw nsw i32 %855, %47, !dbg !28
+  %884 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %880, i32 16, i32 31), !dbg !23
+  %885 = add i32 %884, %880, !dbg !26
+  %886 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %881, i32 16, i32 31), !dbg !23
+  %887 = add i32 %886, %881, !dbg !26
+  %888 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %882, i32 16, i32 31), !dbg !23
+  %889 = add i32 %888, %882, !dbg !26
+  %890 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %883, i32 16, i32 31), !dbg !23
+  %891 = add i32 %890, %883, !dbg !26
+  %892 = mul nuw nsw i32 %852, %.lobit, !dbg !29
+  %893 = mul nuw nsw i32 %853, %.lobit, !dbg !29
+  %894 = mul nuw nsw i32 %854, %.lobit, !dbg !29
+  %895 = mul nuw nsw i32 %855, %.lobit, !dbg !29
+  %896 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %892, i32 16, i32 31), !dbg !23
+  %897 = add i32 %896, %892, !dbg !26
+  %898 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %893, i32 16, i32 31), !dbg !23
+  %899 = add i32 %898, %893, !dbg !26
+  %900 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %894, i32 16, i32 31), !dbg !23
+  %901 = add i32 %900, %894, !dbg !26
+  %902 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %895, i32 16, i32 31), !dbg !23
+  %903 = add i32 %902, %895, !dbg !26
+  %904 = icmp slt i32 %861, %873, !dbg !37
+  %905 = icmp slt i32 %863, %875, !dbg !37
+  %906 = icmp sge i32 %865, %877, !dbg !37
+  %907 = icmp sge i32 %867, %879, !dbg !37
+  %908 = icmp eq i32 %861, %873, !dbg !38
+  %909 = icmp eq i32 %863, %875, !dbg !38
+  %910 = icmp ne i32 %865, %877, !dbg !38
+  %911 = icmp ne i32 %867, %879, !dbg !38
+  %912 = icmp sgt i32 %885, %897, !dbg !39
+  %913 = icmp sgt i32 %887, %899, !dbg !39
+  %914 = icmp sle i32 %889, %901, !dbg !39
+  %915 = icmp sle i32 %891, %903, !dbg !39
+  %916 = and i1 %908, %912, !dbg !40
+  %917 = and i1 %909, %913, !dbg !40
+  %.not74 = or i1 %910, %914, !dbg !40
+  %.not80 = or i1 %911, %915, !dbg !41
+  %918 = or i1 %904, %916, !dbg !41
+  %919 = or i1 %905, %917, !dbg !41
+  %.not71 = and i1 %906, %.not74, !dbg !41
+  %.not77 = and i1 %907, %.not80, !dbg !42
+  %920 = xor i32 %873, %861, !dbg !31
+  %921 = xor i32 %875, %863, !dbg !31
+  %922 = xor i32 %877, %865, !dbg !31
+  %923 = xor i32 %879, %867, !dbg !31
+  %924 = select i1 %918, i32 %920, i32 0, !dbg !32
+  %925 = select i1 %919, i32 %921, i32 0, !dbg !32
+  %926 = select i1 %.not71, i32 %922, i32 0, !dbg !32
+  %927 = select i1 %.not77, i32 %923, i32 0, !dbg !32
+  %928 = xor i32 %924, %840, !dbg !33
+  %929 = xor i32 %925, %841, !dbg !33
+  %930 = xor i32 %926, %842, !dbg !33
+  %931 = xor i32 %927, %843, !dbg !33
+  %932 = xor i32 %897, %885, !dbg !34
+  %933 = xor i32 %899, %887, !dbg !34
+  %934 = xor i32 %901, %889, !dbg !34
+  %935 = xor i32 %903, %891, !dbg !34
+  %936 = select i1 %918, i32 %932, i32 0, !dbg !35
+  %937 = select i1 %919, i32 %933, i32 0, !dbg !35
+  %938 = select i1 %.not71, i32 %934, i32 0, !dbg !35
+  %939 = select i1 %.not77, i32 %935, i32 0, !dbg !35
+  %940 = xor i32 %936, %852, !dbg !36
+  %941 = xor i32 %937, %853, !dbg !36
+  %942 = xor i32 %938, %854, !dbg !36
+  %943 = xor i32 %939, %855, !dbg !36
+  %944 = mul nuw nsw i32 %928, %46, !dbg !22
+  %945 = mul nuw nsw i32 %929, %46, !dbg !22
+  %946 = mul nuw nsw i32 %930, %46, !dbg !22
+  %947 = mul nuw nsw i32 %931, %46, !dbg !22
+  %948 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %944, i32 8, i32 31), !dbg !23
+  %949 = add i32 %944, %948, !dbg !26
+  %950 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %945, i32 8, i32 31), !dbg !23
+  %951 = add i32 %945, %950, !dbg !26
+  %952 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %946, i32 8, i32 31), !dbg !23
+  %953 = add i32 %946, %952, !dbg !26
+  %954 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %947, i32 8, i32 31), !dbg !23
+  %955 = add i32 %947, %954, !dbg !26
+  %956 = mul nuw nsw i32 %928, %.lobit1, !dbg !27
+  %957 = mul nuw nsw i32 %929, %.lobit1, !dbg !27
+  %958 = mul nuw nsw i32 %930, %.lobit1, !dbg !27
+  %959 = mul nuw nsw i32 %931, %.lobit1, !dbg !27
+  %960 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %956, i32 8, i32 31), !dbg !23
+  %961 = add i32 %960, %956, !dbg !26
+  %962 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %957, i32 8, i32 31), !dbg !23
+  %963 = add i32 %962, %957, !dbg !26
+  %964 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %958, i32 8, i32 31), !dbg !23
+  %965 = add i32 %964, %958, !dbg !26
+  %966 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %959, i32 8, i32 31), !dbg !23
+  %967 = add i32 %966, %959, !dbg !26
+  %968 = mul nuw nsw i32 %940, %46, !dbg !28
+  %969 = mul nuw nsw i32 %941, %46, !dbg !28
+  %970 = mul nuw nsw i32 %942, %46, !dbg !28
+  %971 = mul nuw nsw i32 %943, %46, !dbg !28
+  %972 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %968, i32 8, i32 31), !dbg !23
+  %973 = add i32 %972, %968, !dbg !26
+  %974 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %969, i32 8, i32 31), !dbg !23
+  %975 = add i32 %974, %969, !dbg !26
+  %976 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %970, i32 8, i32 31), !dbg !23
+  %977 = add i32 %976, %970, !dbg !26
+  %978 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %971, i32 8, i32 31), !dbg !23
+  %979 = add i32 %978, %971, !dbg !26
+  %980 = mul nuw nsw i32 %940, %.lobit1, !dbg !29
+  %981 = mul nuw nsw i32 %941, %.lobit1, !dbg !29
+  %982 = mul nuw nsw i32 %942, %.lobit1, !dbg !29
+  %983 = mul nuw nsw i32 %943, %.lobit1, !dbg !29
+  %984 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %980, i32 8, i32 31), !dbg !23
+  %985 = add i32 %984, %980, !dbg !26
+  %986 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %981, i32 8, i32 31), !dbg !23
+  %987 = add i32 %986, %981, !dbg !26
+  %988 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %982, i32 8, i32 31), !dbg !23
+  %989 = add i32 %988, %982, !dbg !26
+  %990 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %983, i32 8, i32 31), !dbg !23
+  %991 = add i32 %990, %983, !dbg !26
+  %992 = insertelement <2 x i32> poison, i32 %951, i64 0, !dbg !37
+  %993 = insertelement <2 x i32> %992, i32 %949, i64 1, !dbg !37
+  %994 = insertelement <2 x i32> poison, i32 %963, i64 0, !dbg !37
+  %995 = insertelement <2 x i32> %994, i32 %961, i64 1, !dbg !37
+  %996 = icmp slt <2 x i32> %993, %995, !dbg !37
+  %997 = icmp eq <2 x i32> %993, %995, !dbg !38
+  %998 = insertelement <2 x i32> poison, i32 %975, i64 0, !dbg !39
+  %999 = insertelement <2 x i32> %998, i32 %973, i64 1, !dbg !39
+  %1000 = insertelement <2 x i32> poison, i32 %987, i64 0, !dbg !39
+  %1001 = insertelement <2 x i32> %1000, i32 %985, i64 1, !dbg !39
+  %1002 = icmp sgt <2 x i32> %999, %1001, !dbg !39
+  %1003 = and <2 x i1> %997, %1002, !dbg !40
+  %1004 = insertelement <2 x i32> poison, i32 %955, i64 0, !dbg !37
+  %1005 = insertelement <2 x i32> %1004, i32 %953, i64 1, !dbg !37
+  %1006 = insertelement <2 x i32> poison, i32 %967, i64 0, !dbg !37
+  %1007 = insertelement <2 x i32> %1006, i32 %965, i64 1, !dbg !37
+  %1008 = icmp sge <2 x i32> %1005, %1007, !dbg !37
+  %1009 = icmp ne <2 x i32> %1005, %1007, !dbg !38
+  %1010 = insertelement <2 x i32> poison, i32 %979, i64 0, !dbg !39
+  %1011 = insertelement <2 x i32> %1010, i32 %977, i64 1, !dbg !39
+  %1012 = insertelement <2 x i32> poison, i32 %991, i64 0, !dbg !39
+  %1013 = insertelement <2 x i32> %1012, i32 %989, i64 1, !dbg !39
+  %1014 = icmp sle <2 x i32> %1011, %1013, !dbg !39
+  %1015 = or <2 x i1> %1009, %1014, !dbg !41
+  %1016 = and <2 x i1> %1008, %1015, !dbg !42
+  %1017 = xor i32 %965, %953, !dbg !31
+  %1018 = xor i32 %967, %955, !dbg !31
+  %1019 = extractelement <2 x i1> %1016, i64 1, !dbg !32
+  %1020 = select i1 %1019, i32 %1017, i32 0, !dbg !32
+  %1021 = extractelement <2 x i1> %1016, i64 0, !dbg !32
+  %1022 = select i1 %1021, i32 %1018, i32 0, !dbg !32
+  %1023 = or <2 x i1> %996, %1003, !dbg !41
+  %1024 = xor <2 x i32> %995, %993, !dbg !31
+  %1025 = select <2 x i1> %1023, <2 x i32> %1024, <2 x i32> zeroinitializer, !dbg !32
+  %1026 = insertelement <2 x i32> poison, i32 %929, i64 0, !dbg !33
+  %1027 = insertelement <2 x i32> %1026, i32 %928, i64 1, !dbg !33
+  %1028 = xor <2 x i32> %1025, %1027, !dbg !33
+  %1029 = xor i32 %1020, %930, !dbg !33
+  %1030 = xor i32 %1022, %931, !dbg !33
+  %1031 = xor i32 %985, %973, !dbg !34
+  %1032 = xor i32 %987, %975, !dbg !34
+  %1033 = xor <2 x i32> %1013, %1011, !dbg !34
+  %1034 = extractelement <2 x i1> %1023, i64 1, !dbg !35
+  %1035 = select i1 %1034, i32 %1031, i32 0, !dbg !35
+  %1036 = extractelement <2 x i1> %1023, i64 0, !dbg !35
+  %1037 = select i1 %1036, i32 %1032, i32 0, !dbg !35
+  %1038 = select <2 x i1> %1016, <2 x i32> %1033, <2 x i32> zeroinitializer, !dbg !35
+  %1039 = xor i32 %1035, %940, !dbg !36
+  %1040 = xor i32 %1037, %941, !dbg !36
+  %1041 = insertelement <2 x i32> poison, i32 %943, i64 0, !dbg !36
+  %1042 = insertelement <2 x i32> %1041, i32 %942, i64 1, !dbg !36
+  %1043 = xor <2 x i32> %1038, %1042, !dbg !36
+  %1044 = insertelement <2 x i32> poison, i32 %1030, i64 0, !dbg !37
+  %1045 = insertelement <2 x i32> %1044, i32 %1029, i64 1, !dbg !37
+  %1046 = icmp slt <2 x i32> %1028, %1045, !dbg !37
+  %1047 = icmp eq <2 x i32> %1028, %1045, !dbg !38
+  %1048 = insertelement <2 x i32> poison, i32 %1040, i64 0, !dbg !39
+  %1049 = insertelement <2 x i32> %1048, i32 %1039, i64 1, !dbg !39
+  %1050 = icmp sgt <2 x i32> %1049, %1043, !dbg !39
+  %1051 = and <2 x i1> %1047, %1050, !dbg !40
+  %1052 = or <2 x i1> %1046, %1051, !dbg !41
+  %1053 = insertelement <2 x i32> %1028, i32 %1029, i64 1, !dbg !31
+  %1054 = insertelement <2 x i32> %1028, i32 %1030, i64 0, !dbg !31
+  %1055 = xor <2 x i32> %1053, %1054, !dbg !31
+  %1056 = select <2 x i1> %1052, <2 x i32> %1055, <2 x i32> zeroinitializer, !dbg !32
+  %1057 = xor <2 x i32> %1056, %1028, !dbg !33
+  %1058 = extractelement <2 x i32> %1056, i64 1, !dbg !33
+  %1059 = xor i32 %1058, %1029, !dbg !33
+  %1060 = extractelement <2 x i32> %1056, i64 0, !dbg !33
+  %1061 = xor i32 %1060, %1030, !dbg !33
+  %1062 = extractelement <2 x i32> %1043, i64 1, !dbg !34
+  %1063 = xor i32 %1062, %1039, !dbg !34
+  %1064 = extractelement <2 x i32> %1043, i64 0, !dbg !34
+  %1065 = xor i32 %1064, %1040, !dbg !34
+  %1066 = extractelement <2 x i1> %1052, i64 1, !dbg !35
+  %1067 = select i1 %1066, i32 %1063, i32 0, !dbg !35
+  %1068 = extractelement <2 x i1> %1052, i64 0, !dbg !35
+  %1069 = select i1 %1068, i32 %1065, i32 0, !dbg !35
+  %1070 = xor i32 %1067, %1039, !dbg !36
+  %1071 = xor i32 %1069, %1040, !dbg !36
+  %1072 = xor i32 %1067, %1062, !dbg !36
+  %1073 = xor i32 %1069, %1064, !dbg !36
+  %1074 = extractelement <2 x i32> %1057, i64 0, !dbg !37
+  %1075 = extractelement <2 x i32> %1057, i64 1, !dbg !37
+  %1076 = icmp slt i32 %1075, %1074, !dbg !37
+  %1077 = icmp slt i32 %1059, %1061, !dbg !37
+  %1078 = icmp eq i32 %1075, %1074, !dbg !38
+  %1079 = icmp eq i32 %1059, %1061, !dbg !38
+  %1080 = icmp sgt i32 %1070, %1071, !dbg !39
+  %1081 = icmp sgt i32 %1072, %1073, !dbg !39
+  %1082 = and i1 %1078, %1080, !dbg !40
+  %1083 = and i1 %1079, %1081, !dbg !40
+  %1084 = or i1 %1076, %1082, !dbg !41
+  %1085 = or i1 %1077, %1083, !dbg !41
+  %1086 = xor i32 %1074, %1075, !dbg !31
+  %1087 = xor i32 %1061, %1059, !dbg !31
+  %1088 = select i1 %1084, i32 %1086, i32 0, !dbg !32
+  %1089 = select i1 %1085, i32 %1087, i32 0, !dbg !32
+  %1090 = xor i32 %1088, %1075, !dbg !33
+  %1091 = xor i32 %1088, %1074, !dbg !33
+  %1092 = xor i32 %1089, %1059, !dbg !33
+  %1093 = xor i32 %1089, %1061, !dbg !33
+  %1094 = xor i32 %1071, %1070, !dbg !34
+  %1095 = xor i32 %1073, %1072, !dbg !34
+  %1096 = select i1 %1084, i32 %1094, i32 0, !dbg !35
+  %1097 = select i1 %1085, i32 %1095, i32 0, !dbg !35
+  %1098 = xor i32 %1096, %1070, !dbg !36
+  %1099 = xor i32 %1096, %1071, !dbg !36
+  %1100 = xor i32 %1097, %1072, !dbg !36
+  %1101 = xor i32 %1097, %1073, !dbg !36
+  %1102 = mul nuw nsw i32 %1090, %48, !dbg !22
+  %1103 = mul nuw nsw i32 %1091, %48, !dbg !22
+  %1104 = mul nuw nsw i32 %1092, %48, !dbg !22
+  %1105 = mul nuw nsw i32 %1093, %48, !dbg !22
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %1106 = insertelement <1 x i32> poison, i32 %1102, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %342, <1 x i32> %1106, i1 true) #5, !dbg !23
+  %1107 = insertelement <1 x i32> poison, i32 %1103, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %345, <1 x i32> %1107, i1 true) #5, !dbg !23
+  %1108 = insertelement <1 x i32> poison, i32 %1104, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %348, <1 x i32> %1108, i1 true) #5, !dbg !23
+  %1109 = insertelement <1 x i32> poison, i32 %1105, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %351, <1 x i32> %1109, i1 true) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %1110 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %354, i1 %353) #5, !dbg !23
+  %1111 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1110, i32 1, i32 31), !dbg !23
+  %1112 = add i32 %1111, %1110, !dbg !26
+  %1113 = insertelement <1 x i32> poison, i32 %1112, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %354, <1 x i32> %1113, i1 %359) #5, !dbg !23
+  %1114 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %361, i1 %353) #5, !dbg !23
+  %1115 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1114, i32 1, i32 31), !dbg !23
+  %1116 = add i32 %1115, %1114, !dbg !26
+  %1117 = insertelement <1 x i32> poison, i32 %1116, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %361, <1 x i32> %1117, i1 %359) #5, !dbg !23
+  %1118 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %366, i1 %353) #5, !dbg !23
+  %1119 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1118, i32 1, i32 31), !dbg !23
+  %1120 = add i32 %1119, %1118, !dbg !26
+  %1121 = insertelement <1 x i32> poison, i32 %1120, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %366, <1 x i32> %1121, i1 %359) #5, !dbg !23
+  %1122 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %371, i1 %353) #5, !dbg !23
+  %1123 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1122, i32 1, i32 31), !dbg !23
+  %1124 = add i32 %1123, %1122, !dbg !26
+  %1125 = insertelement <1 x i32> poison, i32 %1124, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %371, <1 x i32> %1125, i1 %359) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %1126 = load i32, ptr addrspace(3) %341, align 16, !dbg !23
+  %1127 = load i32, ptr addrspace(3) %344, align 8, !dbg !23
+  %1128 = load i32, ptr addrspace(3) %347, align 16, !dbg !23
+  %1129 = load i32, ptr addrspace(3) %350, align 8, !dbg !23
+  %1130 = mul nuw nsw i32 %1090, %.lobit2, !dbg !27
+  %1131 = mul nuw nsw i32 %1091, %.lobit2, !dbg !27
+  %1132 = mul nuw nsw i32 %1092, %.lobit2, !dbg !27
+  %1133 = mul nuw nsw i32 %1093, %.lobit2, !dbg !27
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %1134 = insertelement <1 x i32> poison, i32 %1130, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %342, <1 x i32> %1134, i1 true) #5, !dbg !23
+  %1135 = insertelement <1 x i32> poison, i32 %1131, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %345, <1 x i32> %1135, i1 true) #5, !dbg !23
+  %1136 = insertelement <1 x i32> poison, i32 %1132, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %348, <1 x i32> %1136, i1 true) #5, !dbg !23
+  %1137 = insertelement <1 x i32> poison, i32 %1133, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %351, <1 x i32> %1137, i1 true) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %1138 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %354, i1 %353) #5, !dbg !23
+  %1139 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1138, i32 1, i32 31), !dbg !23
+  %1140 = add i32 %1139, %1138, !dbg !26
+  %1141 = insertelement <1 x i32> poison, i32 %1140, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %354, <1 x i32> %1141, i1 %359) #5, !dbg !23
+  %1142 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %361, i1 %353) #5, !dbg !23
+  %1143 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1142, i32 1, i32 31), !dbg !23
+  %1144 = add i32 %1143, %1142, !dbg !26
+  %1145 = insertelement <1 x i32> poison, i32 %1144, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %361, <1 x i32> %1145, i1 %359) #5, !dbg !23
+  %1146 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %366, i1 %353) #5, !dbg !23
+  %1147 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1146, i32 1, i32 31), !dbg !23
+  %1148 = add i32 %1147, %1146, !dbg !26
+  %1149 = insertelement <1 x i32> poison, i32 %1148, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %366, <1 x i32> %1149, i1 %359) #5, !dbg !23
+  %1150 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %371, i1 %353) #5, !dbg !23
+  %1151 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1150, i32 1, i32 31), !dbg !23
+  %1152 = add i32 %1151, %1150, !dbg !26
+  %1153 = insertelement <1 x i32> poison, i32 %1152, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %371, <1 x i32> %1153, i1 %359) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %1154 = load i32, ptr addrspace(3) %341, align 16, !dbg !23
+  %1155 = load i32, ptr addrspace(3) %344, align 8, !dbg !23
+  %1156 = load i32, ptr addrspace(3) %347, align 16, !dbg !23
+  %1157 = load i32, ptr addrspace(3) %350, align 8, !dbg !23
+  %1158 = mul nuw nsw i32 %1098, %48, !dbg !28
+  %1159 = mul nuw nsw i32 %1099, %48, !dbg !28
+  %1160 = mul nuw nsw i32 %1100, %48, !dbg !28
+  %1161 = mul nuw nsw i32 %1101, %48, !dbg !28
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %1162 = insertelement <1 x i32> poison, i32 %1158, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %342, <1 x i32> %1162, i1 true) #5, !dbg !23
+  %1163 = insertelement <1 x i32> poison, i32 %1159, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %345, <1 x i32> %1163, i1 true) #5, !dbg !23
+  %1164 = insertelement <1 x i32> poison, i32 %1160, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %348, <1 x i32> %1164, i1 true) #5, !dbg !23
+  %1165 = insertelement <1 x i32> poison, i32 %1161, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %351, <1 x i32> %1165, i1 true) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %1166 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %354, i1 %353) #5, !dbg !23
+  %1167 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1166, i32 1, i32 31), !dbg !23
+  %1168 = add i32 %1167, %1166, !dbg !26
+  %1169 = insertelement <1 x i32> poison, i32 %1168, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %354, <1 x i32> %1169, i1 %359) #5, !dbg !23
+  %1170 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %361, i1 %353) #5, !dbg !23
+  %1171 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1170, i32 1, i32 31), !dbg !23
+  %1172 = add i32 %1171, %1170, !dbg !26
+  %1173 = insertelement <1 x i32> poison, i32 %1172, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %361, <1 x i32> %1173, i1 %359) #5, !dbg !23
+  %1174 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %366, i1 %353) #5, !dbg !23
+  %1175 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1174, i32 1, i32 31), !dbg !23
+  %1176 = add i32 %1175, %1174, !dbg !26
+  %1177 = insertelement <1 x i32> poison, i32 %1176, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %366, <1 x i32> %1177, i1 %359) #5, !dbg !23
+  %1178 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %371, i1 %353) #5, !dbg !23
+  %1179 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1178, i32 1, i32 31), !dbg !23
+  %1180 = add i32 %1179, %1178, !dbg !26
+  %1181 = insertelement <1 x i32> poison, i32 %1180, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %371, <1 x i32> %1181, i1 %359) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %1182 = load i32, ptr addrspace(3) %341, align 16, !dbg !23
+  %1183 = load i32, ptr addrspace(3) %344, align 8, !dbg !23
+  %1184 = load i32, ptr addrspace(3) %347, align 16, !dbg !23
+  %1185 = load i32, ptr addrspace(3) %350, align 8, !dbg !23
+  %1186 = mul nuw nsw i32 %1098, %.lobit2, !dbg !29
+  %1187 = mul nuw nsw i32 %1099, %.lobit2, !dbg !29
+  %1188 = mul nuw nsw i32 %1100, %.lobit2, !dbg !29
+  %1189 = mul nuw nsw i32 %1101, %.lobit2, !dbg !29
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %1190 = insertelement <1 x i32> poison, i32 %1186, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %342, <1 x i32> %1190, i1 true) #5, !dbg !23
+  %1191 = insertelement <1 x i32> poison, i32 %1187, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %345, <1 x i32> %1191, i1 true) #5, !dbg !23
+  %1192 = insertelement <1 x i32> poison, i32 %1188, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %348, <1 x i32> %1192, i1 true) #5, !dbg !23
+  %1193 = insertelement <1 x i32> poison, i32 %1189, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %351, <1 x i32> %1193, i1 true) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %1194 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %354, i1 %353) #5, !dbg !23
+  %1195 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1194, i32 1, i32 31), !dbg !23
+  %1196 = add i32 %1195, %1194, !dbg !26
+  %1197 = insertelement <1 x i32> poison, i32 %1196, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %354, <1 x i32> %1197, i1 %359) #5, !dbg !23
+  %1198 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %361, i1 %353) #5, !dbg !23
+  %1199 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1198, i32 1, i32 31), !dbg !23
+  %1200 = add i32 %1199, %1198, !dbg !26
+  %1201 = insertelement <1 x i32> poison, i32 %1200, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %361, <1 x i32> %1201, i1 %359) #5, !dbg !23
+  %1202 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %366, i1 %353) #5, !dbg !23
+  %1203 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1202, i32 1, i32 31), !dbg !23
+  %1204 = add i32 %1203, %1202, !dbg !26
+  %1205 = insertelement <1 x i32> poison, i32 %1204, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %366, <1 x i32> %1205, i1 %359) #5, !dbg !23
+  %1206 = tail call i32 asm sideeffect "@$2 ld.shared.b32 $0, [ $1 + 0 ];", "=r,r,b"(ptr addrspace(3) %371, i1 %353) #5, !dbg !23
+  %1207 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1206, i32 1, i32 31), !dbg !23
+  %1208 = add i32 %1207, %1206, !dbg !26
+  %1209 = insertelement <1 x i32> poison, i32 %1208, i64 0, !dbg !23
+  tail call void asm sideeffect "@$2 st.shared.b32 [ $0 + 0 ], $1;", "r,r,b"(ptr addrspace(3) %371, <1 x i32> %1209, i1 %359) #5, !dbg !23
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !23
+  %1210 = load i32, ptr addrspace(3) %341, align 16, !dbg !23
+  %1211 = load i32, ptr addrspace(3) %344, align 8, !dbg !23
+  %1212 = load i32, ptr addrspace(3) %347, align 16, !dbg !23
+  %1213 = load i32, ptr addrspace(3) %350, align 8, !dbg !23
+  %1214 = icmp slt i32 %1126, %1154, !dbg !37
+  %1215 = icmp slt i32 %1127, %1155, !dbg !37
+  %1216 = icmp slt i32 %1128, %1156, !dbg !37
+  %1217 = icmp slt i32 %1129, %1157, !dbg !37
+  %1218 = icmp eq i32 %1126, %1154, !dbg !38
+  %1219 = icmp eq i32 %1127, %1155, !dbg !38
+  %1220 = icmp eq i32 %1128, %1156, !dbg !38
+  %1221 = icmp eq i32 %1129, %1157, !dbg !38
+  %1222 = icmp sgt i32 %1182, %1210, !dbg !39
+  %1223 = icmp sgt i32 %1183, %1211, !dbg !39
+  %1224 = icmp sgt i32 %1184, %1212, !dbg !39
+  %1225 = icmp sgt i32 %1185, %1213, !dbg !39
+  %1226 = and i1 %1218, %1222, !dbg !40
+  %1227 = and i1 %1219, %1223, !dbg !40
+  %1228 = and i1 %1220, %1224, !dbg !40
+  %1229 = and i1 %1221, %1225, !dbg !40
+  %1230 = or i1 %1214, %1226, !dbg !41
+  %1231 = or i1 %1215, %1227, !dbg !41
+  %1232 = or i1 %1216, %1228, !dbg !41
+  %1233 = or i1 %1217, %1229, !dbg !41
+  %1234 = xor i32 %1154, %1126, !dbg !31
+  %1235 = xor i32 %1155, %1127, !dbg !31
+  %1236 = xor i32 %1156, %1128, !dbg !31
+  %1237 = xor i32 %1157, %1129, !dbg !31
+  %1238 = select i1 %1230, i32 %1234, i32 0, !dbg !32
+  %1239 = select i1 %1231, i32 %1235, i32 0, !dbg !32
+  %1240 = select i1 %1232, i32 %1236, i32 0, !dbg !32
+  %1241 = select i1 %1233, i32 %1237, i32 0, !dbg !32
+  %1242 = xor i32 %1238, %1090, !dbg !33
+  %1243 = xor i32 %1239, %1091, !dbg !33
+  %1244 = xor i32 %1240, %1092, !dbg !33
+  %1245 = xor i32 %1241, %1093, !dbg !33
+  %1246 = xor i32 %1210, %1182, !dbg !34
+  %1247 = xor i32 %1211, %1183, !dbg !34
+  %1248 = xor i32 %1212, %1184, !dbg !34
+  %1249 = xor i32 %1213, %1185, !dbg !34
+  %1250 = select i1 %1230, i32 %1246, i32 0, !dbg !35
+  %1251 = select i1 %1231, i32 %1247, i32 0, !dbg !35
+  %1252 = select i1 %1232, i32 %1248, i32 0, !dbg !35
+  %1253 = select i1 %1233, i32 %1249, i32 0, !dbg !35
+  %1254 = xor i32 %1250, %1098, !dbg !36
+  %1255 = xor i32 %1251, %1099, !dbg !36
+  %1256 = xor i32 %1252, %1100, !dbg !36
+  %1257 = xor i32 %1253, %1101, !dbg !36
+  %1258 = mul nuw nsw i32 %1242, %47, !dbg !22
+  %1259 = mul nuw nsw i32 %1243, %47, !dbg !22
+  %1260 = mul nuw nsw i32 %1244, %47, !dbg !22
+  %1261 = mul nuw nsw i32 %1245, %47, !dbg !22
+  %1262 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1258, i32 16, i32 31), !dbg !23
+  %1263 = add i32 %1258, %1262, !dbg !26
+  %1264 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1259, i32 16, i32 31), !dbg !23
+  %1265 = add i32 %1259, %1264, !dbg !26
+  %1266 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1260, i32 16, i32 31), !dbg !23
+  %1267 = add i32 %1260, %1266, !dbg !26
+  %1268 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1261, i32 16, i32 31), !dbg !23
+  %1269 = add i32 %1261, %1268, !dbg !26
+  %1270 = mul nuw nsw i32 %1242, %.lobit, !dbg !27
+  %1271 = mul nuw nsw i32 %1243, %.lobit, !dbg !27
+  %1272 = mul nuw nsw i32 %1244, %.lobit, !dbg !27
+  %1273 = mul nuw nsw i32 %1245, %.lobit, !dbg !27
+  %1274 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1270, i32 16, i32 31), !dbg !23
+  %1275 = add i32 %1274, %1270, !dbg !26
+  %1276 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1271, i32 16, i32 31), !dbg !23
+  %1277 = add i32 %1276, %1271, !dbg !26
+  %1278 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1272, i32 16, i32 31), !dbg !23
+  %1279 = add i32 %1278, %1272, !dbg !26
+  %1280 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1273, i32 16, i32 31), !dbg !23
+  %1281 = add i32 %1280, %1273, !dbg !26
+  %1282 = mul nuw nsw i32 %1254, %47, !dbg !28
+  %1283 = mul nuw nsw i32 %1255, %47, !dbg !28
+  %1284 = mul nuw nsw i32 %1256, %47, !dbg !28
+  %1285 = mul nuw nsw i32 %1257, %47, !dbg !28
+  %1286 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1282, i32 16, i32 31), !dbg !23
+  %1287 = add i32 %1286, %1282, !dbg !26
+  %1288 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1283, i32 16, i32 31), !dbg !23
+  %1289 = add i32 %1288, %1283, !dbg !26
+  %1290 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1284, i32 16, i32 31), !dbg !23
+  %1291 = add i32 %1290, %1284, !dbg !26
+  %1292 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1285, i32 16, i32 31), !dbg !23
+  %1293 = add i32 %1292, %1285, !dbg !26
+  %1294 = mul nuw nsw i32 %1254, %.lobit, !dbg !29
+  %1295 = mul nuw nsw i32 %1255, %.lobit, !dbg !29
+  %1296 = mul nuw nsw i32 %1256, %.lobit, !dbg !29
+  %1297 = mul nuw nsw i32 %1257, %.lobit, !dbg !29
+  %1298 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1294, i32 16, i32 31), !dbg !23
+  %1299 = add i32 %1298, %1294, !dbg !26
+  %1300 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1295, i32 16, i32 31), !dbg !23
+  %1301 = add i32 %1300, %1295, !dbg !26
+  %1302 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1296, i32 16, i32 31), !dbg !23
+  %1303 = add i32 %1302, %1296, !dbg !26
+  %1304 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1297, i32 16, i32 31), !dbg !23
+  %1305 = add i32 %1304, %1297, !dbg !26
+  %1306 = icmp slt i32 %1263, %1275, !dbg !37
+  %1307 = icmp slt i32 %1265, %1277, !dbg !37
+  %1308 = icmp slt i32 %1267, %1279, !dbg !37
+  %1309 = icmp slt i32 %1269, %1281, !dbg !37
+  %1310 = icmp eq i32 %1263, %1275, !dbg !38
+  %1311 = icmp eq i32 %1265, %1277, !dbg !38
+  %1312 = icmp eq i32 %1267, %1279, !dbg !38
+  %1313 = icmp eq i32 %1269, %1281, !dbg !38
+  %1314 = icmp sgt i32 %1287, %1299, !dbg !39
+  %1315 = icmp sgt i32 %1289, %1301, !dbg !39
+  %1316 = icmp sgt i32 %1291, %1303, !dbg !39
+  %1317 = icmp sgt i32 %1293, %1305, !dbg !39
+  %1318 = and i1 %1310, %1314, !dbg !40
+  %1319 = and i1 %1311, %1315, !dbg !40
+  %1320 = and i1 %1312, %1316, !dbg !40
+  %1321 = and i1 %1313, %1317, !dbg !40
+  %1322 = or i1 %1306, %1318, !dbg !41
+  %1323 = or i1 %1307, %1319, !dbg !41
+  %1324 = or i1 %1308, %1320, !dbg !41
+  %1325 = or i1 %1309, %1321, !dbg !41
+  %1326 = xor i32 %1275, %1263, !dbg !31
+  %1327 = xor i32 %1277, %1265, !dbg !31
+  %1328 = xor i32 %1279, %1267, !dbg !31
+  %1329 = xor i32 %1281, %1269, !dbg !31
+  %1330 = select i1 %1322, i32 %1326, i32 0, !dbg !32
+  %1331 = select i1 %1323, i32 %1327, i32 0, !dbg !32
+  %1332 = select i1 %1324, i32 %1328, i32 0, !dbg !32
+  %1333 = select i1 %1325, i32 %1329, i32 0, !dbg !32
+  %1334 = xor i32 %1330, %1242, !dbg !33
+  %1335 = xor i32 %1331, %1243, !dbg !33
+  %1336 = xor i32 %1332, %1244, !dbg !33
+  %1337 = xor i32 %1333, %1245, !dbg !33
+  %1338 = xor i32 %1299, %1287, !dbg !34
+  %1339 = xor i32 %1301, %1289, !dbg !34
+  %1340 = xor i32 %1303, %1291, !dbg !34
+  %1341 = xor i32 %1305, %1293, !dbg !34
+  %1342 = select i1 %1322, i32 %1338, i32 0, !dbg !35
+  %1343 = select i1 %1323, i32 %1339, i32 0, !dbg !35
+  %1344 = select i1 %1324, i32 %1340, i32 0, !dbg !35
+  %1345 = select i1 %1325, i32 %1341, i32 0, !dbg !35
+  %1346 = xor i32 %1342, %1254, !dbg !36
+  %1347 = xor i32 %1343, %1255, !dbg !36
+  %1348 = xor i32 %1344, %1256, !dbg !36
+  %1349 = xor i32 %1345, %1257, !dbg !36
+  %1350 = mul nuw nsw i32 %1334, %46, !dbg !22
+  %1351 = mul nuw nsw i32 %1335, %46, !dbg !22
+  %1352 = mul nuw nsw i32 %1336, %46, !dbg !22
+  %1353 = mul nuw nsw i32 %1337, %46, !dbg !22
+  %1354 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1350, i32 8, i32 31), !dbg !23
+  %1355 = add i32 %1350, %1354, !dbg !26
+  %1356 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1351, i32 8, i32 31), !dbg !23
+  %1357 = add i32 %1351, %1356, !dbg !26
+  %1358 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1352, i32 8, i32 31), !dbg !23
+  %1359 = add i32 %1352, %1358, !dbg !26
+  %1360 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1353, i32 8, i32 31), !dbg !23
+  %1361 = add i32 %1353, %1360, !dbg !26
+  %1362 = mul nuw nsw i32 %1334, %.lobit1, !dbg !27
+  %1363 = mul nuw nsw i32 %1335, %.lobit1, !dbg !27
+  %1364 = mul nuw nsw i32 %1336, %.lobit1, !dbg !27
+  %1365 = mul nuw nsw i32 %1337, %.lobit1, !dbg !27
+  %1366 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1362, i32 8, i32 31), !dbg !23
+  %1367 = add i32 %1366, %1362, !dbg !26
+  %1368 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1363, i32 8, i32 31), !dbg !23
+  %1369 = add i32 %1368, %1363, !dbg !26
+  %1370 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1364, i32 8, i32 31), !dbg !23
+  %1371 = add i32 %1370, %1364, !dbg !26
+  %1372 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1365, i32 8, i32 31), !dbg !23
+  %1373 = add i32 %1372, %1365, !dbg !26
+  %1374 = mul nuw nsw i32 %1346, %46, !dbg !28
+  %1375 = mul nuw nsw i32 %1347, %46, !dbg !28
+  %1376 = mul nuw nsw i32 %1348, %46, !dbg !28
+  %1377 = mul nuw nsw i32 %1349, %46, !dbg !28
+  %1378 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1374, i32 8, i32 31), !dbg !23
+  %1379 = add i32 %1378, %1374, !dbg !26
+  %1380 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1375, i32 8, i32 31), !dbg !23
+  %1381 = add i32 %1380, %1375, !dbg !26
+  %1382 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1376, i32 8, i32 31), !dbg !23
+  %1383 = add i32 %1382, %1376, !dbg !26
+  %1384 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1377, i32 8, i32 31), !dbg !23
+  %1385 = add i32 %1384, %1377, !dbg !26
+  %1386 = mul nuw nsw i32 %1346, %.lobit1, !dbg !29
+  %1387 = mul nuw nsw i32 %1347, %.lobit1, !dbg !29
+  %1388 = mul nuw nsw i32 %1348, %.lobit1, !dbg !29
+  %1389 = mul nuw nsw i32 %1349, %.lobit1, !dbg !29
+  %1390 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1386, i32 8, i32 31), !dbg !23
+  %1391 = add i32 %1390, %1386, !dbg !26
+  %1392 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1387, i32 8, i32 31), !dbg !23
+  %1393 = add i32 %1392, %1387, !dbg !26
+  %1394 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1388, i32 8, i32 31), !dbg !23
+  %1395 = add i32 %1394, %1388, !dbg !26
+  %1396 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1389, i32 8, i32 31), !dbg !23
+  %1397 = add i32 %1396, %1389, !dbg !26
+  %1398 = icmp slt i32 %1355, %1367, !dbg !37
+  %1399 = icmp slt i32 %1357, %1369, !dbg !37
+  %1400 = icmp slt i32 %1359, %1371, !dbg !37
+  %1401 = icmp slt i32 %1361, %1373, !dbg !37
+  %1402 = icmp eq i32 %1355, %1367, !dbg !38
+  %1403 = icmp eq i32 %1357, %1369, !dbg !38
+  %1404 = icmp eq i32 %1359, %1371, !dbg !38
+  %1405 = icmp eq i32 %1361, %1373, !dbg !38
+  %1406 = icmp sgt i32 %1379, %1391, !dbg !39
+  %1407 = icmp sgt i32 %1381, %1393, !dbg !39
+  %1408 = icmp sgt i32 %1383, %1395, !dbg !39
+  %1409 = icmp sgt i32 %1385, %1397, !dbg !39
+  %1410 = and i1 %1402, %1406, !dbg !40
+  %1411 = and i1 %1403, %1407, !dbg !40
+  %1412 = and i1 %1404, %1408, !dbg !40
+  %1413 = and i1 %1405, %1409, !dbg !40
+  %1414 = or i1 %1398, %1410, !dbg !41
+  %1415 = or i1 %1399, %1411, !dbg !41
+  %1416 = or i1 %1400, %1412, !dbg !41
+  %1417 = or i1 %1401, %1413, !dbg !41
+  %1418 = xor i32 %1391, %1379, !dbg !34
+  %1419 = xor i32 %1393, %1381, !dbg !34
+  %1420 = xor i32 %1395, %1383, !dbg !34
+  %1421 = xor i32 %1397, %1385, !dbg !34
+  %1422 = select i1 %1414, i32 %1418, i32 0, !dbg !35
+  %1423 = select i1 %1415, i32 %1419, i32 0, !dbg !35
+  %1424 = select i1 %1416, i32 %1420, i32 0, !dbg !35
+  %1425 = select i1 %1417, i32 %1421, i32 0, !dbg !35
+  %1426 = xor i32 %1422, %1346, !dbg !36
+  %1427 = xor i32 %1423, %1347, !dbg !36
+  %1428 = xor i32 %1424, %1348, !dbg !36
+  %1429 = xor i32 %1425, %1349, !dbg !36
+  %1430 = insertelement <4 x i1> poison, i1 %18, i64 0, !dbg !43
+  %1431 = shufflevector <4 x i1> %1430, <4 x i1> poison, <4 x i32> zeroinitializer, !dbg !43
+  %1432 = insertelement <4 x i32> poison, i32 %41, i64 0, !dbg !43
+  %1433 = insertelement <4 x i32> %1432, i32 %40, i64 1, !dbg !43
+  %1434 = insertelement <4 x i32> %1433, i32 %42, i64 2, !dbg !43
+  %1435 = insertelement <4 x i32> %1434, i32 %43, i64 3, !dbg !43
+  %1436 = sext <4 x i32> %1435 to <4 x i64>, !dbg !43
+  %1437 = select <4 x i1> %1431, <4 x i64> %1436, <4 x i64> zeroinitializer, !dbg !43
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !44
+  %1438 = tail call i64 @llvm.vector.reduce.add.v4i64(<4 x i64> %1437), !dbg !46
+  %extelt.offset = lshr i64 %1438, 32, !dbg !44
+  %1439 = trunc nuw i64 %extelt.offset to i32, !dbg !44
+  %1440 = trunc i64 %1438 to i32, !dbg !44
+  %1441 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1440, i32 16, i32 31), !dbg !44
+  %1442 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1439, i32 16, i32 31), !dbg !44
+  %1443 = insertelement <2 x i32> poison, i32 %1441, i64 0, !dbg !44
+  %1444 = insertelement <2 x i32> %1443, i32 %1442, i64 1, !dbg !44
+  %1445 = bitcast <2 x i32> %1444 to i64, !dbg !44
+  %1446 = add i64 %1438, %1445, !dbg !46
+  %extelt.offset96 = lshr i64 %1446, 32, !dbg !44
+  %1447 = trunc nuw i64 %extelt.offset96 to i32, !dbg !44
+  %1448 = trunc i64 %1446 to i32, !dbg !44
+  %1449 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1448, i32 8, i32 31), !dbg !44
+  %1450 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1447, i32 8, i32 31), !dbg !44
+  %1451 = insertelement <2 x i32> poison, i32 %1449, i64 0, !dbg !44
+  %1452 = insertelement <2 x i32> %1451, i32 %1450, i64 1, !dbg !44
+  %1453 = bitcast <2 x i32> %1452 to i64, !dbg !44
+  %1454 = add i64 %1446, %1453, !dbg !46
+  %1455 = icmp eq i32 %11, 0, !dbg !44
+  %.idx101 = shl nuw nsw i32 %13, 4, !dbg !44
+  %1456 = getelementptr i8, ptr addrspace(3) @global_smem, i32 %.idx101, !dbg !44
+  %1457 = getelementptr i64, ptr addrspace(3) %1456, i32 %338, !dbg !44
+  %1458 = insertelement <1 x i64> poison, i64 %1454, i64 0, !dbg !44
+  tail call void asm sideeffect "@$2 st.shared.b64 [ $0 + 0 ], $1;", "r,l,b"(ptr addrspace(3) %1457, <1 x i64> %1458, i1 %1455) #5, !dbg !44
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !44
+  %1459 = icmp samesign ult i32 %10, 16, !dbg !44
+  %1460 = getelementptr i64, ptr addrspace(3) @global_smem, i32 %10, !dbg !44
+  %1461 = tail call i64 asm sideeffect "@$2 ld.shared.b64 $0, [ $1 + 0 ];", "=l,r,b"(ptr addrspace(3) %1460, i1 %1459) #5, !dbg !44
+  %extelt.offset97 = lshr i64 %1461, 32, !dbg !44
+  %1462 = trunc nuw i64 %extelt.offset97 to i32, !dbg !44
+  %1463 = trunc i64 %1461 to i32, !dbg !44
+  %1464 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1463, i32 1, i32 31), !dbg !44
+  %1465 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %1462, i32 1, i32 31), !dbg !44
+  %1466 = insertelement <2 x i32> poison, i32 %1464, i64 0, !dbg !44
+  %1467 = insertelement <2 x i32> %1466, i32 %1465, i64 1, !dbg !44
+  %1468 = bitcast <2 x i32> %1467 to i64, !dbg !44
+  %1469 = add i64 %1461, %1468, !dbg !46
+  %1470 = and i32 %10, 1009, !dbg !44
+  %1471 = icmp eq i32 %1470, 0, !dbg !44
+  %1472 = insertelement <1 x i64> poison, i64 %1469, i64 0, !dbg !44
+  tail call void asm sideeffect "@$2 st.shared.b64 [ $0 + 0 ], $1;", "r,l,b"(ptr addrspace(3) %1460, <1 x i64> %1472, i1 %1471) #5, !dbg !44
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !44
+  %1473 = load i64, ptr addrspace(3) %1456, align 16, !dbg !44
+  %1474 = trunc i64 %1473 to i32, !dbg !47
+  %1475 = shl i32 %17, 5, !dbg !48
+  %1476 = or disjoint i32 %1475, %23, !dbg !49
+  %1477 = sext i32 %1476 to i64, !dbg !50
+  %1478 = getelementptr i32, ptr addrspace(1) %1, i64 %1477, !dbg !50
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !51
+  %1479 = shl nuw nsw i32 %10, 5, !dbg !51
+  %1480 = and i32 %1479, 896, !dbg !51
+  %1481 = lshr exact i32 %11, 1, !dbg !51
+  %1482 = shl nuw nsw i32 %45, 1, !dbg !51
+  %1483 = or disjoint i32 %1480, %.idx101, !dbg !51
+  %1484 = or disjoint i32 %1481, %1482, !dbg !51
+  %1485 = xor i32 %1483, %1484, !dbg !51
+  %1486 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %1485, !dbg !51
+  %1487 = insertelement <1 x i32> poison, i32 %1426, i64 0, !dbg !51
+  store <1 x i32> %1487, ptr addrspace(3) %1486, align 4, !dbg !51
+  %1488 = xor i32 %1485, 4, !dbg !51
+  %1489 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %1488, !dbg !51
+  %1490 = insertelement <1 x i32> poison, i32 %1427, i64 0, !dbg !51
+  store <1 x i32> %1490, ptr addrspace(3) %1489, align 4, !dbg !51
+  %1491 = xor i32 %1485, 8, !dbg !51
+  %1492 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %1491, !dbg !51
+  %1493 = insertelement <1 x i32> poison, i32 %1428, i64 0, !dbg !51
+  store <1 x i32> %1493, ptr addrspace(3) %1492, align 4, !dbg !51
+  %1494 = xor i32 %1485, 12, !dbg !51
+  %1495 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %1494, !dbg !51
+  %1496 = insertelement <1 x i32> poison, i32 %1429, i64 0, !dbg !51
+  store <1 x i32> %1496, ptr addrspace(3) %1495, align 4, !dbg !51
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0), !dbg !51
+  %1497 = shl nuw nsw i32 %10, 1, !dbg !51
+  %1498 = and i32 %1497, 60, !dbg !51
+  %1499 = shl nuw nsw i32 %10, 6, !dbg !51
+  %1500 = and i32 %1499, 64, !dbg !51
+  %1501 = select i1 %.not, i32 0, i32 192, !dbg !51
+  %1502 = or disjoint i32 %1498, %1500, !dbg !51
+  %1503 = xor i32 %1502, %1501, !dbg !51
+  %1504 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %1503, !dbg !51
+  %1505 = load i32, ptr addrspace(3) %1504, align 4, !dbg !51
+  %1506 = xor i32 %1503, 260, !dbg !51
+  %1507 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %1506, !dbg !51
+  %1508 = load i32, ptr addrspace(3) %1507, align 4, !dbg !51
+  %1509 = xor i32 %1503, 520, !dbg !51
+  %1510 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %1509, !dbg !51
+  %1511 = load i32, ptr addrspace(3) %1510, align 4, !dbg !51
+  %1512 = xor i32 %1503, 780, !dbg !51
+  %1513 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %1512, !dbg !51
+  %1514 = load i32, ptr addrspace(3) %1513, align 4, !dbg !51
+  tail call void asm sideeffect "@$5 st.global.v4.b32 [ $4 + 0 ], { $0, $1, $2, $3 };", "r,r,r,r,l,b"(i32 %1505, i32 %1508, i32 %1511, i32 %1514, ptr addrspace(1) %1478, i1 %19) #5, !dbg !51
+  %1515 = sext i32 %16 to i64, !dbg !52
+  %1516 = getelementptr i32, ptr addrspace(1) %2, i64 %1515, !dbg !52
+  %1517 = and i32 %10, 56, !dbg !53
+  %1518 = icmp eq i32 %1517, 0, !dbg !53
+  %1519 = and i1 %1518, %18, !dbg !53
+  tail call void asm sideeffect "@$2 st.global.b32 [ $1 + 0 ], { $0 };", "r,l,b"(i32 %1474, ptr addrspace(1) %1516, i1 %1519) #5, !dbg !53
+  ret void, !dbg !54
+}
+
+; Function Attrs: mustprogress nocallback nofree nosync nounwind speculatable willreturn memory(none)
+declare noundef range(i32 0, 2147483647) i32 @llvm.nvvm.read.ptx.sreg.ctaid.x() #1
+
+; Function Attrs: mustprogress nocallback nofree nosync nounwind speculatable willreturn memory(none)
+declare noundef range(i32 0, 1024) i32 @llvm.nvvm.read.ptx.sreg.tid.x() #1
+
+; Function Attrs: convergent nocallback nounwind memory(inaccessiblemem: readwrite)
+declare i32 @llvm.nvvm.shfl.sync.bfly.i32(i32, i32, i32, i32) #2
+
+; Function Attrs: convergent nocallback nounwind
+declare void @llvm.nvvm.barrier.cta.sync.aligned.all(i32) #3
+
+; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
+declare i64 @llvm.vector.reduce.add.v4i64(<4 x i64>) #4
+
+attributes #0 = { nounwind "nvvm.reqntid"="64" }
+attributes #1 = { mustprogress nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #2 = { convergent nocallback nounwind memory(inaccessiblemem: readwrite) }
+attributes #3 = { convergent nocallback nounwind }
+attributes #4 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #5 = { nounwind }
+
+!llvm.dbg.cu = !{!0}
+!llvm.module.flags = !{!2, !3}
+
+!0 = distinct !DICompileUnit(language: DW_LANG_C, file: !1, producer: "triton", isOptimized: true, runtimeVersion: 0, emissionKind: LineTablesOnly)
+!1 = !DIFile(filename: "cvqtexkew4phduoq2vwvz2tnbscksrzaj7fkq2zzfikw3aptexqs.py", directory: "/diancpfs/user/wanghanzhen/LiteSpec/tests/optimization_handoff_runs/20261013_cuda13_203502/newhost_2gpu/fixed_ce_warmup200_steps300/inductor-cache/rank_1/vq")
+!2 = !{i32 2, !"Debug Info Version", i32 3}
+!3 = !{i32 4, !"nvvm-reflect-ftz", i32 1}
+!4 = distinct !DISubprogram(name: "triton_per_fused__to_copy_clone_slice_sort_sum_transpose_4", linkageName: "triton_per_fused__to_copy_clone_slice_sort_sum_transpose_4", scope: !1, file: !1, line: 18, type: !5, scopeLine: 18, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0)
+!5 = !DISubroutineType(cc: DW_CC_normal, types: !6)
+!6 = !{}
+!7 = !DILocation(line: 24, column: 28, scope: !4)
+!8 = !DILocation(line: 24, column: 33, scope: !4)
+!9 = !DILocation(line: 25, column: 44, scope: !4)
+!10 = !DILocation(line: 25, column: 23, scope: !4)
+!11 = !DILocation(line: 26, column: 21, scope: !4)
+!12 = !DILocation(line: 27, column: 38, scope: !4)
+!13 = !DILocation(line: 34, column: 38, scope: !4)
+!14 = !DILocation(line: 34, column: 35, scope: !4)
+!15 = !DILocation(line: 34, column: 30, scope: !4)
+!16 = !DILocation(line: 34, column: 45, scope: !4)
+!17 = !DILocation(line: 627, column: 44, scope: !18, inlinedAt: !20)
+!18 = distinct !DILexicalBlockFile(scope: !4, file: !19, discriminator: 0)
+!19 = !DIFile(filename: "triton_helpers.py", directory: "/root/.cache/uv/environments-v2/litespec-cp3.11-befba8bee4099476/lib/python3.11/site-packages/torch/_inductor/runtime")
+!20 = !DILocation(line: 39, column: 67, scope: !4)
+!21 = !DILocation(line: 537, column: 21, scope: !18, inlinedAt: !20)
+!22 = !DILocation(line: 538, column: 40, scope: !18, inlinedAt: !20)
+!23 = !DILocation(line: 291, column: 36, scope: !24, inlinedAt: !20)
+!24 = distinct !DILexicalBlockFile(scope: !4, file: !25, discriminator: 0)
+!25 = !DIFile(filename: "standard.py", directory: "/root/.cache/uv/environments-v2/litespec-cp3.11-befba8bee4099476/lib/python3.11/site-packages/triton/language")
+!26 = !DILocation(line: 261, column: 15, scope: !24, inlinedAt: !20)
+!27 = !DILocation(line: 539, column: 41, scope: !18, inlinedAt: !20)
+!28 = !DILocation(line: 548, column: 23, scope: !18, inlinedAt: !20)
+!29 = !DILocation(line: 551, column: 23, scope: !18, inlinedAt: !20)
+!30 = !DILocation(line: 599, column: 28, scope: !18, inlinedAt: !20)
+!31 = !DILocation(line: 600, column: 38, scope: !18, inlinedAt: !20)
+!32 = !DILocation(line: 600, column: 46, scope: !18, inlinedAt: !20)
+!33 = !DILocation(line: 600, column: 15, scope: !18, inlinedAt: !20)
+!34 = !DILocation(line: 601, column: 48, scope: !18, inlinedAt: !20)
+!35 = !DILocation(line: 601, column: 59, scope: !18, inlinedAt: !20)
+!36 = !DILocation(line: 601, column: 22, scope: !18, inlinedAt: !20)
+!37 = !DILocation(line: 574, column: 22, scope: !18, inlinedAt: !20)
+!38 = !DILocation(line: 591, column: 21, scope: !18, inlinedAt: !20)
+!39 = !DILocation(line: 594, column: 40, scope: !18, inlinedAt: !20)
+!40 = !DILocation(line: 594, column: 29, scope: !18, inlinedAt: !20)
+!41 = !DILocation(line: 594, column: 23, scope: !18, inlinedAt: !20)
+!42 = !DILocation(line: 599, column: 19, scope: !18, inlinedAt: !20)
+!43 = !DILocation(line: 42, column: 34, scope: !4)
+!44 = !DILocation(line: 291, column: 36, scope: !24, inlinedAt: !45)
+!45 = !DILocation(line: 43, column: 26, scope: !4)
+!46 = !DILocation(line: 261, column: 15, scope: !24, inlinedAt: !45)
+!47 = !DILocation(line: 46, column: 21, scope: !4)
+!48 = !DILocation(line: 47, column: 35, scope: !4)
+!49 = !DILocation(line: 47, column: 32, scope: !4)
+!50 = !DILocation(line: 47, column: 25, scope: !4)
+!51 = !DILocation(line: 47, column: 47, scope: !4)
+!52 = !DILocation(line: 48, column: 25, scope: !4)
+!53 = !DILocation(line: 48, column: 37, scope: !4)
+!54 = !DILocation(line: 48, column: 4, scope: !4)

@@ -1,0 +1,102 @@
+{
+  "shape": [
+    1127,
+    151936
+  ],
+  "logit_dtype": "torch.float32",
+  "teacher_dtype": "torch.bfloat16",
+  "upstream": {
+    "ce": 0.1,
+    "l1": 1.0
+  },
+  "results": {
+    "native_ce": {
+      "values": [
+        7186.7939453125
+      ],
+      "gradient_l2": 1.9920388460159302
+    },
+    "compiled_ce": {
+      "values": [
+        7186.794921875
+      ],
+      "gradient_l2": 1.9920388460159302,
+      "vs_native": {
+        "elements": 171231872,
+        "max_abs": 4.547473508864641e-12,
+        "l2_delta": 1.1516958497992391e-09,
+        "reference_l2": 1.9920388460159302,
+        "fp32_different": 8659927,
+        "bf16_different": 1316,
+        "bf16_max_abs": 3.725290298461914e-09
+      }
+    },
+    "native_l1": {
+      "values": [
+        1202.64306640625
+      ],
+      "gradient_l2": 0.0008847481803968549
+    },
+    "compiled_l1": {
+      "values": [
+        1202.64306640625
+      ],
+      "gradient_l2": 0.0008847481803968549,
+      "vs_native": {
+        "elements": 171231872,
+        "max_abs": 0.0,
+        "l2_delta": 0.0,
+        "reference_l2": 0.0008847481803968549,
+        "fp32_different": 0,
+        "bf16_different": 0,
+        "bf16_max_abs": 0.0
+      }
+    },
+    "native_both": {
+      "values": [
+        7186.7939453125,
+        1202.64306640625
+      ],
+      "gradient_l2": 1.9923268556594849
+    },
+    "compiled_combined": {
+      "values": [
+        7186.794921875,
+        1202.64306640625
+      ],
+      "gradient_l2": 1.9923268556594849,
+      "vs_native": {
+        "elements": 171231872,
+        "max_abs": 4.547473508864641e-12,
+        "l2_delta": 1.151709505542442e-09,
+        "reference_l2": 1.9923268556594849,
+        "fp32_different": 8659754,
+        "bf16_different": 924,
+        "bf16_max_abs": 3.725290298461914e-09
+      }
+    },
+    "native_ce_compiled_l1": {
+      "values": [
+        7186.7939453125,
+        1202.64306640625
+      ],
+      "gradient_l2": 1.9923268556594849
+    },
+    "compiled_ce_native_l1": {
+      "values": [
+        7186.794921875,
+        1202.64306640625
+      ],
+      "gradient_l2": 1.9923268556594849,
+      "vs_native": {
+        "elements": 171231872,
+        "max_abs": 4.547473508864641e-12,
+        "l2_delta": 1.151709505542442e-09,
+        "reference_l2": 1.9923268556594849,
+        "fp32_different": 8659754,
+        "bf16_different": 924,
+        "bf16_max_abs": 3.725290298461914e-09
+      }
+    }
+  }
+}

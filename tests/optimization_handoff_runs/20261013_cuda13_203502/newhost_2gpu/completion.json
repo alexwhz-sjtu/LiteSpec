@@ -1,0 +1,18 @@
+{
+  "ssh": "root@47.237.165.176 -p 971",
+  "full_cache_verified": true,
+  "successful_samples": 4586,
+  "eligible_block8_samples": 4568,
+  "abba_complete": true,
+  "stability_steps_per_rank": 450,
+  "cuda_profile_complete": true,
+  "scope": "Single-node two-rank offline DLite validation; original 48-rank online failure remains unverified",
+  "references": [
+    "../cache_pipeline/full_validation.json",
+    "abba_summary.json",
+    "gpu_isolation_audit.json",
+    "stability_summary.json",
+    "nsys_state.json",
+    "nsys_profile_step10.nsys-rep"
+  ]
+}

@@ -10,7 +10,7 @@ from litespec.core.block_metrics import (
     block_accepted_length_terms,
     expected_accept_len_terms,
 )
-from litespec.core.chunking import checkpointed_chunk_reduce
+from litespec.core.chunking import checkpointed_chunk_reduce, is_chunk_recomputing
 from litespec.core.outputs import RatioTerms, TrainingOutput
 from litespec.core.losses import (
     weighted_cross_entropy,
@@ -149,6 +149,8 @@ class OnlineDSparkModel(DFlashTrainingBase):
         loss_weights: torch.Tensor,
         eval_mask: torch.Tensor,
         aligned_target_hidden: Optional[torch.Tensor],
+        *,
+        collect_detailed_metrics: bool = True,
     ) -> Tuple[torch.Tensor, ...]:
         """Return additive loss and telemetry numerators for one block slice."""
 
@@ -171,6 +173,8 @@ class OnlineDSparkModel(DFlashTrainingBase):
         tau_num = zero
         tau_den = zero
         accept_probability = None
+        collect_metrics = collect_detailed_metrics and not is_chunk_recomputing()
+        correct_num = eval_den = prefix_num = prefix_den = zero
 
         teacher_ids = None
         if aligned_target_hidden is not None:
@@ -180,16 +184,20 @@ class OnlineDSparkModel(DFlashTrainingBase):
                         bsz, num_blocks * block_size, hidden_size
                     )
                 ).reshape_as(draft_logits)
-                teacher_ids = target_logits.argmax(dim=-1)
-            ce_num, l1_objective, _, l1_per_token, target_top1, draft_top1 = (
-                weighted_ce_l1(
-                    draft_logits,
-                    target_ids,
-                    target_logits,
-                    loss_weights,
-                    diagnostics=True,
-                )
+                if collect_metrics:
+                    teacher_ids = target_logits.argmax(dim=-1)
+            distribution_terms = weighted_ce_l1(
+                draft_logits,
+                target_ids,
+                target_logits,
+                loss_weights,
+                diagnostics=collect_metrics,
             )
+            ce_num, l1_objective, _, l1_per_token = distribution_terms[:4]
+            if collect_metrics:
+                target_top1, draft_top1 = distribution_terms[4:]
+            # This probability remains a required, detached confidence target
+            # on non-log steps. Only its logging-only consumers are skipped.
             accept_probability = (1.0 - 0.5 * l1_per_token).clamp(0.0, 1.0)
             if self.dspark_l1_loss_alpha > 0:
                 l1_num = l1_objective
@@ -210,35 +218,37 @@ class OnlineDSparkModel(DFlashTrainingBase):
                 accept_probability.detach(),
                 loss_weights,
             )
-            confidence_error_num = (
-                (confidence_pred.float().sigmoid() - accept_probability).abs()
-                * loss_weights
-            ).sum()
+            if collect_metrics:
+                with torch.no_grad():
+                    confidence_error_num = (
+                        (confidence_pred.float().sigmoid() - accept_probability).abs()
+                        * loss_weights
+                    ).sum()
 
-        with torch.no_grad():
-            predicted_ids = draft_logits.argmax(dim=-1)
-            correct = ((predicted_ids == target_ids) & eval_mask).float()
-            correct_num = correct.sum()
-            eval_den = eval_mask.float().sum()
-            # Slot zero is the unsupervised anchor. Start every acceptance
-            # chain at slot one so that the anchor mask cannot terminate it.
-            prefix = block_accepted_length_terms(
-                predicted_ids[..., 1:], target_ids[..., 1:], eval_mask[..., 1:]
-            )
-            prefix_num, prefix_den = prefix.numerator, prefix.denominator
-            if aligned_target_hidden is not None:
-                assert teacher_ids is not None
-                teacher_agreement_num = (
-                    (predicted_ids == teacher_ids).float() * eval_mask
-                ).sum()
-                teacher_top1_num = (target_top1 * eval_mask).sum()
-                draft_top1_num = (draft_top1 * eval_mask).sum()
-                expected_terms = expected_accept_len_terms(
-                    accept_probability[..., 1:], eval_mask[..., 1:]
+        if collect_metrics:
+            with torch.no_grad():
+                predicted_ids = draft_logits.argmax(dim=-1)
+                correct = ((predicted_ids == target_ids) & eval_mask).float()
+                correct_num = correct.sum()
+                eval_den = eval_mask.float().sum()
+                # Slot zero is the unsupervised anchor. Start every acceptance
+                # chain at slot one so that the anchor mask cannot terminate it.
+                prefix = block_accepted_length_terms(
+                    predicted_ids[..., 1:], target_ids[..., 1:], eval_mask[..., 1:]
                 )
-                tau_num = expected_terms.numerator
-                tau_den = expected_terms.denominator
-
+                prefix_num, prefix_den = prefix.numerator, prefix.denominator
+                if aligned_target_hidden is not None:
+                    assert teacher_ids is not None
+                    teacher_agreement_num = (
+                        (predicted_ids == teacher_ids).float() * eval_mask
+                    ).sum()
+                    teacher_top1_num = (target_top1 * eval_mask).sum()
+                    draft_top1_num = (draft_top1 * eval_mask).sum()
+                    expected_terms = expected_accept_len_terms(
+                        accept_probability[..., 1:], eval_mask[..., 1:]
+                    )
+                    tau_num = expected_terms.numerator
+                    tau_den = expected_terms.denominator
         return (
             ce_num,
             l1_num,
@@ -287,8 +297,13 @@ class OnlineDSparkModel(DFlashTrainingBase):
             safe_label_indices,
         )
 
+        def objective_chunk(*chunk_args):
+            return self._dspark_objective_chunk_terms(
+                *chunk_args, collect_detailed_metrics=collect_detailed_metrics
+            )
+
         totals = checkpointed_chunk_reduce(
-            self._dspark_objective_chunk_terms,
+            objective_chunk,
             draft_block_hidden_states,
             prev_token_ids,
             target_ids,
@@ -351,8 +366,8 @@ class OnlineDSparkModel(DFlashTrainingBase):
                 confidence_error_num.detach(),
                 local_loss_den.detach(),
             ),
-        }
-        if aligned_target_hidden is not None:
+        } if collect_detailed_metrics else {}
+        if collect_detailed_metrics and aligned_target_hidden is not None:
             ratio_metrics.update(
                 {
                     "teacher_agreement": (teacher_agreement_num, eval_den),

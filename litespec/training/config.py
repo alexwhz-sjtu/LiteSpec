@@ -139,8 +139,9 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
         type=int,
         default=50,
         help=(
-            "Log every N optimizer steps. Metric numerators and denominators "
-            "are accumulated over the complete gradient-accumulation window."
+            "Log and compute diagnostics every N optimizer steps. Metrics "
+            "cover the complete logged gradient-accumulation window, including "
+            "scheduled final and forced partial-window tail logs."
         ),
     )
     output.add_argument("--save-interval", type=int, default=20000)

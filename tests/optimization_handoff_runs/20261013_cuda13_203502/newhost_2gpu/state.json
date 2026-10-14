@@ -1,0 +1,9 @@
+{
+  "name": "smoke_complete",
+  "updated": 1791906802.5617301,
+  "host": "dsw-540652-5d64c98d65-cxjkw",
+  "controller_pid": 2692453,
+  "dataset": "formal regen_full",
+  "world_size": 2,
+  "optimizer_steps": 3
+}

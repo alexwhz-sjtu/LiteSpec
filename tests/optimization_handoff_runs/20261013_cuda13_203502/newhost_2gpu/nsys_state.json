@@ -1,0 +1,20 @@
+{
+  "name": "complete",
+  "updated": 1791907871.540284,
+  "host": "dsw-540652-5d64c98d65-cxjkw",
+  "pid": 2700752,
+  "kernel_events": 4371,
+  "profiled_step": 10,
+  "graphs_added": 0,
+  "draft_projection_calls_per_rank": 1,
+  "kernel_events_by_device": {
+    "0": {
+      "count": 2222,
+      "total_kernel_duration_ns": 226221698
+    },
+    "1": {
+      "count": 2149,
+      "total_kernel_duration_ns": 222220891
+    }
+  }
+}

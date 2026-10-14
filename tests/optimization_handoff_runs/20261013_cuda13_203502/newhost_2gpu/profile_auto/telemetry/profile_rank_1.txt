@@ -1,0 +1,85 @@
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg       CPU Mem  Self CPU Mem      CUDA Mem  Self CUDA Mem    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                               aten::to         0.28%     470.139us         7.12%      12.095ms      33.410us         256 B           0 B      11.52 GB           0 B           362  
+                                         aten::_to_copy         0.61%       1.036ms         6.84%      11.624ms      50.322us         256 B           0 B      11.52 GB           0 B           231  
+                                    aten::empty_strided         1.09%       1.857ms         1.09%       1.857ms       5.804us         256 B         256 B      12.54 GB      12.54 GB           320  
+                                            aten::copy_         8.34%      14.167ms         8.34%      14.167ms      22.777us           0 B           0 B           0 B           0 B           622  
+                                            aten::slice         0.66%       1.123ms         0.83%       1.407ms       3.919us           0 B           0 B           0 B           0 B           359  
+                                       aten::as_strided         0.62%       1.055ms         0.62%       1.055ms       0.781us           0 B           0 B           0 B           0 B          1350  
+                                               aten::gt         0.08%     136.140us         0.08%     136.140us      45.380us           0 B           0 B       6.50 KB       6.50 KB             3  
+                                          aten::__and__         0.01%       9.464us         0.04%      68.161us      22.720us           0 B           0 B       8.50 KB           0 B             3  
+                                      aten::bitwise_and         0.03%      58.697us         0.03%      58.697us      19.566us           0 B           0 B       8.50 KB       8.50 KB             3  
+                                               [memory]         0.00%       0.000us         0.00%       0.000us       0.000us        -504 B        -504 B      -1.11 GB      -1.11 GB           254  
+                                              aten::sum         0.94%       1.598ms         1.01%       1.723ms      24.616us           0 B           0 B       3.85 MB       3.77 MB            70  
+                                              aten::max         0.03%      44.470us         0.03%      55.536us      27.768us           0 B           0 B       1.00 KB           0 B             2  
+                                            aten::empty         0.74%       1.255ms         0.74%       1.255ms       5.504us         300 B         300 B       5.31 GB       5.31 GB           228  
+                                             aten::item         0.06%     100.027us        15.31%      26.002ms     393.968us           0 B           0 B           0 B           0 B            66  
+                              aten::_local_scalar_dense        15.25%      25.902ms        15.25%      25.902ms     392.452us           0 B           0 B           0 B           0 B            66  
+                                        aten::rand_like         0.00%       5.667us         0.02%      36.402us      36.402us           0 B           0 B       5.50 KB           0 B             1  
+                                       aten::empty_like         0.12%     196.277us         0.41%     688.415us       7.823us           0 B           0 B       2.34 GB           0 B            88  
+                                         aten::uniform_         0.01%      23.554us         0.01%      23.554us      23.554us           0 B           0 B           0 B           0 B             1  
+                                      aten::bitwise_not         0.03%      43.296us         0.03%      43.296us      21.648us           0 B           0 B       2.00 KB       2.00 KB             2  
+                                     aten::masked_fill_         0.03%      47.053us         0.03%      47.053us      23.527us           0 B           0 B           0 B           0 B             2  
+                                          aten::argsort         0.00%       6.013us         0.73%       1.241ms       1.241ms           0 B           0 B      11.00 KB      -5.50 KB             1  
+                                             aten::sort         0.16%     263.505us         0.98%       1.670ms     278.322us           0 B           0 B     102.50 KB      85.50 KB             6  
+                                           aten::arange         0.17%     293.036us         0.40%     686.717us      26.412us           0 B           0 B      96.00 KB           0 B            26  
+                                          aten::resize_         0.10%     174.609us         0.10%     174.609us       4.477us           0 B           0 B      91.05 MB      91.05 MB            39  
+                                             aten::view         0.62%       1.046ms         0.62%       1.046ms       1.578us           0 B           0 B           0 B           0 B           663  
+                                           aten::gather         0.23%     384.798us         0.24%     413.357us      21.756us           0 B           0 B      48.07 MB      48.07 MB            19  
+                                      aten::masked_fill         0.01%      10.277us         0.04%      64.534us      64.534us           0 B           0 B       4.00 KB           0 B             1  
+                                            aten::clone         0.15%     263.170us         0.87%       1.485ms      26.522us           0 B           0 B       1.32 GB           0 B            56  
+                                               aten::ne         0.02%      30.263us         0.02%      30.263us      30.263us           0 B           0 B         512 B         512 B             1  
+                                       aten::zeros_like         0.07%     112.381us         0.35%     601.039us      14.659us           0 B           0 B      28.10 MB           0 B            41  
+                                            aten::zero_         0.22%     368.907us         0.67%       1.130ms       9.823us           0 B           0 B           0 B           0 B           115  
+                                            aten::fill_         0.47%     801.245us         0.47%     801.245us       6.733us           0 B           0 B           0 B           0 B           119  
+                                            aten::where         0.09%     153.729us         0.15%     255.624us      31.953us           0 B           0 B      84.04 MB        -512 B             8  
+                                           aten::detach         0.06%     108.612us         0.17%     284.375us       3.896us           0 B           0 B           0 B           0 B            73  
+                                                 detach         0.10%     175.763us         0.10%     175.763us       2.408us           0 B           0 B           0 B           0 B            73  
+                                        aten::unsqueeze         0.13%     221.127us         0.17%     289.942us       2.761us           0 B           0 B           0 B           0 B           105  
+                                              aten::add         0.78%       1.331ms         0.78%       1.331ms      15.841us           0 B           0 B     994.46 MB     994.46 MB            84  
+                                               aten::ge         0.03%      57.826us         0.03%      57.826us      28.913us           0 B           0 B       7.00 KB       7.00 KB             2  
+                                              aten::any         0.10%     171.368us         0.10%     177.820us      25.403us           0 B           0 B       3.50 KB       3.50 KB             7  
+                                       aten::is_nonzero         0.01%      24.616us         6.69%      11.371ms       2.843ms           0 B           0 B           0 B           0 B             4  
+                                           aten::expand         0.40%     687.412us         0.50%     842.121us       3.881us           0 B           0 B           0 B           0 B           217  
+                                           aten::linear         0.15%     246.464us         2.01%       3.416ms      56.004us           0 B           0 B       3.57 GB           0 B            61  
+                                                aten::t         0.41%     694.972us         0.90%       1.528ms       4.929us           0 B           0 B           0 B           0 B           310  
+                                        aten::transpose         0.64%       1.093ms         0.86%       1.468ms       3.291us           0 B           0 B           0 B           0 B           446  
+                                           aten::matmul         0.66%       1.129ms         4.20%       7.134ms      53.637us           0 B           0 B       5.49 GB           0 B           133  
+                                          aten::reshape         1.79%       3.045ms         2.60%       4.409ms       7.614us           0 B           0 B       1.16 GB           0 B           579  
+                                               aten::mm         3.11%       5.290ms         3.11%       5.290ms      31.679us           0 B           0 B       7.19 GB       7.19 GB           167  
+                                     aten::_unsafe_view         0.14%     234.693us         0.14%     234.693us       1.534us           0 B           0 B           0 B           0 B           153  
+                       FullyShardedDataParallel.forward         3.44%       5.836ms        34.27%      58.215ms      58.215ms          16 B         -24 B      11.47 GB     -10.73 GB             1  
+             FullyShardedDataParallel._root_pre_forward         0.14%     230.212us         0.21%     350.982us     350.982us           0 B           0 B   -1014.66 MB   -1014.66 MB             1  
+                    FullyShardedDataParallel._to_kwargs         0.07%     120.770us         0.07%     120.770us     120.770us           0 B           0 B           0 B           0 B             1  
+                  FullyShardedDataParallel._pre_forward         0.61%       1.031ms         0.96%       1.626ms       1.626ms           0 B           0 B       1.98 GB       1.98 GB             1  
+                  FullyShardedDataParallel.rate_limiter         0.02%      34.169us         0.02%      34.169us      34.169us           0 B           0 B           0 B           0 B             1  
+                                 c10d::_allgather_base_         0.03%      47.392us         0.12%     206.462us     206.462us           0 B           0 B           0 B           0 B             1  
+                                     record_param_comms         2.31%       3.927ms         2.31%       3.927ms      50.346us           0 B           0 B           0 B           0 B            78  
+                                  nccl:_all_gather_base         0.00%       0.000us             0     132.816us     132.816us           0 B           0 B           0 B           0 B             1  
+                aten::_has_compatible_shallow_copy_type         0.02%      26.214us         0.02%      26.214us       0.385us           0 B           0 B           0 B           0 B            68  
+                                 aten::split_with_sizes         0.07%     122.147us         0.09%     158.453us     158.453us           0 B           0 B           0 B           0 B             1  
+         FullyShardedDataParallel._pre_forward_prefetch         0.04%      67.053us         0.04%      67.053us      67.053us           0 B           0 B           0 B           0 B             1  
+                                        aten::expand_as         0.00%       4.732us         0.01%      14.652us      14.652us           0 B           0 B           0 B           0 B             1  
+                                              aten::sub         0.15%     256.374us         0.15%     256.374us      17.092us           0 B           0 B       2.25 MB       2.25 MB            15  
+                                            aten::clamp         0.27%     452.704us         0.27%     463.326us      20.145us           0 B           0 B      70.50 KB      70.50 KB            23  
+                                            aten::stack         0.05%      92.893us         0.17%     285.978us     142.989us           0 B           0 B      20.00 MB           0 B             2  
+                                              aten::cat         0.94%       1.605ms         0.95%       1.612ms      19.191us           0 B           0 B       4.27 GB       4.27 GB            84  
+                                        aten::embedding         0.05%      81.348us         0.34%     578.842us      57.884us           0 B           0 B      34.23 MB           0 B            10  
+                                     aten::index_select         0.08%     142.435us         0.26%     449.251us      44.925us           0 B           0 B      34.23 MB           0 B            10  
+                                              aten::mul         4.27%       7.260ms         4.27%       7.260ms      21.803us          24 B          24 B      11.65 GB      11.65 GB           333  
+                                             aten::full         0.00%       5.894us         0.01%      22.544us      22.544us           0 B           0 B      28.00 KB           0 B             1  
+                                               aten::lt         0.03%      50.152us         0.03%      50.152us      25.076us           0 B           0 B       7.50 KB       7.50 KB             2  
+                                        aten::full_like         0.00%       4.425us         0.01%      20.504us      20.504us           0 B           0 B       4.00 KB           0 B             1  
+                                             aten::amin         0.01%      23.763us         0.01%      24.486us      24.486us           0 B           0 B       4.00 KB       4.00 KB             1  
+                               TorchDynamo Cache Lookup         0.33%     556.831us         0.33%     556.831us      79.547us           0 B           0 B           0 B           0 B             7  
+                             Torch-Compiled Region: 0/1         0.10%     166.267us         0.80%       1.356ms       1.356ms           0 B           0 B      28.00 KB           0 B             1  
+                                      Pregraph bytecode         0.09%     153.195us         0.09%     153.195us      21.885us           0 B           0 B           0 B           0 B             7  
+                 AOTDispatcher Runtime Wrapper Prologue         0.07%     110.807us         0.07%     110.807us      15.830us           0 B           0 B           0 B           0 B             7  
+## Call CompiledFxGraph fnh6osqhjjgmejarrdjb2ksviqyv...         0.33%     554.379us         0.68%       1.161ms       1.161ms           0 B           0 B      28.00 KB     -50.00 KB             1  
+triton_poi_fused_arange_bitwise_and_bitwise_not_bitw...         0.03%      56.615us         0.03%      56.615us      56.615us           0 B           0 B           0 B           0 B             1  
+triton_poi_fused_arange_bitwise_and_bitwise_not_bitw...         0.02%      28.082us         0.02%      28.082us      28.082us           0 B           0 B           0 B           0 B             1  
+triton_red_fused__to_copy_bitwise_and_eq_gt_lt_permu...         0.01%      18.900us         0.01%      18.900us      18.900us           0 B           0 B           0 B           0 B             1  
+                        triton_red_fused__to_copy_sum_3         0.02%      32.605us         0.02%      32.605us      16.303us           0 B           0 B           0 B           0 B             2  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 169.852ms

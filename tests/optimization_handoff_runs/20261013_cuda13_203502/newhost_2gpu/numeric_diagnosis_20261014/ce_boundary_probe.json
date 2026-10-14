@@ -1,0 +1,71 @@
+{
+  "native_ce": {
+    "value": 218.7177734375,
+    "vs_native": {
+      "elements": 4861952,
+      "max_abs": 0.0,
+      "l2_delta": 0.0,
+      "reference_l2": 0.3472248315811157,
+      "fp32_different": 0,
+      "bf16_different": 0,
+      "bf16_max_abs": 0.0
+    }
+  },
+  "compiled_ce": {
+    "value": 218.71778869628906,
+    "vs_native": {
+      "elements": 4861952,
+      "max_abs": 3.637978807091713e-12,
+      "l2_delta": 3.576749174616367e-10,
+      "reference_l2": 0.3472248315811157,
+      "fp32_different": 455782,
+      "bf16_different": 28,
+      "bf16_max_abs": 1.862645149230957e-09
+    }
+  },
+  "native_logsoftmax_native_nll": {
+    "value": 218.7177734375,
+    "vs_native": {
+      "elements": 4861952,
+      "max_abs": 0.0,
+      "l2_delta": 0.0,
+      "reference_l2": 0.3472248315811157,
+      "fp32_different": 0,
+      "bf16_different": 0,
+      "bf16_max_abs": 0.0
+    }
+  },
+  "compiled_logsoftmax_native_nll": {
+    "value": 218.7177734375,
+    "vs_native": {
+      "elements": 4861952,
+      "max_abs": 3.637978807091713e-12,
+      "l2_delta": 3.576749174616367e-10,
+      "reference_l2": 0.3472248315811157,
+      "fp32_different": 455782,
+      "bf16_different": 28,
+      "bf16_max_abs": 1.862645149230957e-09
+    }
+  },
+  "native_logsoftmax_compiled_gather": {
+    "value": 218.71778869628906,
+    "vs_native": {
+      "elements": 4861952,
+      "max_abs": 0.0,
+      "l2_delta": 0.0,
+      "reference_l2": 0.3472248315811157,
+      "fp32_different": 0,
+      "bf16_different": 0,
+      "bf16_max_abs": 0.0
+    }
+  },
+  "logsoftmax_values": {
+    "elements": 4861952,
+    "max_abs": 1.9073486328125e-06,
+    "l2_delta": 0.0006438834243454039,
+    "reference_l2": 26551.33203125,
+    "fp32_different": 455785,
+    "bf16_different": 0,
+    "bf16_max_abs": 0.0
+  }
+}

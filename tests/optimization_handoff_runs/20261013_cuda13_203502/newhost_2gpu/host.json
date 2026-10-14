@@ -1,0 +1,6 @@
+{
+  "hostname": "dsw-540652-5d64c98d65-cxjkw",
+  "ssh": "root@47.237.165.176 -p 971",
+  "world_size": 2,
+  "cache_verification_reuse": "Full SHA-256 reader validation once; unchanged inode/size/mtime/ctime and manifest SHA-256 guards per launch; test harness only"
+}

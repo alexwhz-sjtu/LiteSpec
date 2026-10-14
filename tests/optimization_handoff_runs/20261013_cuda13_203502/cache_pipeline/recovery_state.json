@@ -1,0 +1,10 @@
+{
+  "phase": "complete",
+  "updated": 1791905851.6592908,
+  "pid": 2675430,
+  "host": "dsw-540652-5d64c98d65-cxjkw",
+  "successful_samples": 4586,
+  "failed_samples": 0,
+  "shards": 9,
+  "cache_bytes": 298266081280
+}

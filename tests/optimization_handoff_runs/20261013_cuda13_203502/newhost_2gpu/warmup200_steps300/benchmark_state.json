@@ -1,0 +1,14 @@
+{
+  "name": "complete",
+  "updated": 1791911870.8388844,
+  "host": "dsw-540652-5d64c98d65-cxjkw",
+  "controller_pid": 2731086,
+  "world_size": 2,
+  "dataset": "formal regen_full",
+  "abba_steps": 300,
+  "warmup_steps": 200,
+  "measurement_step_range": [
+    201,
+    300
+  ]
+}

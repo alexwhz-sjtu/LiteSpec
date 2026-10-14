@@ -1,0 +1,1005 @@
+{
+  "method": "Exclusive CUDA-event default-stream timeline (includes queued work, dependency waits and host-induced idle), critical rank selected per step; NVTX CUDA correlation is separate kernel work accounting, not wall shares.",
+  "warmup_steps": 200,
+  "measurement_steps": [
+    201,
+    300
+  ],
+  "phase_summary": {
+    "auto": {
+      "samples": 95,
+      "steps": [
+        201,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207,
+        208,
+        209,
+        210,
+        211,
+        212,
+        213,
+        214,
+        215,
+        216,
+        217,
+        218,
+        219,
+        220,
+        221,
+        222,
+        223,
+        224,
+        225,
+        226,
+        227,
+        228,
+        229,
+        230,
+        231,
+        232,
+        233,
+        234,
+        235,
+        236,
+        237,
+        238,
+        239,
+        243,
+        244,
+        245,
+        246,
+        247,
+        248,
+        249,
+        251,
+        252,
+        253,
+        254,
+        255,
+        256,
+        257,
+        258,
+        259,
+        260,
+        261,
+        262,
+        263,
+        264,
+        265,
+        266,
+        267,
+        268,
+        269,
+        270,
+        271,
+        272,
+        273,
+        274,
+        275,
+        276,
+        277,
+        278,
+        279,
+        280,
+        281,
+        282,
+        283,
+        284,
+        285,
+        286,
+        287,
+        288,
+        289,
+        290,
+        291,
+        292,
+        293,
+        294,
+        295,
+        296,
+        297,
+        298,
+        299
+      ],
+      "mean_wall_ms": 236.02977324350687,
+      "median_wall_ms": 235.13151099905372,
+      "stages": {
+        "load_data": {
+          "mean_stream_ms": 0.4479066994629408,
+          "share_percent": 0.19006442177557917,
+          "mean_host_ms": 0.4568205031223203
+        },
+        "prepare": {
+          "mean_stream_ms": 13.934460926055909,
+          "share_percent": 5.912939596216837,
+          "mean_host_ms": 4.560619750746379
+        },
+        "forward": {
+          "mean_stream_ms": 23.2781608763494,
+          "share_percent": 9.877838827298724,
+          "mean_host_ms": 21.570034383943206
+        },
+        "loss": {
+          "mean_stream_ms": 21.238465700259333,
+          "share_percent": 9.012315974644737,
+          "mean_host_ms": 32.29708129319509
+        },
+        "backward": {
+          "mean_stream_ms": 68.67586589612459,
+          "share_percent": 29.141869851768337,
+          "mean_host_ms": 32.6262107462083
+        },
+        "update": {
+          "mean_stream_ms": 108.08560453716078,
+          "share_percent": 45.86497132829579,
+          "mean_host_ms": 59.61131298865535
+        }
+      },
+      "attributed_mean_ms": 235.66046463541295,
+      "instrumentation_mean_ms": 0.27825178958867725,
+      "unattributed_sync_and_boundary_mean_ms": 0.09105681850525894
+    },
+    "torch": {
+      "samples": 98,
+      "steps": [
+        201,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207,
+        208,
+        209,
+        210,
+        211,
+        212,
+        213,
+        214,
+        215,
+        216,
+        217,
+        218,
+        219,
+        220,
+        221,
+        222,
+        223,
+        224,
+        225,
+        226,
+        227,
+        228,
+        229,
+        230,
+        231,
+        232,
+        233,
+        234,
+        235,
+        236,
+        237,
+        238,
+        239,
+        240,
+        241,
+        242,
+        243,
+        244,
+        245,
+        246,
+        247,
+        248,
+        249,
+        251,
+        252,
+        253,
+        254,
+        255,
+        256,
+        257,
+        258,
+        259,
+        260,
+        261,
+        262,
+        263,
+        264,
+        265,
+        266,
+        267,
+        268,
+        269,
+        270,
+        271,
+        272,
+        273,
+        274,
+        275,
+        276,
+        277,
+        278,
+        279,
+        280,
+        281,
+        282,
+        283,
+        284,
+        285,
+        286,
+        287,
+        288,
+        289,
+        290,
+        291,
+        292,
+        293,
+        294,
+        295,
+        296,
+        297,
+        298,
+        299
+      ],
+      "mean_wall_ms": 240.945208139423,
+      "median_wall_ms": 240.77382747782394,
+      "stages": {
+        "load_data": {
+          "mean_stream_ms": 0.31022824742356125,
+          "share_percent": 0.12894814523764736,
+          "mean_host_ms": 0.3187341297197403
+        },
+        "prepare": {
+          "mean_stream_ms": 13.556822805988546,
+          "share_percent": 5.63497093080923,
+          "mean_host_ms": 4.218940454421147
+        },
+        "forward": {
+          "mean_stream_ms": 22.747560543825433,
+          "share_percent": 9.455153633390907,
+          "mean_host_ms": 20.16565213526352
+        },
+        "loss": {
+          "mean_stream_ms": 24.78536294400692,
+          "share_percent": 10.302177855222848,
+          "mean_host_ms": 36.67915536314059
+        },
+        "backward": {
+          "mean_stream_ms": 71.23838759441765,
+          "share_percent": 29.61064321611843,
+          "mean_host_ms": 32.97294548603383
+        },
+        "update": {
+          "mean_stream_ms": 107.9453599890884,
+          "share_percent": 44.86810621922094,
+          "mean_host_ms": 58.552935770570244
+        }
+      },
+      "attributed_mean_ms": 240.58372212475052,
+      "instrumentation_mean_ms": 0.2824666109316203,
+      "unattributed_sync_and_boundary_mean_ms": 0.0790194037408397
+    }
+  },
+  "stable_trace_steps": [
+    240,
+    241,
+    242
+  ],
+  "trace": {
+    "kernel_stats": {
+      "count": 13179,
+      "summed_kernel_ms": 1356.770007,
+      "under10us_count": 5112,
+      "under20us_count": 6631,
+      "under10us_summed_percent": 1.1110639181457083,
+      "graph_node_nonzero": 0
+    },
+    "by_device": {
+      "0": {
+        "count": 6698,
+        "summed_kernel_ms": 688.6724939999999,
+        "under10us_count": 2526,
+        "under20us_count": 3286,
+        "under10us_summed_percent": 1.072167113443622,
+        "graph_node_nonzero": 0
+      },
+      "1": {
+        "count": 6481,
+        "summed_kernel_ms": 668.097513,
+        "under10us_count": 2586,
+        "under20us_count": 3345,
+        "under10us_summed_percent": 1.1511586033998602,
+        "graph_node_nonzero": 0
+      }
+    },
+    "by_stage": {
+      "backward": {
+        "count": 4908,
+        "summed_kernel_ms": 378.22845,
+        "under10us_count": 1762,
+        "under20us_count": 2410,
+        "under10us_summed_percent": 1.578128244979985,
+        "graph_node_nonzero": 0
+      },
+      "forward": {
+        "count": 2665,
+        "summed_kernel_ms": 111.15724499999999,
+        "under10us_count": 1132,
+        "under20us_count": 1492,
+        "under10us_summed_percent": 2.9645472051776744,
+        "graph_node_nonzero": 0
+      },
+      "loss": {
+        "count": 762,
+        "summed_kernel_ms": 121.067572,
+        "under10us_count": 678,
+        "under20us_count": 682,
+        "under10us_summed_percent": 1.2531398581281534,
+        "graph_node_nonzero": 0
+      },
+      "outside_stage": {
+        "count": 24,
+        "summed_kernel_ms": 1.460443,
+        "under10us_count": 17,
+        "under20us_count": 17,
+        "under10us_summed_percent": 4.005360017474151,
+        "graph_node_nonzero": 0
+      },
+      "prepare": {
+        "count": 348,
+        "summed_kernel_ms": 65.147352,
+        "under10us_count": 305,
+        "under20us_count": 314,
+        "under10us_summed_percent": 1.2198792055278012,
+        "graph_node_nonzero": 0
+      },
+      "update": {
+        "count": 4472,
+        "summed_kernel_ms": 679.708945,
+        "under10us_count": 1218,
+        "under20us_count": 1716,
+        "under10us_summed_percent": 0.5060963262738878,
+        "graph_node_nonzero": 0
+      }
+    },
+    "top_launch_counts": [
+      {
+        "stage": "update",
+        "name": "nvjet_tst_256x128_64x4_1x2_h_bx_coopA_NNT",
+        "count": 870,
+        "summed_kernel_ms": 212.383367,
+        "under10us_count": 0,
+        "under20us_count": 103,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)8, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char *, (unsigned long)3>>(int, T2, T3)",
+        "count": 576,
+        "summed_kernel_ms": 11.738599,
+        "under10us_count": 245,
+        "under20us_count": 376,
+        "under10us_summed_percent": 7.41969292928398,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 6)]::operator ()() const::[lambda(double) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)",
+        "count": 384,
+        "summed_kernel_ms": 0.5808909999999999,
+        "under10us_count": 384,
+        "under20us_count": 384,
+        "under10us_summed_percent": 100.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "nvjet_tst_256x128_64x4_1x2_h_bz_coopA_TNT",
+        "count": 345,
+        "summed_kernel_ms": 132.3985,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native::binary_internal::MulFunctor<float>>>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+        "count": 330,
+        "summed_kernel_ms": 10.193014,
+        "under10us_count": 24,
+        "under20us_count": 71,
+        "under10us_summed_percent": 0.863022458322926,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>, std::array<char *, (unsigned long)3>>(int, T2, T3)",
+        "count": 328,
+        "summed_kernel_ms": 20.520369,
+        "under10us_count": 126,
+        "under20us_count": 138,
+        "under10us_summed_percent": 0.7867304920296512,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)8, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)",
+        "count": 303,
+        "summed_kernel_ms": 12.788519,
+        "under10us_count": 113,
+        "under20us_count": 142,
+        "under10us_summed_percent": 3.1150440484938096,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 12)]::operator ()() const::[lambda(c10::BFloat16) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+        "count": 300,
+        "summed_kernel_ms": 5.133701,
+        "under10us_count": 130,
+        "under20us_count": 203,
+        "under10us_summed_percent": 15.095756453287795,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)8, at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native::binary_internal::MulFunctor<float>>, std::array<char *, (unsigned long)3>>(int, T2, T3)",
+        "count": 270,
+        "summed_kernel_ms": 7.077919,
+        "under10us_count": 139,
+        "under20us_count": 159,
+        "under10us_summed_percent": 3.6706834311045378,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::AUnaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>, std::array<char *, (unsigned long)2>>(int, T2, T3)",
+        "count": 264,
+        "summed_kernel_ms": 4.1458450000000004,
+        "under10us_count": 148,
+        "under20us_count": 183,
+        "under10us_summed_percent": 6.200304159948092,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "forward",
+        "name": "void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native::binary_internal::MulFunctor<float>>>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+        "count": 252,
+        "summed_kernel_ms": 7.924252,
+        "under10us_count": 10,
+        "under20us_count": 92,
+        "under10us_summed_percent": 1.1145531464673257,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "nvjet_tst_256x128_64x4_1x2_h_bz_coopA_NTT",
+        "count": 250,
+        "summed_kernel_ms": 52.29259,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)8, at::native::FillFunctor<c10::BFloat16>, std::array<char *, (unsigned long)1>>(int, T2, T3)",
+        "count": 228,
+        "summed_kernel_ms": 2.546767,
+        "under10us_count": 119,
+        "under20us_count": 186,
+        "under10us_summed_percent": 22.106655222091383,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::reduce_kernel<(int)128, (int)4, at::native::ReduceOp<c10::BFloat16, at::native::func_wrapper_t<c10::BFloat16, at::native::sum_functor<c10::BFloat16, float, c10::BFloat16>::operator ()(at::TensorIterator &)::[lambda(float, float) (instance 1)]>, unsigned int, c10::BFloat16, (int)4, (int)4>>(T3)",
+        "count": 222,
+        "summed_kernel_ms": 7.081988,
+        "under10us_count": 59,
+        "under20us_count": 118,
+        "under10us_summed_percent": 6.846891014218041,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "ncclDevKernel_SendRecv(ncclDevKernelArgsStorage<(unsigned long)4096>)",
+        "count": 216,
+        "summed_kernel_ms": 136.059179,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::<unnamed>::lerp_scalar_kernel(at::TensorIteratorBase &, const c10::Scalar &)::[lambda() (instance 2)]::operator ()() const::[lambda() (instance 2)]::operator ()() const::[lambda(float, float) (instance 1)], std::array<char *, (unsigned long)3>>(int, T2, T3)",
+        "count": 216,
+        "summed_kernel_ms": 24.968382000000002,
+        "under10us_count": 0,
+        "under20us_count": 45,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)8, at::native::AUnaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native::binary_internal::MulFunctor<float>>, std::array<char *, (unsigned long)2>>(int, T2, T3)",
+        "count": 195,
+        "summed_kernel_ms": 4.647693,
+        "under10us_count": 114,
+        "under20us_count": 114,
+        "under10us_summed_percent": 8.052855470445229,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 7)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)",
+        "count": 195,
+        "summed_kernel_ms": 10.428726000000001,
+        "under10us_count": 81,
+        "under20us_count": 114,
+        "under10us_summed_percent": 2.2562199831503866,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<float>, std::array<char *, (unsigned long)1>>(int, T2, T3)",
+        "count": 195,
+        "summed_kernel_ms": 0.194334,
+        "under10us_count": 195,
+        "under20us_count": 195,
+        "under10us_summed_percent": 100.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+        "count": 186,
+        "summed_kernel_ms": 8.243555,
+        "under10us_count": 0,
+        "under20us_count": 21,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::AUnaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>, std::array<char *, (unsigned long)2>>(int, T2, T3)",
+        "count": 173,
+        "summed_kernel_ms": 10.605818,
+        "under10us_count": 27,
+        "under20us_count": 71,
+        "under10us_summed_percent": 0.4251157242185375,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "void at::native::<unnamed>::multi_tensor_apply_kernel<at::native::<unnamed>::TensorListMetadata<(int)1>, at::native::LpNormFunctor<float, (at::native::NormType)1, float, (int)1, (int)1, (int)0>, float *, int>(T1, T2, T3...)",
+        "count": 156,
+        "summed_kernel_ms": 4.671916,
+        "under10us_count": 0,
+        "under20us_count": 6,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "forward",
+        "name": "nvjet_tst_256x128_64x4_1x2_h_bz_coopA_TNT",
+        "count": 155,
+        "summed_kernel_ms": 42.299862999999995,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "nvjet_tst_128x64_64x8_1x2_h_bz_TNT",
+        "count": 150,
+        "summed_kernel_ms": 3.0903270000000003,
+        "under10us_count": 0,
+        "under20us_count": 106,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "nvjet_tst_128x64_64x8_1x2_h_bx_NNT",
+        "count": 150,
+        "summed_kernel_ms": 1.266778,
+        "under10us_count": 111,
+        "under20us_count": 150,
+        "under10us_summed_percent": 63.33895915464273,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "forward",
+        "name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 7)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)",
+        "count": 144,
+        "summed_kernel_ms": 5.1243609999999995,
+        "under10us_count": 17,
+        "under20us_count": 24,
+        "under10us_summed_percent": 1.5455195291666608,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "forward",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)8, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)",
+        "count": 144,
+        "summed_kernel_ms": 3.079661,
+        "under10us_count": 23,
+        "under20us_count": 77,
+        "under10us_summed_percent": 2.5156015548464588,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "nvjet_tst_256x128_64x4_1x2_h_bz_coopA_NNT",
+        "count": 140,
+        "summed_kernel_ms": 40.135363,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)8, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)",
+        "count": 136,
+        "summed_kernel_ms": 8.285467,
+        "under10us_count": 12,
+        "under20us_count": 61,
+        "under10us_summed_percent": 0.7786163411187322,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "forward",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)4, void at::native::<unnamed>::pow_tensor_scalar_kernel_impl<float, float>(at::TensorIteratorBase &, T2)::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)",
+        "count": 132,
+        "summed_kernel_ms": 4.2120429999999995,
+        "under10us_count": 11,
+        "under20us_count": 41,
+        "under10us_summed_percent": 1.8317001986921786,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "forward",
+        "name": "void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<float, at::native::MeanOps<float, float, float, float>, unsigned int, float, (int)4, (int)4>>(T3)",
+        "count": 132,
+        "summed_kernel_ms": 3.518833,
+        "under10us_count": 6,
+        "under20us_count": 45,
+        "under10us_summed_percent": 1.4204709345399456,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "forward",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::CUDAFunctorOnSelf_add<float>, std::array<char *, (unsigned long)2>>(int, T2, T3)",
+        "count": 132,
+        "summed_kernel_ms": 0.19084700000000002,
+        "under10us_count": 132,
+        "under20us_count": 132,
+        "under10us_summed_percent": 100.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "forward",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::rsqrt_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 2)]::operator ()() const::[lambda() (instance 2)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)",
+        "count": 132,
+        "summed_kernel_ms": 0.179231,
+        "under10us_count": 132,
+        "under20us_count": 132,
+        "under10us_summed_percent": 100.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "forward",
+        "name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+        "count": 132,
+        "summed_kernel_ms": 5.366325,
+        "under10us_count": 5,
+        "under20us_count": 11,
+        "under10us_summed_percent": 0.8837332811560984,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<c10::BFloat16>>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+        "count": 132,
+        "summed_kernel_ms": 2.3912240000000002,
+        "under10us_count": 72,
+        "under20us_count": 82,
+        "under10us_summed_percent": 10.858288474856392,
+        "graph_node_nonzero": 0
+      }
+    ],
+    "top_gpu_work": [
+      {
+        "stage": "update",
+        "name": "nvjet_tst_256x128_64x4_1x2_h_bx_coopA_NNT",
+        "count": 870,
+        "summed_kernel_ms": 212.383367,
+        "under10us_count": 0,
+        "under20us_count": 103,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "ncclDevKernel_SendRecv(ncclDevKernelArgsStorage<(unsigned long)4096>)",
+        "count": 216,
+        "summed_kernel_ms": 136.059179,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "nvjet_tst_256x128_64x4_1x2_h_bz_coopA_TNT",
+        "count": 345,
+        "summed_kernel_ms": 132.3985,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "ncclDevKernel_ReduceScatter_Sum_bf16_RING_LL(ncclDevKernelArgsStorage<(unsigned long)4096>)",
+        "count": 6,
+        "summed_kernel_ms": 70.372607,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "nvjet_tst_256x128_64x4_1x2_h_bz_coopA_NTT",
+        "count": 250,
+        "summed_kernel_ms": 52.29259,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "forward",
+        "name": "nvjet_tst_256x128_64x4_1x2_h_bz_coopA_TNT",
+        "count": 155,
+        "summed_kernel_ms": 42.299862999999995,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "nvjet_tst_256x128_64x4_1x2_h_bz_coopA_NNT",
+        "count": 140,
+        "summed_kernel_ms": 40.135363,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 12)]::operator ()() const::[lambda(c10::BFloat16) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+        "count": 90,
+        "summed_kernel_ms": 35.561620000000005,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "prepare",
+        "name": "ncclDevKernel_AllGather_RING_LL(ncclDevKernelArgsStorage<(unsigned long)4096>)",
+        "count": 6,
+        "summed_kernel_ms": 33.835058,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "loss",
+        "name": "ncclDevKernel_AllReduce_Sum_f32_RING_LL(ncclDevKernelArgsStorage<(unsigned long)4096>)",
+        "count": 6,
+        "summed_kernel_ms": 31.094111,
+        "under10us_count": 3,
+        "under20us_count": 4,
+        "under10us_summed_percent": 0.051765429151520034,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "loss",
+        "name": "void at::native::<unnamed>::cunn_SoftMaxForward<(int)4, float, float, float, at::native::<unnamed>::SoftMaxForwardEpilogue>(T4 *, const T2 *, int)",
+        "count": 12,
+        "summed_kernel_ms": 28.999466,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "triton_tem_fused_zeros_1",
+        "count": 30,
+        "summed_kernel_ms": 25.869079,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::<unnamed>::lerp_scalar_kernel(at::TensorIteratorBase &, const c10::Scalar &)::[lambda() (instance 2)]::operator ()() const::[lambda() (instance 2)]::operator ()() const::[lambda(float, float) (instance 1)], std::array<char *, (unsigned long)3>>(int, T2, T3)",
+        "count": 216,
+        "summed_kernel_ms": 24.968382000000002,
+        "under10us_count": 0,
+        "under20us_count": 45,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "prepare",
+        "name": "nvjet_tst_320x128_64x3_1x2_h_bz_coopB_TNT",
+        "count": 4,
+        "summed_kernel_ms": 23.544545,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>, std::array<char *, (unsigned long)3>>(int, T2, T3)",
+        "count": 328,
+        "summed_kernel_ms": 20.520369,
+        "under10us_count": 126,
+        "under20us_count": 138,
+        "under10us_summed_percent": 0.7867304920296512,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "nvjet_tst_256x128_64x4_1x2_h_bz_coopA_NTT",
+        "count": 30,
+        "summed_kernel_ms": 18.808497,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "nvjet_tst_256x128_64x4_1x2_h_bx_coopA_TNT",
+        "count": 30,
+        "summed_kernel_ms": 18.806582,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "loss",
+        "name": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)2>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)",
+        "count": 18,
+        "summed_kernel_ms": 18.151545000000002,
+        "under10us_count": 3,
+        "under20us_count": 6,
+        "under10us_summed_percent": 0.12164253786661135,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "loss",
+        "name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 7)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)",
+        "count": 56,
+        "summed_kernel_ms": 17.28921,
+        "under10us_count": 36,
+        "under20us_count": 36,
+        "under10us_summed_percent": 0.42273764966704663,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "triton_red_fused__log_softmax__log_softmax_backward_data_expand_mul_nll_loss_backward_nll_loss_forward_unsqueeze_0",
+        "count": 6,
+        "summed_kernel_ms": 16.605244,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::<unnamed>::cunn_SoftMaxBackward<(int)4, float, float, float, at::native::<unnamed>::SoftMaxBackwardEpilogue>(T2 *, const T4 *, const T4 *, long)",
+        "count": 6,
+        "summed_kernel_ms": 14.55978,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "backward",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::CUDAFunctor_add<float>, std::array<char *, (unsigned long)3>>(int, T2, T3)",
+        "count": 76,
+        "summed_kernel_ms": 14.195172000000001,
+        "under10us_count": 0,
+        "under20us_count": 1,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "void at::native::vectorized_elementwise_kernel<(int)8, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)",
+        "count": 303,
+        "summed_kernel_ms": 12.788519,
+        "under10us_count": 113,
+        "under20us_count": 142,
+        "under10us_summed_percent": 3.1150440484938096,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "loss",
+        "name": "triton_red_fused_abs_sgn_sub_sum_1",
+        "count": 6,
+        "summed_kernel_ms": 12.203918999999999,
+        "under10us_count": 0,
+        "under20us_count": 0,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      },
+      {
+        "stage": "update",
+        "name": "void at::native::unrolled_elementwise_kernel<at::native::CUDAFunctor_add<float>, std::array<char *, (unsigned long)3>, (int)4, TrivialOffsetCalculator<(int)2, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)2>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)",
+        "count": 108,
+        "summed_kernel_ms": 12.065676,
+        "under10us_count": 0,
+        "under20us_count": 33,
+        "under10us_summed_percent": 0.0,
+        "graph_node_nonzero": 0
+      }
+    ],
+    "graph_api_calls": []
+  },
+  "instrumentation_replay_checks": {
+    "auto": {
+      "0": {
+        "initial_equal": true,
+        "inputs_and_anchors_equal": true,
+        "max_loss_abs": 0.0,
+        "max_grad_norm_abs": 0.0
+      },
+      "1": {
+        "initial_equal": true,
+        "inputs_and_anchors_equal": true,
+        "max_loss_abs": 0.0,
+        "max_grad_norm_abs": 0.0
+      }
+    },
+    "torch": {
+      "0": {
+        "initial_equal": true,
+        "inputs_and_anchors_equal": true,
+        "max_loss_abs": 0.0,
+        "max_grad_norm_abs": 0.0
+      },
+      "1": {
+        "initial_equal": true,
+        "inputs_and_anchors_equal": true,
+        "max_loss_abs": 0.0,
+        "max_grad_norm_abs": 0.0
+      }
+    }
+  }
+}

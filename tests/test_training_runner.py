@@ -508,7 +508,10 @@ def test_target_lifecycle_drains_schemas_and_skips_consumed_packets(
     "phase_name", ["sft", "teacher", "stage1", "transition", "stage2"]
 )
 @pytest.mark.parametrize("disaggregate", [False, True])
-def test_real_dlite_recipe_objectives_on_cpu(monkeypatch, phase_name, disaggregate):
+@pytest.mark.parametrize("collect_detailed_metrics", [False, True])
+def test_real_dlite_recipe_objectives_on_cpu(
+    monkeypatch, phase_name, disaggregate, collect_detailed_metrics
+):
     """Real preparation/heads/losses; replace only GPU backbone attention."""
     from refactor_baseline import capture
 
@@ -634,7 +637,10 @@ def test_real_dlite_recipe_objectives_on_cpu(monkeypatch, phase_name, disaggrega
             history,
             prediction,
         )
-        output = base.compute_step(session, batch, microbatch_start=0, microbatch_end=1)
+        output = base.compute_step(
+            session, batch, microbatch_start=0, microbatch_end=1,
+            collect_detailed_metrics=collect_detailed_metrics,
+        )
     else:
         output = base.compute_step(
             session,
@@ -643,6 +649,7 @@ def test_real_dlite_recipe_objectives_on_cpu(monkeypatch, phase_name, disaggrega
                 attention_mask=torch.ones_like(ids),
                 loss_mask=torch.ones_like(ids),
             ),
+            collect_detailed_metrics=collect_detailed_metrics,
         )
     assert isinstance(output, TrainingOutput)
     assert torch.isfinite(output.loss)
@@ -651,8 +658,10 @@ def test_real_dlite_recipe_objectives_on_cpu(monkeypatch, phase_name, disaggrega
     if phase_name == "stage1":
         assert "expected_accept_len" not in output.ratio_metrics
         assert all(p.grad is None for p in draft.sequential_head.parameters())
-    else:
+    elif collect_detailed_metrics:
         assert "expected_accept_len" in output.ratio_metrics
+    if not collect_detailed_metrics:
+        assert not output.ratio_metrics
 
 
 @pytest.mark.parametrize("algorithm", ["dflash", "dflash2", "dspark"])

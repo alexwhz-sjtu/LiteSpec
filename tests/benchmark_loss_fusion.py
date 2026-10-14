@@ -8,6 +8,8 @@ import gc
 import json
 import os
 import statistics
+import subprocess
+import time
 from pathlib import Path
 
 import torch
@@ -32,6 +34,15 @@ def main():
     )
     parser.add_argument("--dtype", choices=("float32", "bfloat16"), default="float32")
     args = parser.parse_args()
+    def visible_gpu_processes():
+        query = subprocess.run(
+            ["nvidia-smi", "--query-compute-apps=pid,gpu_uuid", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, check=True,
+        )
+        return [(int(pid.strip()), uuid.strip()) for pid, uuid in
+                (line.split(",", 1) for line in query.stdout.splitlines() if line.strip())]
+
+    before_context = visible_gpu_processes()
     torch.manual_seed(17)
     dtype = getattr(torch, args.dtype)
     x = torch.randn(
@@ -40,9 +51,20 @@ def main():
     target = torch.randn_like(x)
     labels = torch.randint(args.vocab, (args.rows,), device="cuda")
     weights = torch.rand(args.rows, device="cuda")
+    gpu_uuid = str(torch.cuda.get_device_properties(x.device).uuid)
+    if not gpu_uuid.startswith("GPU-"):
+        gpu_uuid = "GPU-" + gpu_uuid
+    after_context = visible_gpu_processes()
+    preexisting = [pid for pid, uuid in before_context if uuid == gpu_uuid]
+    own_candidates = [pid for pid, uuid in after_context if uuid == gpu_uuid]
+    if preexisting or len(own_candidates) != 1:
+        raise RuntimeError(f"Cannot verify an initially idle, single-process GPU: {before_context}, {after_context}")
+    pid_mapping = {"container_pid": os.getpid(), "driver_pid": own_candidates[0],
+                   "gpu_uuid": gpu_uuid, "method": "empty before CUDA allocation; exactly one driver process after allocation"}
     results = {}
     for kind in ("ce", "ce_l1", "kl"):
         steps = {}
+        warmups = {}
         for backend in ("torch", "inductor"):
             os.environ["LITESPEC_LOSS_BACKEND"] = backend
 
@@ -57,10 +79,22 @@ def main():
                     loss = weighted_kl(x, target, weights)
                 loss.backward()
 
-            for _ in range(3):
+            torch.cuda.synchronize()
+            warmup_started = time.perf_counter()
+            step()
+            torch.cuda.synchronize()
+            first_step_ms = (time.perf_counter() - warmup_started) * 1000
+            for _ in range(2):
                 step()
             torch.cuda.synchronize()
+            warmups[backend] = {
+                "first_step_wall_ms": first_step_ms,
+                "three_step_warmup_wall_ms": (time.perf_counter() - warmup_started) * 1000,
+            }
             steps[backend] = step
+        from torch._dynamo.utils import counters
+
+        graphs_before_timing = counters["stats"]["unique_graphs"]
         times = {name: [] for name in steps}
         peaks = {name: [] for name in steps}
         for trial in range(args.trials):
@@ -82,11 +116,16 @@ def main():
                 peaks[backend].append(
                     (torch.cuda.max_memory_allocated() - base) / 2**20
                 )
+        graphs_after_timing = counters["stats"]["unique_graphs"]
+        if graphs_after_timing != graphs_before_timing:
+            raise RuntimeError("New graphs compiled inside the measured trials")
         for backend in steps:
             result = {
                 "ms": statistics.median(times[backend]),
                 "trials_ms": times[backend],
                 "extra_peak_mib": max(peaks[backend]),
+                "warmup": warmups[backend],
+                "new_graphs_during_trials": graphs_after_timing - graphs_before_timing,
             }
             results[f"{kind}/{backend}"] = result
             print(json.dumps({f"{kind}/{backend}": result}), flush=True)
@@ -95,6 +134,9 @@ def main():
             k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()
         },
         "torch": torch.__version__,
+        "cuda": torch.version.cuda,
+        "gpu_process_identity": pid_mapping,
+        "inductor_cache_dir": os.environ.get("TORCHINDUCTOR_CACHE_DIR"),
         "gpu": torch.cuda.get_device_name(),
         "results": results,
     }

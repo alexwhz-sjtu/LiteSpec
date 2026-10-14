@@ -1,0 +1,7 @@
+{
+  "name": "failed",
+  "updated": 1791906608.4557517,
+  "host": "dsw-540652-5d64c98d65-cxjkw",
+  "controller_pid": 2682383,
+  "error": "RuntimeError('Smoke prerequisite failed: {\\'name\\': \\'failed\\', \\'updated\\': 1791906594.837083, \\'host\\': \\'dsw-540652-5d64c98d65-cxjkw\\', \\'controller_pid\\': 2682382, \\'error\\': \"RuntimeError(\\'smoke_auto exited 1; see /diancpfs/user/wanghanzhen/LiteSpec/tests/optimization_handoff_runs/20261013_cuda13_203502/newhost_2gpu/smoke_auto.log\\')\"}')"
+}

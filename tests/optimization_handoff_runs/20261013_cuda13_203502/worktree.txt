@@ -1,0 +1,5 @@
+ M README.md
+ M pyproject.toml
+ M tests/training_optimization_handoff.md
+ M uv.lock
+?? tests/optimization_handoff_runs/

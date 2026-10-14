@@ -507,6 +507,7 @@ class DFlashTrainingBase(nn.Module):
         predecessor_ids: torch.Tensor,
         *,
         metrics_callback=None,
+        collect_detailed_metrics: bool = True,
     ) -> DFlashObjectiveTerms:
         """Return a flat tuple of additive objective and metric tensors."""
 
@@ -537,8 +538,13 @@ class DFlashTrainingBase(nn.Module):
         ce_loss_num, neg_log_q = weighted_cross_entropy(
             objective_logits, target_ids, loss_weights
         )
-        target_probability = torch.exp(-neg_log_q)
-        target_probability_num = (target_probability.detach() * weight_mask).sum()
+        zero = ce_loss_num.new_zeros(())
+        target_probability_num = zero
+        correct_num = zero
+        accuracy_den = zero
+        if collect_detailed_metrics:
+            target_probability = torch.exp(-neg_log_q)
+            target_probability_num = (target_probability.detach() * weight_mask).sum()
 
         selector_terms = SelectorTerms.zeros(ce_loss_num)
         if self._selector_objective_enabled:
@@ -550,14 +556,16 @@ class DFlashTrainingBase(nn.Module):
                 predecessor_ids=predecessor_ids,
                 loss_weights=loss_weights,
                 weight_mask=weight_mask,
+                collect_detailed_metrics=collect_detailed_metrics,
             )
 
-        with torch.no_grad():
-            predicted_ids = objective_logits.argmax(dim=-1)
-            correct_num = (
-                ((predicted_ids == target_ids) & (weight_mask > 0.5)).sum().float()
-            )
-            accuracy_den = weight_mask.sum()
+        if collect_detailed_metrics:
+            with torch.no_grad():
+                predicted_ids = objective_logits.argmax(dim=-1)
+                correct_num = (
+                    ((predicted_ids == target_ids) & (weight_mask > 0.5)).sum().float()
+                )
+                accuracy_den = weight_mask.sum()
         return DFlashObjectiveTerms(
             ce_loss_num=ce_loss_num,
             loss_den=loss_den,

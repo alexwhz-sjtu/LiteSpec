@@ -1,0 +1,6 @@
+ M README.md
+ M pyproject.toml
+ M tests/benchmark_loss_fusion.py
+ M tests/training_optimization_handoff.md
+ M uv.lock
+?? tests/optimization_handoff_runs/

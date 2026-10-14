@@ -1,0 +1,14 @@
+{
+  "litespec/core/dlite.py": "ffb0280bcf4597b9cd324856644b33495db3404c8d2fe987ef841c106570a98f",
+  "litespec/core/dflash.py": "34e2a856fbb6ed5c3de6d13d10497c71f108d3861f9ef8cb8c0f2295405229d3",
+  "litespec/core/dflash2.py": "3f320ecb62339cb25909f5809c0a663797b4ee6fbc8e4c5abd16e8a96452b35b",
+  "litespec/core/dspark.py": "38a87c5d9fa2f9b0fd98e3815c4eb434264be394a4b23834e96e797fe55b4b63",
+  "litespec/core/_dflash_common.py": "4263d4ff8276dc0ff4d1cbefbdcb4a0561524aba2f0e43389db363cc98b36719",
+  "litespec/core/losses.py": "a22f49c9ddc7a604e145ecdecae864a4b7bbdfbdb3a2c82798bd024eb21a3041",
+  "litespec/training/recipes/dlite.py": "908e184f84319611d67ac4d5fafdb271c605200650444d19f351be8e290505d7",
+  "litespec/training/runner.py": "523f0e9870780b59686ad75c3978a5743198a138e4713ff100b9f40d2a640a19",
+  "litespec/training/config.py": "6e95adfc79a75377d49626b91616338d178cfed9aff11d4a3898e7e30224b03d",
+  "docs/TRAINING.md": "6b6f3209fc1a5cdf98851b45d63199c651bd33ed594c99ace9883eca322ee42c",
+  "tests/test_metrics_logging_only.py": "ae00c64b17733187d959d76fb2492dac8089a9e8d800f513bf8678d8dd4f2c33",
+  "tests/test_training_runner.py": "eaf052727d3006da40587a4a49b92a641ba1a9535f769b8c6acab0aea82af346"
+}

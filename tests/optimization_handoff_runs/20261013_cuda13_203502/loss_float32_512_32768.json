@@ -1,0 +1,125 @@
+{
+  "config": {
+    "rows": 512,
+    "vocab": 32768,
+    "iterations": 30,
+    "trials": 7,
+    "output": "/diancpfs/user/wanghanzhen/LiteSpec/tests/optimization_handoff_runs/20261013_cuda13_203502/loss_float32_512_32768.json",
+    "note": "GPU process/utilization sampled throughout at ~1-second intervals; see gpu-monitor.jsonl and status.json for contention audit.",
+    "dtype": "float32"
+  },
+  "torch": "2.9.1+cu130",
+  "cuda": "13.0",
+  "inductor_cache_dir": "/diancpfs/user/wanghanzhen/LiteSpec/tests/optimization_handoff_runs/20261013_cuda13_203502/inductor-cache",
+  "gpu": "NVIDIA L20Z",
+  "results": {
+    "ce/torch": {
+      "ms": 0.2631989320119222,
+      "trials_ms": [
+        0.2631989320119222,
+        0.27348267237345375,
+        0.25020480155944824,
+        0.2718154589335124,
+        0.3054197311401367,
+        0.2492853323618571,
+        0.24591466585795085
+      ],
+      "extra_peak_mib": 192.0009765625,
+      "warmup": {
+        "first_step_wall_ms": 49.79962200013688,
+        "three_step_warmup_wall_ms": 50.495051000325475
+      },
+      "new_graphs_during_trials": 0
+    },
+    "ce/inductor": {
+      "ms": 0.49036693572998047,
+      "trials_ms": [
+        0.49036693572998047,
+        0.4124191919962565,
+        0.5238975842793783,
+        0.4878389358520508,
+        0.5087669372558594,
+        0.5219946543375651,
+        0.4831071853637695
+      ],
+      "extra_peak_mib": 64.0048828125,
+      "warmup": {
+        "first_step_wall_ms": 1682.186030999219,
+        "three_step_warmup_wall_ms": 1683.492533999015
+      },
+      "new_graphs_during_trials": 0
+    },
+    "ce_l1/torch": {
+      "ms": 0.878437360127767,
+      "trials_ms": [
+        0.8858517328898112,
+        0.8769429524739584,
+        0.8753706614176432,
+        0.8885930379231771,
+        0.8813034693400065,
+        0.8773333231608073,
+        0.878437360127767
+      ],
+      "extra_peak_mib": 320.0087890625,
+      "warmup": {
+        "first_step_wall_ms": 41.02791600053024,
+        "three_step_warmup_wall_ms": 42.843670998991
+      },
+      "new_graphs_during_trials": 0
+    },
+    "ce_l1/inductor": {
+      "ms": 0.767579714457194,
+      "trials_ms": [
+        0.7443605422973633,
+        0.7421045303344727,
+        0.7603200276692709,
+        0.8045632044474283,
+        0.767579714457194,
+        0.8187967936197916,
+        0.8629215876261394
+      ],
+      "extra_peak_mib": 320.005859375,
+      "warmup": {
+        "first_step_wall_ms": 195.95090500115475,
+        "three_step_warmup_wall_ms": 197.78998600122577
+      },
+      "new_graphs_during_trials": 0
+    },
+    "kl/torch": {
+      "ms": 0.5818517049153645,
+      "trials_ms": [
+        0.5882495880126953,
+        0.5831082661946615,
+        0.5813119888305665,
+        0.5805994669596354,
+        0.5818517049153645,
+        0.6084970474243164,
+        0.5797141393025717
+      ],
+      "extra_peak_mib": 320.0,
+      "warmup": {
+        "first_step_wall_ms": 16.157342000951758,
+        "three_step_warmup_wall_ms": 17.34538100026839
+      },
+      "new_graphs_during_trials": 0
+    },
+    "kl/inductor": {
+      "ms": 0.5391914367675781,
+      "trials_ms": [
+        0.5369589487711589,
+        0.5031189282735189,
+        0.5115541458129883,
+        0.571347173055013,
+        0.5438666661580404,
+        0.586907704671224,
+        0.5391914367675781
+      ],
+      "extra_peak_mib": 128.00634765625,
+      "warmup": {
+        "first_step_wall_ms": 121.10817199936719,
+        "three_step_warmup_wall_ms": 122.56926000009116
+      },
+      "new_graphs_during_trials": 0
+    }
+  }
+}

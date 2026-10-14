@@ -1,0 +1,28 @@
+{
+  "passed": true,
+  "cases": [
+    {
+      "dtype": "torch.float32",
+      "shape": [
+        32,
+        151936
+      ],
+      "objective_abs": 0.0,
+      "probability_max_abs": 5.960464477539063e-08,
+      "logit_gradient_max_abs": 0.0,
+      "confidence_gradient_max_abs": 5.960464477539063e-08
+    },
+    {
+      "dtype": "torch.bfloat16",
+      "shape": [
+        32,
+        151936
+      ],
+      "objective_abs": 0.0,
+      "probability_max_abs": 5.960464477539063e-08,
+      "logit_gradient_max_abs": 0.0,
+      "confidence_gradient_max_abs": 0.0
+    }
+  ],
+  "method": "Legacy fused diagnostic reduction versus constant training reduction; FP32 forward/confidence-gradient tolerance 1e-7, BF16 leaf gradients exact in this probe."
+}

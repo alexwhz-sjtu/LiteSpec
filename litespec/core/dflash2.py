@@ -22,6 +22,7 @@ class OnlineDFlash2Model(OnlineDFlashModel):
         predecessor_ids: torch.Tensor,
         loss_weights: torch.Tensor,
         weight_mask: torch.Tensor,
+        collect_detailed_metrics: bool = True,
     ) -> SelectorTerms:
         """Return additive selector terms for one enabled objective chunk.
 
@@ -56,22 +57,25 @@ class OnlineDFlash2Model(OnlineDFlashModel):
             predecessor_ids=predecessor_ids,
         )
         selector_loss_weights = loss_weights * target_is_candidate.float()
-        selector_metric_mask = weight_mask * target_is_candidate.float()
         ce_num, selector_ce = weighted_cross_entropy(
             selector_logits.float(), target_candidate_index, selector_loss_weights
         )
-        selector_probability = torch.exp(-selector_ce)
-        probability_num = (selector_probability.detach() * selector_metric_mask).sum()
-        weight_den = selector_loss_weights.sum()
-        covered_num = selector_metric_mask.sum()
-        with torch.no_grad():
-            selected_ids = candidate_ids.gather(
-                -1,
-                selector_logits.argmax(dim=-1, keepdim=True),
-            ).squeeze(-1)
-            correct_num = (
-                (selected_ids == target_ids).float() * selector_loss_weights
-            ).sum()
+        zero = ce_num.new_zeros(())
+        probability_num = correct_num = weight_den = covered_num = zero
+        if collect_detailed_metrics:
+            with torch.no_grad():
+                selector_metric_mask = weight_mask * target_is_candidate.float()
+                selector_probability = torch.exp(-selector_ce)
+                probability_num = (selector_probability * selector_metric_mask).sum()
+                weight_den = selector_loss_weights.sum()
+                covered_num = selector_metric_mask.sum()
+                selected_ids = candidate_ids.gather(
+                    -1,
+                    selector_logits.argmax(dim=-1, keepdim=True),
+                ).squeeze(-1)
+                correct_num = (
+                    (selected_ids == target_ids).float() * selector_loss_weights
+                ).sum()
         return SelectorTerms(
             ce_num=ce_num,
             probability_num=probability_num,

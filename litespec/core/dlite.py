@@ -446,6 +446,7 @@ class OnlineDLiteModel(nn.Module):
         target_prefill_logits: torch.Tensor,
         *,
         serial_logits: Optional[torch.Tensor] = None,
+        collect_detailed_metrics: bool = True,
     ) -> TrainingOutput:
         """Compute supervised loss and its full-vocabulary projections.
 
@@ -535,15 +536,17 @@ class OnlineDLiteModel(nn.Module):
                 final_logits.float(), active_ce_labels, active_target_logits,
                 active_final_weights,
             )
-            active_acceptance = (1.0 - 0.5 * l1_values).clamp(0.0, 1.0)
+            if collect_detailed_metrics:
+                active_acceptance = (1.0 - 0.5 * l1_values).clamp(0.0, 1.0)
         else:
             final_ce_numerator, _ = weighted_cross_entropy(
                 final_logits.float(), active_ce_labels, active_final_weights
             )
             l1_numerator = prediction_hidden.new_zeros((), dtype=torch.float32)
-            active_acceptance = distribution_acceptance_probability(
-                active_target_logits, final_logits
-            )
+            if collect_detailed_metrics:
+                active_acceptance = distribution_acceptance_probability(
+                    active_target_logits, final_logits
+                )
         # The optimizer-window objective needs one additive denominator so
         # FSDP's rank-averaged gradients can be rescaled after accumulation.
         # When final/base decay schedules differ, use the loss-coefficient-
@@ -564,6 +567,11 @@ class OnlineDLiteModel(nn.Module):
         total = fsdp_global_weighted_mean(
             loss_numerator, loss_denominator, self.process_group
         )
+        if not collect_detailed_metrics:
+            return TrainingOutput(
+                loss=total,
+                loss_terms=RatioTerms(loss_numerator, loss_denominator.detach()),
+            )
         with torch.no_grad():
             predictions = torch.zeros_like(batch.labels)
             predictions[active_positions] = final_logits.argmax(dim=-1)
@@ -649,6 +657,7 @@ class OnlineDLiteModel(nn.Module):
         return_backbone_and_serial_logits: bool = False,
         return_transition_outputs: bool = False,
         target_logits_are_gathered: bool = False,
+        collect_detailed_metrics: bool = True,
     ):
         if prepared_batch is None:
             if input_ids is None or loss_mask is None:
@@ -686,6 +695,7 @@ class OnlineDLiteModel(nn.Module):
             supervised = self.compute_supervised_loss(
                 prediction_hidden, prepared_batch, gathered_target_logits,
                 serial_logits=student_serial_logits,
+                collect_detailed_metrics=collect_detailed_metrics,
             )
             return (
                 prediction_hidden,
@@ -710,7 +720,8 @@ class OnlineDLiteModel(nn.Module):
             )
         )
         return self.compute_supervised_loss(
-            prediction_hidden, prepared_batch, gathered_target_logits
+            prediction_hidden, prepared_batch, gathered_target_logits,
+            collect_detailed_metrics=collect_detailed_metrics,
         )
 
 

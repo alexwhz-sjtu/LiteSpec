@@ -1,0 +1,103 @@
+{
+  "warmup": 200,
+  "measured_calls_per_trial": 100,
+  "trial_order": [
+    "eager",
+    "graph",
+    "graph",
+    "eager"
+  ],
+  "scope": "Static Newton-Schulz only; no FSDP, NCCL, parameter mutation, CPU gradient norm or end-to-end speedup claim.",
+  "results": [
+    {
+      "shape": [
+        1,
+        640,
+        640
+      ],
+      "exact_output_equal": true,
+      "measurements": {
+        "eager": [
+          {
+            "wall_ms_per_call": 0.274184700101614,
+            "stream_ms_per_call": 0.2729539108276367
+          },
+          {
+            "wall_ms_per_call": 0.26694391039200127,
+            "stream_ms_per_call": 0.26649375915527346
+          }
+        ],
+        "graph": [
+          {
+            "wall_ms_per_call": 0.096461889334023,
+            "stream_ms_per_call": 0.09624128341674805
+          },
+          {
+            "wall_ms_per_call": 0.09623163030482829,
+            "stream_ms_per_call": 0.09601920127868652
+          }
+        ]
+      }
+    },
+    {
+      "shape": [
+        1,
+        4096,
+        4096
+      ],
+      "exact_output_equal": true,
+      "measurements": {
+        "eager": [
+          {
+            "wall_ms_per_call": 3.546498300274834,
+            "stream_ms_per_call": 3.546037292480469
+          },
+          {
+            "wall_ms_per_call": 3.541640480980277,
+            "stream_ms_per_call": 3.5405313110351564
+          }
+        ],
+        "graph": [
+          {
+            "wall_ms_per_call": 3.3716118603479117,
+            "stream_ms_per_call": 3.371037902832031
+          },
+          {
+            "wall_ms_per_call": 3.3420677797403187,
+            "stream_ms_per_call": 3.34107421875
+          }
+        ]
+      }
+    },
+    {
+      "shape": [
+        1,
+        151936,
+        320
+      ],
+      "exact_output_equal": true,
+      "measurements": {
+        "eager": [
+          {
+            "wall_ms_per_call": 1.9023087399546057,
+            "stream_ms_per_call": 1.9016844177246093
+          },
+          {
+            "wall_ms_per_call": 1.9048594601918012,
+            "stream_ms_per_call": 1.9037107849121093
+          }
+        ],
+        "graph": [
+          {
+            "wall_ms_per_call": 1.866936890874058,
+            "stream_ms_per_call": 1.86606689453125
+          },
+          {
+            "wall_ms_per_call": 1.8669824302196503,
+            "stream_ms_per_call": 1.8659274291992187
+          }
+        ]
+      }
+    }
+  ]
+}

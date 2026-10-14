@@ -1,0 +1,53 @@
+{
+  "input_shape": [
+    32,
+    151936
+  ],
+  "saved_tensors": [
+    {
+      "shape": [
+        32,
+        151936
+      ],
+      "dtype": "torch.float32",
+      "bytes": 19447808,
+      "storage_ptr": 140552368553984,
+      "is_logits_storage": false
+    },
+    {
+      "shape": [
+        32,
+        151936
+      ],
+      "dtype": "torch.float32",
+      "bytes": 19447808,
+      "storage_ptr": 140552368553984,
+      "is_logits_storage": false
+    },
+    {
+      "shape": [
+        32
+      ],
+      "dtype": "torch.int64",
+      "bytes": 256,
+      "storage_ptr": 140552869773312,
+      "is_logits_storage": false
+    },
+    {
+      "shape": [],
+      "dtype": "torch.float32",
+      "bytes": 4,
+      "storage_ptr": 140552869774848,
+      "is_logits_storage": false
+    },
+    {
+      "shape": [
+        32
+      ],
+      "dtype": "torch.float32",
+      "bytes": 128,
+      "storage_ptr": 140552869773824,
+      "is_logits_storage": false
+    }
+  ]
+}

@@ -716,7 +716,7 @@ def _make_online(args, draft, components, process_group, *, teacher_defaults=Fal
     return OnlineDLiteModel(**kwargs)
 
 
-def _supervised_step(session, data):
+def _supervised_step(session, data, *, collect_detailed_metrics=True):
     args = session.args
     student = session.draft
     draft_online = session.draft_online
@@ -768,12 +768,13 @@ def _supervised_step(session, data):
             block_keep_mask=block_keep_mask,
             target_prefill_logits=target_logits,
             target_logits_are_gathered=True,
+            collect_detailed_metrics=collect_detailed_metrics,
         ),
     )
     return output
 
 
-def _distillation_step(session, data):
+def _distillation_step(session, data, *, collect_detailed_metrics=True):
     args = session.args
     student = session.draft
     student_online = session.draft_online
@@ -850,16 +851,16 @@ def _distillation_step(session, data):
     return TrainingOutput(
         loss=loss,
         loss_terms=RatioTerms(loss_numerator, loss_denominator),
-        ratio_metrics={
+        ratio_metrics=({
             "kl": RatioTerms(
                 loss_numerator / args.stage1_kl_weight,
                 loss_denominator,
             )
-        },
+        } if collect_detailed_metrics else {}),
     )
 
 
-def _transition_step(session, data):
+def _transition_step(session, data, *, collect_detailed_metrics=True):
     args = session.args
     student = session.draft
     student_online = session.draft_online
@@ -938,6 +939,7 @@ def _transition_step(session, data):
             seq_len=input_ids.size(1),
             target_prefill_logits=target_logits,
             target_logits_are_gathered=True,
+            collect_detailed_metrics=collect_detailed_metrics,
             return_transition_outputs=True,
         ),
     )
@@ -964,11 +966,11 @@ def _transition_step(session, data):
     loss_denominator = (
         stage1_scale * stage1_loss_denominator + stage2_scale * stage2_loss_denominator
     )
-    zero_terms = RatioTerms(stage2_loss.new_zeros(()), stage2_loss_denominator)
+    zero_terms = (RatioTerms(stage2_loss.new_zeros(()), stage2_loss_denominator) if collect_detailed_metrics else None)
     return TrainingOutput(
         loss=loss,
         loss_terms=RatioTerms(loss_numerator, loss_denominator),
-        ratio_metrics={
+        ratio_metrics=({
             "stage1_loss": RatioTerms(stage1_loss_numerator, stage1_loss_denominator),
             "stage2_loss": stage2_output.loss_terms,
             "kl": RatioTerms(
@@ -991,11 +993,13 @@ def _transition_step(session, data):
             "stage2_weight_scale": RatioTerms(
                 loss.new_tensor(stage2_scale), loss.new_ones(())
             ),
-        },
+        } if collect_detailed_metrics else {}),
     )
 
 
-def _packet_step(session, packet, microbatch_start, microbatch_end):
+def _packet_step(
+    session, packet, microbatch_start, microbatch_end, *, collect_detailed_metrics=True
+):
     args = session.args
     mode = args.mode
     phase = session.phase
@@ -1094,12 +1098,12 @@ def _packet_step(session, packet, microbatch_start, microbatch_end):
             metric_output = TrainingOutput(
                 loss=loss,
                 loss_terms=RatioTerms(numerator, denominator),
-                ratio_metrics={
+                ratio_metrics=({
                     "kl": RatioTerms(
                         numerator / args.stage1_kl_weight,
                         denominator,
                     )
-                },
+                } if collect_detailed_metrics else {}),
             )
         else:
             target_logits = _target_logits(
@@ -1123,6 +1127,7 @@ def _packet_step(session, packet, microbatch_start, microbatch_end):
                     seq_len=input_ids.size(1),
                     target_prefill_logits=target_logits,
                     target_logits_are_gathered=True,
+                    collect_detailed_metrics=collect_detailed_metrics,
                     return_transition_outputs=True,
                 ),
             )
@@ -1144,11 +1149,11 @@ def _packet_step(session, packet, microbatch_start, microbatch_end):
             loss = stage1_scale * stage1_loss + stage2_scale * stage2_loss
             numerator = stage1_scale * stage1_num + stage2_scale * stage2_num
             denominator = stage1_scale * stage1_den + stage2_scale * stage2_den
-            zero_terms = RatioTerms(stage2_loss.new_zeros(()), stage2_den)
+            zero_terms = (RatioTerms(stage2_loss.new_zeros(()), stage2_den) if collect_detailed_metrics else None)
             metric_output = TrainingOutput(
                 loss=loss,
                 loss_terms=RatioTerms(numerator, denominator),
-                ratio_metrics={
+                ratio_metrics=({
                     "kl": RatioTerms(
                         stage1_num / args.stage1_kl_weight,
                         stage1_den,
@@ -1168,7 +1173,7 @@ def _packet_step(session, packet, microbatch_start, microbatch_end):
                     "l1_distance": supervised.ratio_metrics.get(
                         "objective/l1_distance", zero_terms
                     ),
-                },
+                } if collect_detailed_metrics else {}),
             )
     else:
         target_logits = _target_logits(
@@ -1196,6 +1201,7 @@ def _packet_step(session, packet, microbatch_start, microbatch_end):
                 block_keep_mask=block_keep_mask,
                 target_prefill_logits=target_logits,
                 target_logits_are_gathered=True,
+                collect_detailed_metrics=collect_detailed_metrics,
             ),
         )
         loss = supervised.loss
@@ -1402,12 +1408,21 @@ class DLiteTrainingAdapter(TrainingAdapter):
         collect_detailed_metrics=False,
     ):
         if session.topology is not None:
-            return _packet_step(session, data, microbatch_start, microbatch_end)
+            return _packet_step(
+                session, data, microbatch_start, microbatch_end,
+                collect_detailed_metrics=collect_detailed_metrics,
+            )
         if session.phase.name == "stage1":
-            return _distillation_step(session, data)
+            return _distillation_step(
+                session, data, collect_detailed_metrics=collect_detailed_metrics
+            )
         if session.phase.name == "transition":
-            return _transition_step(session, data)
-        return _supervised_step(session, data)
+            return _transition_step(
+                session, data, collect_detailed_metrics=collect_detailed_metrics
+            )
+        return _supervised_step(
+            session, data, collect_detailed_metrics=collect_detailed_metrics
+        )
 
     def packet_metadata(self, session):
         return _draft_metadata(session.draft, session.teacher)

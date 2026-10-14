@@ -1,0 +1,21 @@
+[
+  {
+    "name": "dlite_smoke",
+    "pid": 387606,
+    "command": [
+      "/diancpfs/user/wanghanzhen/LiteSpec/.venv/bin/torchrun",
+      "--standalone",
+      "--nproc_per_node=2",
+      "tests/benchmark_training_handoff.py",
+      "--config",
+      "/diancpfs/user/wanghanzhen/LiteSpec/tests/optimization_handoff_runs/20261013_cuda13_203502/dlite_smoke.yaml",
+      "--steps",
+      "3",
+      "--warmup-steps",
+      "5"
+    ],
+    "started": 1791896052.0512183,
+    "ended": 1791896111.6385057,
+    "exit_code": 1
+  }
+]

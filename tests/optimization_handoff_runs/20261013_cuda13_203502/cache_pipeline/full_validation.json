@@ -1,0 +1,344 @@
+{
+  "cache_root": "/diancpfs/user/wanghanzhen/LiteSpec/cache/data/regen_full/wildchat_chinese_turns_le2_qwen3_8b",
+  "manifest_sha256": "752f46886586e39a173a4b5e48817374f08bc02e7233f7e23171dc104a7a5f88",
+  "verified_file_stats": {
+    "manifest.json": {
+      "size": 1081370,
+      "mtime_ns": 1791905851580079799,
+      "ctime_ns": 1791905851596565156,
+      "inode": 9549195837,
+      "device": 103
+    },
+    "shards/shard_00000000_00000511.tar": {
+      "size": 30420254720,
+      "mtime_ns": 1791901018931005122,
+      "ctime_ns": 1791901019064440617,
+      "inode": 5924843931,
+      "device": 103
+    },
+    "shards/shard_00000512_00001023.tar": {
+      "size": 34546759680,
+      "mtime_ns": 1791901080725124059,
+      "ctime_ns": 1791901083121494835,
+      "inode": 5924843937,
+      "device": 103
+    },
+    "shards/shard_00001024_00001535.tar": {
+      "size": 34498672640,
+      "mtime_ns": 1791901219445545846,
+      "ctime_ns": 1791901219483975617,
+      "inode": 5924843939,
+      "device": 103
+    },
+    "shards/shard_00001536_00002047.tar": {
+      "size": 31731978240,
+      "mtime_ns": 1791901301944179386,
+      "ctime_ns": 1791901347988937387,
+      "inode": 5924843942,
+      "device": 103
+    },
+    "shards/shard_00002048_00002559.tar": {
+      "size": 32884070400,
+      "mtime_ns": 1791901434801199712,
+      "ctime_ns": 1791901440560863172,
+      "inode": 5924843940,
+      "device": 103
+    },
+    "shards/shard_00002560_00003071.tar": {
+      "size": 31714375680,
+      "mtime_ns": 1791901516699097393,
+      "ctime_ns": 1791901518831532712,
+      "inode": 5924843963,
+      "device": 103
+    },
+    "shards/shard_00003072_00003583.tar": {
+      "size": 32932904960,
+      "mtime_ns": 1791901619149615484,
+      "ctime_ns": 1791901642593128891,
+      "inode": 5924843958,
+      "device": 103
+    },
+    "shards/shard_00003584_00004095.tar": {
+      "size": 35050137600,
+      "mtime_ns": 1791902144171647574,
+      "ctime_ns": 1791902147725107863,
+      "inode": 5924843966,
+      "device": 103
+    },
+    "shards/shard_00004096_00004585.tar": {
+      "size": 34486927360,
+      "mtime_ns": 1791905105609268659,
+      "ctime_ns": 1791905114615277372,
+      "inode": 5924843961,
+      "device": 103
+    }
+  },
+  "complete": true,
+  "validated": 1791906551.772625,
+  "wall_seconds": 686.4232380390167,
+  "successful_samples": 4586,
+  "failed_samples": 0,
+  "assistant_turns": 5794,
+  "source_order_preserved": true,
+  "all_shard_checksums_verified": true,
+  "eligible_block8_samples": 4568,
+  "ineligible_block8_samples": 18,
+  "cache_bytes": 298266081280,
+  "shards": 9,
+  "stored_layer_ids": [
+    0,
+    8,
+    16,
+    24,
+    31,
+    35
+  ],
+  "sample_checks": [
+    {
+      "index": 0,
+      "source_index": 0,
+      "tokens": 3372,
+      "supervised": 3328,
+      "hidden_shapes": {
+        "0": [
+          3372,
+          4096
+        ],
+        "8": [
+          3372,
+          4096
+        ],
+        "16": [
+          3372,
+          4096
+        ],
+        "24": [
+          3372,
+          4096
+        ],
+        "31": [
+          3372,
+          4096
+        ],
+        "35": [
+          3372,
+          4096
+        ]
+      },
+      "hidden_dtypes": {
+        "0": "torch.bfloat16",
+        "8": "torch.bfloat16",
+        "16": "torch.bfloat16",
+        "24": "torch.bfloat16",
+        "31": "torch.bfloat16",
+        "35": "torch.bfloat16"
+      },
+      "final_norm_layer": 35
+    },
+    {
+      "index": 511,
+      "source_index": 511,
+      "tokens": 1187,
+      "supervised": 1163,
+      "hidden_shapes": {
+        "0": [
+          1187,
+          4096
+        ],
+        "8": [
+          1187,
+          4096
+        ],
+        "16": [
+          1187,
+          4096
+        ],
+        "24": [
+          1187,
+          4096
+        ],
+        "31": [
+          1187,
+          4096
+        ],
+        "35": [
+          1187,
+          4096
+        ]
+      },
+      "hidden_dtypes": {
+        "0": "torch.bfloat16",
+        "8": "torch.bfloat16",
+        "16": "torch.bfloat16",
+        "24": "torch.bfloat16",
+        "31": "torch.bfloat16",
+        "35": "torch.bfloat16"
+      },
+      "final_norm_layer": 35
+    },
+    {
+      "index": 512,
+      "source_index": 512,
+      "tokens": 2460,
+      "supervised": 2415,
+      "hidden_shapes": {
+        "0": [
+          2460,
+          4096
+        ],
+        "8": [
+          2460,
+          4096
+        ],
+        "16": [
+          2460,
+          4096
+        ],
+        "24": [
+          2460,
+          4096
+        ],
+        "31": [
+          2460,
+          4096
+        ],
+        "35": [
+          2460,
+          4096
+        ]
+      },
+      "hidden_dtypes": {
+        "0": "torch.bfloat16",
+        "8": "torch.bfloat16",
+        "16": "torch.bfloat16",
+        "24": "torch.bfloat16",
+        "31": "torch.bfloat16",
+        "35": "torch.bfloat16"
+      },
+      "final_norm_layer": 35
+    },
+    {
+      "index": 4095,
+      "source_index": 4095,
+      "tokens": 272,
+      "supervised": 249,
+      "hidden_shapes": {
+        "0": [
+          272,
+          4096
+        ],
+        "8": [
+          272,
+          4096
+        ],
+        "16": [
+          272,
+          4096
+        ],
+        "24": [
+          272,
+          4096
+        ],
+        "31": [
+          272,
+          4096
+        ],
+        "35": [
+          272,
+          4096
+        ]
+      },
+      "hidden_dtypes": {
+        "0": "torch.bfloat16",
+        "8": "torch.bfloat16",
+        "16": "torch.bfloat16",
+        "24": "torch.bfloat16",
+        "31": "torch.bfloat16",
+        "35": "torch.bfloat16"
+      },
+      "final_norm_layer": 35
+    },
+    {
+      "index": 4096,
+      "source_index": 4096,
+      "tokens": 541,
+      "supervised": 294,
+      "hidden_shapes": {
+        "0": [
+          541,
+          4096
+        ],
+        "8": [
+          541,
+          4096
+        ],
+        "16": [
+          541,
+          4096
+        ],
+        "24": [
+          541,
+          4096
+        ],
+        "31": [
+          541,
+          4096
+        ],
+        "35": [
+          541,
+          4096
+        ]
+      },
+      "hidden_dtypes": {
+        "0": "torch.bfloat16",
+        "8": "torch.bfloat16",
+        "16": "torch.bfloat16",
+        "24": "torch.bfloat16",
+        "31": "torch.bfloat16",
+        "35": "torch.bfloat16"
+      },
+      "final_norm_layer": 35
+    },
+    {
+      "index": 4585,
+      "source_index": 4585,
+      "tokens": 4584,
+      "supervised": 3255,
+      "hidden_shapes": {
+        "0": [
+          4584,
+          4096
+        ],
+        "8": [
+          4584,
+          4096
+        ],
+        "16": [
+          4584,
+          4096
+        ],
+        "24": [
+          4584,
+          4096
+        ],
+        "31": [
+          4584,
+          4096
+        ],
+        "35": [
+          4584,
+          4096
+        ]
+      },
+      "hidden_dtypes": {
+        "0": "torch.bfloat16",
+        "8": "torch.bfloat16",
+        "16": "torch.bfloat16",
+        "24": "torch.bfloat16",
+        "31": "torch.bfloat16",
+        "35": "torch.bfloat16"
+      },
+      "final_norm_layer": 35
+    }
+  ]
+}
