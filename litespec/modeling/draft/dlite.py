@@ -735,7 +735,7 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
         token_position_ids: torch.Tensor,
         token_keep_mask: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return context and Q RoPE ids for the configured model role."""
+        """Return role-specific RoPE ids; student queries start at 1 after CHS 0."""
         if token_position_ids.shape != token_keep_mask.shape:
             raise ValueError("token positions and keep mask must have equal shapes")
         pivot = (anchor_positions - 1).clamp(min=0)
@@ -771,7 +771,7 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
             origin = torch.where(has_tokens, first_valid, pivot)
             local_tokens = torch.where(
                 token_keep_mask,
-                token_position_ids - origin.unsqueeze(-1),
+                token_position_ids - origin.unsqueeze(-1) + 1,
                 torch.zeros_like(token_position_ids),
             )
             context_positions = (
@@ -784,7 +784,7 @@ class DLiteDraftModel(Qwen3PreTrainedModel):
                 1, self.block_size, device=anchor_positions.device
             ).view(1, 1, -1)
             local_masks = (
-                anchor_positions.unsqueeze(-1) + mask_offsets - origin.unsqueeze(-1)
+                anchor_positions.unsqueeze(-1) + mask_offsets - origin.unsqueeze(-1) + 1
             )
             draft_positions = torch.cat([local_tokens, local_masks], dim=-1)
         return (

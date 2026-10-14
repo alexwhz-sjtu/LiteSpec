@@ -250,6 +250,41 @@ def training_base_cli(env: Mapping[str, str]) -> list[str]:
     return cli
 
 
+def effective_training_yaml(
+    source: str,
+    parsed_args: Mapping[str, Any],
+    argument_names: Sequence[str],
+    env: Mapping[str, str],
+) -> str:
+    """Merge typed trainer options and actual torchrun settings into the snapshot."""
+    config = yaml.safe_load(source)
+    launcher = config["launcher"]
+    arguments = config.setdefault("arguments", {})
+    launcher_options = {
+        "target_model_path": "target_model",
+        "train_data_path": "train_data",
+        "train_hidden_states_path": "train_hidden_states",
+        "output_dir": "output_dir",
+        "teacher_draft_path": "teacher_draft",
+    }
+    for name in dict.fromkeys([*arguments, *argument_names]):
+        value = parsed_args[name]
+        if name in launcher_options:
+            launcher[launcher_options[name]] = value
+            arguments.pop(name, None)
+        else:
+            arguments[name] = value
+    # Paths can also have been supplied through launcher fields, rather than
+    # arguments. Record the parsed values to avoid stale duplicate settings.
+    for name, key in launcher_options.items():
+        if name in parsed_args and (parsed_args[name] is not None or key in launcher):
+            launcher[key] = parsed_args[name]
+    for key in ("nnodes", "node_rank", "nproc_per_node", "master_addr", "master_port"):
+        value = env.get(f"PET_{key.upper()}", env[key.upper()])
+        launcher[key] = value if key == "master_addr" else int(value)
+    return yaml.safe_dump(config, sort_keys=False, allow_unicode=True)
+
+
 def launch_training(
     *,
     label: str,
@@ -307,7 +342,10 @@ def launch_training(
 
         is_dlite = module.startswith("scripts.dlite.")
         adapter = get_training_adapter("dlite" if is_dlite else label)
-        adapter.parse_args(label if is_dlite else None, argv=trainer_cli)
+        parsed = adapter.parse_args(label if is_dlite else None, argv=trainer_cli)
+        env["LITESPEC_TRAINING_YAML"] = effective_training_yaml(
+            configured_env["LITESPEC_TRAINING_YAML"], vars(parsed), list(effective), env
+        )
     command = [
         sys.executable,
         "-m",

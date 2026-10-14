@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 
 from litespec.args import SGLangBackendArgs
 from litespec.training.logging import TrackerArgs
@@ -90,6 +91,12 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     train.add_argument("--accumulation-steps", type=int, default=1)
     train.add_argument("--max-grad-norm", type=float, default=1.0)
     train.add_argument(
+        "--weight-decay",
+        type=float,
+        default=0.0,
+        help="AdamW weight decay when Muon is disabled; ignored with --use-muon.",
+    )
+    train.add_argument(
         "--use-muon", action=argparse.BooleanOptionalAction, default=False
     )
     train.add_argument("--muon-lr", type=float, default=0.02)
@@ -157,6 +164,11 @@ def validate_common_args(parser: argparse.ArgumentParser, args) -> None:
         muon_config_from_args(args)
     except ValueError as exc:
         parser.error(str(exc))
+
+    if not args.use_muon and (
+        not math.isfinite(args.weight_decay) or args.weight_decay < 0
+    ):
+        parser.error("--weight-decay must be finite and non-negative")
 
     if args.attention_backend == "flex_attention":
         try:
