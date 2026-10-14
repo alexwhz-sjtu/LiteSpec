@@ -29,12 +29,14 @@ learning rate from the baseline YAML, not from experiment 2.
 
 All YAML-launched workflows (DLite SFT/teacher/two-stage, DFlash, DFlash2,
 and DSpark) save `training_config.yaml` beside the model in every checkpoint
-directory, including final and phase-boundary saves. This is the original YAML
-captured when the launcher reads it, preserving comments and formatting; later
-edits or deletion of the source file do not affect it. CLI overrides are not
-merged into this source snapshot. Direct CLI runs without a YAML launcher do
-not create a source YAML snapshot. A resumed YAML launch records its new launch
-snapshot in the new checkpoints.
+directory, including final and phase-boundary saves. It contains the launch-time
+YAML with command-line overrides merged in using the parsed argument types,
+including `--no-*` flags, output paths and W&B names. Torchrun settings also
+reflect `PET_*` environment overrides. The source file is not modified; the
+saved YAML is reserialized, so original comments and formatting are not retained.
+Later edits or deletion of the source file do not affect the captured config.
+Direct CLI runs without a YAML launcher do not create this YAML snapshot. A
+resumed YAML launch records its new merged launch configuration.
 
 Use `launcher.train_data` for online target-model prefill, or  
 `launcher.train_hidden_states` for offline training. Set only one. Offline mode  
