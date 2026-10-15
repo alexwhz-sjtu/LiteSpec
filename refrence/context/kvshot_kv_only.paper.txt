@@ -1,0 +1,8 @@
+PAPER-ONLY EVIDENCE / NOT AUTHOR SOURCE
+Source: https://arxiv.org/html/2604.26412v1
+Section: 3.2 KV-Only Reuse
+
+没有定位到可确认的作者实现源码。以下是原文定义及本轮适配计划，不是官方代码。
+原文：同一 token 的多层 target K 和 V 分别沿特征维 concat，各自经 learned linear projection 降到单层 KV；比较 projection-only 与 projection+RoPE-fix。
+首版适配：每个 draft 层单独 K/V projector；Q 与 local block KV 来自并行骨干；projected prefix KV 不再经过 hidden->KV projection；MLA 接口使用 expanded KV。
+来源变量：W_K^proj、W_V^proj；统一变量：context_key_projection、context_value_projection。

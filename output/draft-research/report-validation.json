@@ -1,0 +1,26 @@
+{
+  "title": "LiteSpec · 可配置并行 Draft 调研与集成说明",
+  "sections": [
+    "overview",
+    "injection",
+    "attention",
+    "backbone",
+    "heads",
+    "losses",
+    "integration",
+    "roadmap",
+    "sources"
+  ],
+  "errors": [],
+  "desktopOverflow": false,
+  "sourceRows": 53,
+  "search": "显示 2 / 53 个源码入口；点击文件名查看固定版本与行号。",
+  "compatibility": "直接 target KV：先匹配 target 层映射、KV heads/dim、RoPE 状态、缓存布局与生命周期；同 hidden size 不保证兼容。DSA：需要可训练 indexer、mask-before-top-k 和后端适配。先验证 dense reference，再测稀疏执行收益。组合约束：普通 target KV 不能直接当作 MLA latent；DSA 官方 index K 还依赖 hidden，KV-only 输入不足。Selector：q 只在候选支持集内归一化；verifier 必须收到候选 IDs 与实际概率。BV：保持完整 block prefix 梯度，轨迹采样 p 与分母 p 一致；明确 block verifier 与实际 proposal 条件分布。此组合需专项设计：teacher label 可能不在候选内，q(y)=0；不能用 unary q 冒充 selector q。",
+  "mobileOverflow": false,
+  "activeIntegrationNav": "06 · 集成接口",
+  "mobile": {
+    "overflow": false,
+    "top": 0
+  },
+  "missingLocalLinks": []
+}

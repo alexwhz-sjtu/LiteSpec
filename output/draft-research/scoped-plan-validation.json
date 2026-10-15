@@ -1,0 +1,21 @@
+{
+  "title": "LiteSpec · 并行 Draft 第一版集成方案",
+  "sections": [
+    "overview",
+    "injection",
+    "attention",
+    "backbone",
+    "losses",
+    "integration",
+    "config-section",
+    "roadmap",
+    "sources"
+  ],
+  "desktopOverflow": false,
+  "bvSelectorRejected": true,
+  "rejection": "接口规划：该组合被第一版校验规则拒绝。SWA：最近 W 个已确认历史 KV + 整个当前 block；所有 block query 使用同一历史切片，块内双向。BV recipe 固定为原文 vocabulary-integrated、annealed block-log；要求完整预测块和与 p 一致的 target-sampled 轨迹。不支持：BV + selector 在配置解析阶段报错；不得回退到 unary q。",
+  "bvRnnAllowed": true,
+  "search": "显示 2 / 31 个第一版源码入口。",
+  "mobileOverflow": false,
+  "errors": []
+}

@@ -1,0 +1,66 @@
+Qwen3.5 GatedDeltaNet：官方参考与待集成边界
+=========================================
+状态：reference + docstring-only scaffold；没有集成实现、注册、训练或依赖升级。
+
+1. 官方来源与版本
+主参考是 Qwen Team / Hugging Face 的 Transformers v5.3.0，commit aad13b87ed59f2afcfaebc985f403301887a35fc。
+这是可复现的历史参考基线，不代表最新版，也不声称已兼容项目 Transformers 4.57.1。
+建模入口：modular_qwen3_5.py（继承 Qwen3-Next）；展开实现：modeling_qwen3_5.py。
+展开文件便于完整阅读继承后的逻辑，后续不在上游 generated 文件中直接维护修改。
+官方模型说明：https://huggingface.co/Qwen/Qwen3.5-0.8B
+官方 checkpoint 配置独立固定到 2fc06364715b967f1860aea9cf38778875588b17；
+包含部分较新字段，不能与历史源码默认配置混为同一版本。只归档 JSON/README/LICENSE，无权重。
+算法作者：https://github.com/NVlabs/GatedDeltaNet（本次固定 README 版本见 manifest）。
+论文：https://arxiv.org/abs/2412.06464（Gated Delta Networks: Improving Mamba2 with Delta Rule）。
+加速 kernel：https://github.com/fla-org/flash-linear-attention
+按项目已有依赖 v0.5.2 固定到 9c8e42e762fce087c27b673af4922795d9edb85e；
+归档 chunk/fused recurrent API 供后续核对，不声称与上述 Transformers 基线已完成数值验证。
+卷积 kernel：https://github.com/Dao-AILab/causal-conv1d（本项目已有 1.7.0 依赖；本次不改动）。
+完整文件路径、immutable URL、SHA-256 见 manifest.json 的 qwen35_official_sources。
+
+2. 放在四模块中的哪里
+context injection -> backbone [GatedDeltaNet mixer / 可选 hybrid] -> proposal -> objective。
+attention/gated_deltanet.py 是未来序列混合子层占位，外部宽度保持 hidden_size。
+qwen35_hybrid.py 是可选 linear/full 层编排占位，不增加第五个顶层模块。
+gated_delta_state.py 是 backbone 子状态占位，不与 proposal RNN 的状态混用。
+默认路由仍是 DFlash + transformer MHA/dense + parallel + Hard CE；本次不改原配置。
+
+3. 必须保留的源数学与参数
+Qwen3.5 是独立 in_proj_qkv / in_proj_z / in_proj_b / in_proj_a，不能直接照搬
+Qwen3-Next 的 packed qkvz/ba 布局。Q/K/V 经 causal depthwise convolution；z/a/b 不随之卷积。
+beta = sigmoid(b)；g = -exp(A_log.float()) * softplus(a.float() + dt_bias)。
+Q/K 做 L2 norm；V heads 可重复对应 Q/K heads；linear_num_value_heads 必须满足分组约束。
+保留 chunk/recurrent 中的 fp32 state 运算、query scaling、norm-before-SiLU gate 及输出投影。
+内部 conv 不是 DFlash2 的局部动态算子；不能为套用现有 operators 而替换数学。
+官方 GDN 路径不调用 RoPE；full attention 分支有自己的 rotary 与输出 gate。
+layer_types 显式控制混合层；默认 3 linear + 1 full，不能把比例硬编码为所有 draft 的要求。
+官方 full attention 不等同于现有 MHA；保留 norm/residual/FFN 与参数初始化顺序。
+
+4. 参数和状态布局（待适配，不是已支持接口）
+输入/输出：[N,T,hidden_size]；与框架 [N,A,Q,D] 之间的展开及恢复必须显式约定。
+linear_num_key_heads=Hk，linear_num_value_heads=Hv；key/value head dim=Dk/Dv。
+卷积通道 C=2*Hk*Dk+Hv*Dv；conv_states [N,C,linear_conv_kernel_dim]。
+recurrent_states [N,Hv,Dk,Dv]；FLA state_v_first 等选项可能改变轴顺序，不能静默转置。
+官方 0.8B 示例：D=1024，24 层，Hk=Hv=16，Dk=Dv=128，conv kernel=4。
+示例尺寸只用于识别来源，不覆盖 draft/target hidden_size 契约。
+普通注意力层另存 KV。历史 cache 源 docstring 的 ssm_states 并非实际属性；代码使用 recurrent_states。
+
+5. 实现前须解决的框架适配
+context：如何把 target hidden/context 编入 recurrence 或作为独立 conditioning 仍待设计；
+target expanded KV 不能直接充当 GDN recurrent state，因此 KVShot 组合未获支持。
+mask/access：GDN 是有序因果 recurrence，不接收任意 MHA block/dense/SWA/DSA 访问矩阵。
+并行 proposal 并不自动要求双向 mixer，但当前 block 的可见性语义必须逐项定义和验证。
+anchor：多 anchor、packed 文档和 padding 必须隔离卷积与递推状态，禁止跨 anchor/doc 泄漏；
+源 padding helper 的分支条件也需审查，不能宣称已经解决所有 padding 情形。
+prefill/continuation：固定 v5.3.0 实现在已有 cache 且 seq_len=1/cache_position 非空时走 recurrent；
+cached seq_len>1 仍走 chunk(initial_state=None)，不能直接作为已有 state 的多 token 续算实现。
+speculation：接受前的候选不能永久污染已确认状态；拒绝时需同时恢复 conv 和 recurrence。
+普通 KV 裁剪不足以回退，后续选择状态快照、重放或经证明等价的方案并验证。
+训练：保持可训练 context 在模型 forward/FSDP 内；checkpoint/export 必须保存结构与状态语义。
+依赖：源基线 Transformers 5.x API 与本项目 4.57.1 不同，未来选择本地移植或升级路线；本次不选择。
+
+6. 未来验收（本次不运行模型，不声明通过）
+PyTorch chunk/recurrent 与 FLA 的输出/状态一致性；训练反向与 dtype；prefill+decode；
+cached multi-token continuation；不同 anchor/doc 隔离；候选接受/拒绝与状态恢复；
+context/proposal/objective 组合能力检查；checkpoint 冷加载与独立导出。
+只有这些语义落地后才进入 registry；本次所有新增生产 Python 文件仅含模块 docstring。

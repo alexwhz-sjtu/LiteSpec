@@ -1,0 +1,384 @@
+{
+  "date": "2026-10-15",
+  "scope": "Read-only paper and code audit; no GPU execution",
+  "sources": {
+    "lite-fusion": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/modeling/draft/dflash.py",
+      "symbol": "DFlashDraftModel",
+      "line": 685,
+      "end_line": 1011,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash.py",
+      "sha256": "7e409a72657322fa65cacd75ddab4096c272b4510479a2b4b6a650a8582b421f",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash.py#L685"
+    },
+    "lite-attn": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/modeling/draft/dflash.py",
+      "symbol": "Qwen3DFlashAttention",
+      "line": 386,
+      "end_line": 445,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash.py",
+      "sha256": "7e409a72657322fa65cacd75ddab4096c272b4510479a2b4b6a650a8582b421f",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash.py#L386"
+    },
+    "lite-cache": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/modeling/draft/dflash.py",
+      "symbol": "Qwen3DFlashAttentionBase",
+      "line": 277,
+      "end_line": 383,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash.py",
+      "sha256": "7e409a72657322fa65cacd75ddab4096c272b4510479a2b4b6a650a8582b421f",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash.py#L277"
+    },
+    "lite-mla": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/modeling/draft/dflash.py",
+      "symbol": "Qwen3DFlashMLAAttention",
+      "line": 448,
+      "end_line": 589,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash.py",
+      "sha256": "7e409a72657322fa65cacd75ddab4096c272b4510479a2b4b6a650a8582b421f",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash.py#L448"
+    },
+    "lite-mode": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/modeling/draft/dflash.py",
+      "symbol": "resolve_dflash_attention_mode",
+      "line": 131,
+      "end_line": 146,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash.py",
+      "sha256": "7e409a72657322fa65cacd75ddab4096c272b4510479a2b4b6a650a8582b421f",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash.py#L131"
+    },
+    "lite-mask": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/core/attention_masks.py",
+      "symbol": "create_dflash_sdpa_mask",
+      "line": 58,
+      "end_line": 78,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/attention_masks.py",
+      "sha256": "dae431bc92d0e78cef0940cfe9de228d527ac21618e3709f52991cf72ec17024",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/attention_masks.py#L58"
+    },
+    "lite-conv": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/modeling/draft/dflash2.py",
+      "symbol": "DFlashGroupedConv",
+      "line": 29,
+      "end_line": 139,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash2.py",
+      "sha256": "71ae5cde0632aa5b1636549212d7b0a1a7a2ce270aa66ecdb3a037cef88434f1",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash2.py#L29"
+    },
+    "lite-convlayer": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/modeling/draft/dflash2.py",
+      "symbol": "Qwen3DFlash2DecoderLayer",
+      "line": 142,
+      "end_line": 197,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash2.py",
+      "sha256": "71ae5cde0632aa5b1636549212d7b0a1a7a2ce270aa66ecdb3a037cef88434f1",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash2.py#L142"
+    },
+    "lite-selector": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/modeling/draft/dflash2.py",
+      "symbol": "CandidateSelector",
+      "line": 200,
+      "end_line": 339,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash2.py",
+      "sha256": "71ae5cde0632aa5b1636549212d7b0a1a7a2ce270aa66ecdb3a037cef88434f1",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dflash2.py#L200"
+    },
+    "lite-selector-loss": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/core/dflash2.py",
+      "symbol": "_selector_chunk_terms",
+      "line": 16,
+      "end_line": 81,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/dflash2.py",
+      "sha256": "6b660ac58a2c23e2af28c005db59c3fe7b5fe4d95bd4a470d21004f97b50c44e",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/dflash2.py#L16"
+    },
+    "lite-markov": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/modeling/draft/dspark.py",
+      "symbol": "VanillaMarkovHead",
+      "line": 32,
+      "end_line": 114,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dspark.py",
+      "sha256": "d72e9695d46a18688b64ba546fb221d4ee708697d900783821f2bcc91b78a52a",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dspark.py#L32"
+    },
+    "lite-rnn": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/modeling/draft/dspark.py",
+      "symbol": "RNNMarkovHead",
+      "line": 144,
+      "end_line": 248,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dspark.py",
+      "sha256": "d72e9695d46a18688b64ba546fb221d4ee708697d900783821f2bcc91b78a52a",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dspark.py#L144"
+    },
+    "lite-dlite": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/modeling/draft/dlite.py",
+      "symbol": "DLiteSequentialHead",
+      "line": 34,
+      "end_line": 188,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dlite.py",
+      "sha256": "a707c3258fe7f8e6a5a8d5d2e0c29db9a1a29dce137926c9666b1b254322fbbb",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/draft/dlite.py#L34"
+    },
+    "lite-dlite-loss": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/core/dlite.py",
+      "symbol": "compute_supervised_loss",
+      "line": 442,
+      "end_line": 600,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/dlite.py",
+      "sha256": "d132214100d73a1e455b820f510cbe3e6fd871ac9ed57ef00e1a4cdba4ebc677",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/dlite.py#L442"
+    },
+    "lite-loss": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/core/losses.py",
+      "symbol": "_l1_probs",
+      "line": 37,
+      "end_line": 46,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/losses.py",
+      "sha256": "11991921ed824325185538c1bf823115a0590f135657727658a595fb103b8aa8",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/losses.py#L37"
+    },
+    "lite-ce": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/core/losses.py",
+      "symbol": "weighted_cross_entropy",
+      "line": 107,
+      "end_line": 113,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/losses.py",
+      "sha256": "11991921ed824325185538c1bf823115a0590f135657727658a595fb103b8aa8",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/losses.py#L107"
+    },
+    "lite-kl": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/core/losses.py",
+      "symbol": "weighted_kl",
+      "line": 132,
+      "end_line": 141,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/losses.py",
+      "sha256": "11991921ed824325185538c1bf823115a0590f135657727658a595fb103b8aa8",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/losses.py#L132"
+    },
+    "lite-target": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/modeling/target/training_target_model.py",
+      "symbol": "TargetTrainingOutput",
+      "line": 14,
+      "end_line": 21,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/target/training_target_model.py",
+      "sha256": "063bf2855b9e152ea9e26b36c49a9a309e8c4ae8e40d0024d9c041ff6eacd62d",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/modeling/target/training_target_model.py#L14"
+    },
+    "lite-chunk": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/core/chunking.py",
+      "symbol": "checkpointed_chunk_reduce",
+      "line": 35,
+      "end_line": 122,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/chunking.py",
+      "sha256": "d531b3f4a47f1b77f74b7bb27ac30508aad0d53cf90db1ef5b56e7cd264648da",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/chunking.py#L35"
+    },
+    "lite-output": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/core/outputs.py",
+      "symbol": "TrainingOutput",
+      "line": 18,
+      "end_line": 22,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/outputs.py",
+      "sha256": "99df29c277e17aea64d028a18dc82d9645d670b4034e0508bccce9501f01684f",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/core/outputs.py#L18"
+    },
+    "lite-recipe": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "path": "litespec/training/recipes/_dflash_common.py",
+      "symbol": null,
+      "line": 314,
+      "end_line": 314,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/training/recipes/_dflash_common.py",
+      "sha256": "4937c5bfc47f7ffadba03cd00d52438c90575cfd6d591978092639808aef26d3",
+      "url": "https://github.com/alexwhz-sjtu/LiteSpec/blob/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c/litespec/training/recipes/_dflash_common.py#L314"
+    },
+    "flare-fusion": {
+      "repo": "Tencent/AngelSpec",
+      "revision": "d3412bed231025ea85d35dbf5e0af44f1ac62a5b",
+      "path": "angelspec/models/draft/dflare.py",
+      "symbol": "DFlareDraftModel",
+      "line": 189,
+      "end_line": 297,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/Tencent__AngelSpec/d3412bed231025ea85d35dbf5e0af44f1ac62a5b/angelspec/models/draft/dflare.py",
+      "sha256": "c02bbaa0dda89b133545e54d12101970d68e5486129ddd5dbb94f47ad3a3949d",
+      "url": "https://github.com/Tencent/AngelSpec/blob/d3412bed231025ea85d35dbf5e0af44f1ac62a5b/angelspec/models/draft/dflare.py#L189"
+    },
+    "flare-attn": {
+      "repo": "Tencent/AngelSpec",
+      "revision": "d3412bed231025ea85d35dbf5e0af44f1ac62a5b",
+      "path": "angelspec/models/draft/dflare.py",
+      "symbol": "DFlareAttention",
+      "line": 41,
+      "end_line": 148,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/Tencent__AngelSpec/d3412bed231025ea85d35dbf5e0af44f1ac62a5b/angelspec/models/draft/dflare.py",
+      "sha256": "c02bbaa0dda89b133545e54d12101970d68e5486129ddd5dbb94f47ad3a3949d",
+      "url": "https://github.com/Tencent/AngelSpec/blob/d3412bed231025ea85d35dbf5e0af44f1ac62a5b/angelspec/models/draft/dflare.py#L41"
+    },
+    "flash-conv": {
+      "repo": "z-lab/dflash",
+      "revision": "07ebd93db9f472af339b644bb70221ad8428328a",
+      "path": "dflash/model.py",
+      "symbol": "GroupedDynamicCausalConv",
+      "line": 492,
+      "end_line": 512,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/z-lab__dflash/07ebd93db9f472af339b644bb70221ad8428328a/dflash/model.py",
+      "sha256": "f55b7fe0a4c0b3073e0f9cdce547cce29f4b8e2168c4d2818760007c43b7651e",
+      "url": "https://github.com/z-lab/dflash/blob/07ebd93db9f472af339b644bb70221ad8428328a/dflash/model.py#L492"
+    },
+    "spark-rnn": {
+      "repo": "deepseek-ai/DeepSpec",
+      "revision": "005e03b81cec38b7da6399833d609ee89a2587f2",
+      "path": "deepspec/modeling/dspark/markov_head.py",
+      "symbol": "RNNHead",
+      "line": 125,
+      "end_line": 284,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/deepseek-ai__DeepSpec/005e03b81cec38b7da6399833d609ee89a2587f2/deepspec/modeling/dspark/markov_head.py",
+      "sha256": "6659bcdc12d923d4fc16cc2280c03078c2110a4792305e1f3f42b5468f75ef46",
+      "url": "https://github.com/deepseek-ai/DeepSpec/blob/005e03b81cec38b7da6399833d609ee89a2587f2/deepspec/modeling/dspark/markov_head.py#L125"
+    },
+    "pace-weights": {
+      "repo": "Lucas-TY/D-PACE",
+      "revision": "f36bad6e6b0f9f5b59e1e6cf405c705b46d2b43f",
+      "path": "specforge/core/dflash.py",
+      "symbol": "_dpace_weight",
+      "line": 234,
+      "end_line": 264,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/Lucas-TY__D-PACE/f36bad6e6b0f9f5b59e1e6cf405c705b46d2b43f/specforge/core/dflash.py",
+      "sha256": "adb9910c6d01178d3e930082ed3901a160ef7a3e7e96ebfd3611cf4841761179",
+      "url": "https://github.com/Lucas-TY/D-PACE/blob/f36bad6e6b0f9f5b59e1e6cf405c705b46d2b43f/specforge/core/dflash.py#L234"
+    },
+    "pace-reduce": {
+      "repo": "Lucas-TY/D-PACE",
+      "revision": "f36bad6e6b0f9f5b59e1e6cf405c705b46d2b43f",
+      "path": "specforge/core/dflash.py",
+      "symbol": null,
+      "line": 365,
+      "end_line": 365,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/Lucas-TY__D-PACE/f36bad6e6b0f9f5b59e1e6cf405c705b46d2b43f/specforge/core/dflash.py",
+      "sha256": "adb9910c6d01178d3e930082ed3901a160ef7a3e7e96ebfd3611cf4841761179",
+      "url": "https://github.com/Lucas-TY/D-PACE/blob/f36bad6e6b0f9f5b59e1e6cf405c705b46d2b43f/specforge/core/dflash.py#L365"
+    },
+    "spec-nla": {
+      "repo": "vllm-project/speculators",
+      "revision": "c5d4f9dec9bddcad48b5611344ba19b8b6039dc0",
+      "path": "src/speculators/losses/eager.py",
+      "symbol": "neg_log_acceptance_loss",
+      "line": 145,
+      "end_line": 171,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/vllm-project__speculators/c5d4f9dec9bddcad48b5611344ba19b8b6039dc0/src/speculators/losses/eager.py",
+      "sha256": "a674d55c403f59d082d22bb11bc8515d4444f87ec25dcce20344549bf501f242",
+      "url": "https://github.com/vllm-project/speculators/blob/c5d4f9dec9bddcad48b5611344ba19b8b6039dc0/src/speculators/losses/eager.py#L145"
+    },
+    "spec-reduce": {
+      "repo": "vllm-project/speculators",
+      "revision": "c5d4f9dec9bddcad48b5611344ba19b8b6039dc0",
+      "path": "src/speculators/losses/utils.py",
+      "symbol": "loss_function",
+      "line": 269,
+      "end_line": 304,
+      "local_path": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/vllm-project__speculators/c5d4f9dec9bddcad48b5611344ba19b8b6039dc0/src/speculators/losses/utils.py",
+      "sha256": "45ebb8c2abf22556c1de23c215d2cdabc79dd6bab56ef9fc57777a91b8ddd2a8",
+      "url": "https://github.com/vllm-project/speculators/blob/c5d4f9dec9bddcad48b5611344ba19b8b6039dc0/src/speculators/losses/utils.py#L269"
+    }
+  },
+  "papers": {
+    "dflare": [
+      "DFlare · 2026-06",
+      "https://arxiv.org/html/2606.02091v1"
+    ],
+    "dflash2": [
+      "DFlash 2 · 作者技术博客，2026-08-18",
+      "https://inco.ai/blog/dflash2/"
+    ],
+    "kvshot": [
+      "KVShot · 2026-04",
+      "https://arxiv.org/html/2604.26412v1"
+    ],
+    "dpace": [
+      "D-PACE · 2026-05",
+      "https://arxiv.org/html/2605.18810v1"
+    ],
+    "bv": [
+      "Block Verification-aware Loss · 2026-09",
+      "https://arxiv.org/html/2609.34832v1"
+    ],
+    "lk": [
+      "LK Losses · 2026-02",
+      "https://arxiv.org/html/2602.23881v1"
+    ]
+  },
+  "repositories": {
+    "lite": {
+      "repo": "alexwhz-sjtu/LiteSpec",
+      "revision": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+      "local_root": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/alexwhz-sjtu__LiteSpec/1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c"
+    },
+    "flash": {
+      "repo": "z-lab/dflash",
+      "revision": "07ebd93db9f472af339b644bb70221ad8428328a",
+      "local_root": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/z-lab__dflash/07ebd93db9f472af339b644bb70221ad8428328a"
+    },
+    "flare": {
+      "repo": "Tencent/AngelSpec",
+      "revision": "d3412bed231025ea85d35dbf5e0af44f1ac62a5b",
+      "local_root": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/Tencent__AngelSpec/d3412bed231025ea85d35dbf5e0af44f1ac62a5b"
+    },
+    "spark": {
+      "repo": "deepseek-ai/DeepSpec",
+      "revision": "005e03b81cec38b7da6399833d609ee89a2587f2",
+      "local_root": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/deepseek-ai__DeepSpec/005e03b81cec38b7da6399833d609ee89a2587f2"
+    },
+    "pace": {
+      "repo": "Lucas-TY/D-PACE",
+      "revision": "f36bad6e6b0f9f5b59e1e6cf405c705b46d2b43f",
+      "local_root": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/Lucas-TY__D-PACE/f36bad6e6b0f9f5b59e1e6cf405c705b46d2b43f"
+    },
+    "spec": {
+      "repo": "vllm-project/speculators",
+      "revision": "c5d4f9dec9bddcad48b5611344ba19b8b6039dc0",
+      "local_root": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_reference_sources/vllm-project__speculators/c5d4f9dec9bddcad48b5611344ba19b8b6039dc0"
+    }
+  },
+  "workspace": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp"
+}

@@ -42,7 +42,7 @@ def register_optimizer_parameters(model, parameters=None):
                 muon_exceptions.intersection(path.split("."))
                 or isinstance(module, torch.nn.Embedding)
                 or "norm" in type(module).__name__.lower()
-                or name in ("bias", "base_kernel")
+                or name in ("bias", "base_kernel", "layer_fusion_weights")
             ):
                 kind = "adamw"
             elif (

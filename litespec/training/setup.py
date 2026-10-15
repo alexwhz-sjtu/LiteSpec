@@ -498,7 +498,10 @@ def wrap_training_model(draft_online, components, *, process_group=None):
         ignored_modules=[components.lm_head, components.embed_tokens],
         use_orig_params=True,
         mixed_precision=MixedPrecision(
-            param_dtype=torch.bfloat16, buffer_dtype=torch.bfloat16
+            param_dtype=torch.bfloat16, buffer_dtype=torch.bfloat16,
+            # Composable layouts contain FP32 counts/native denominators.
+            cast_root_forward_inputs=(getattr(getattr(draft_online, "draft_model", None),
+                "method_config_key", None) != "composable_config"),
         ),
         sharding_strategy=ShardingStrategy.SHARD_GRAD_OP,
     )

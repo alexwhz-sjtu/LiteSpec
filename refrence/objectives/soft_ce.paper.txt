@@ -1,0 +1,7 @@
+PAPER-ONLY EVIDENCE / NOT AUTHOR SOURCE
+Source: https://arxiv.org/html/2609.34832v1
+Section: Appendix A.1, CE/KL
+
+现有框架没有单独的 soft-CE 函数；此处记录定义，不伪造源代码。
+soft_ce=-sum(target_probabilities*log(draft_probabilities))；forward_kl=soft_ce-target_entropy。target frozen，二者对draft参数梯度相同、scalar日志不同。
+计划从现有全vocab teacher/draft log-softmax路径构建，并核对scalar差和梯度；Hard CE仍使用显式labels。

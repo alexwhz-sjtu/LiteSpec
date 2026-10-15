@@ -1,0 +1,44 @@
+# DESIGN SCHEMA — 当前 LiteSpec 尚不能直接读取
+schema_version: draft-modular-v1
+hidden_size: inherit_target
+block:
+  prediction_tokens: 7
+  include_anchor_slot: true
+context:
+  source: target_hidden
+  target_layers: evenly_spaced_5
+  fusion: learned_per_layer_softmax
+  projection_sharing: separate_context_draft
+backbone:
+  depth: 5
+  default_layer:
+    attention:
+      parameterization: gqa
+      context_window: null
+      intra_block: bidirectional
+      token_selector: none
+      cache: expanded_kv
+      backend: flex
+    local_operator:
+      type: dynamic_depthwise_conv
+      kernel_size: 2
+      group_size: 16
+      placement: [attn_pre_post, ffn_pre_post]
+  layer_overrides:
+    "2":
+      attention:
+        parameterization: mha
+head:
+  type: dspark_rnn_additive
+  rank: 256
+  state_reset: per_block
+objective:
+  token_terms: [{type: ce, weight: 1.0}]
+  label_source: target_sample
+  position_weights: {type: dpace, alpha: 0.5}
+  reduction: paper_batch_sum
+  block_terms: []
+  auxiliary_terms: []
+verification:
+  algorithm: token_rejection
+  use_actual_proposal_distribution: true

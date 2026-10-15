@@ -1,0 +1,11 @@
+PAPER-ONLY EVIDENCE / NOT AUTHOR SOURCE
+Source: https://arxiv.org/html/2609.34832v1
+Section: 3.2/3.3, Appendix A.3/A.4/B.4/B.5
+
+作者源码尚未定位；不要把此文档或将来的 reference 实现标成作者原代码。
+固定主实验：vocabulary-integrated prefix scores + annealed block-log；r0=A0=1；ri=ri-1*q_i(y_i)/p_i(y_i)；Ai=min(Ai-1,ri)。
+integrated_score_i=sum_v min(Ai-1*p_i(v),ri-1*q_i(v))；后续prefix state继续沿采样路径推进，不以integrated_score取代Ai。
+前三epoch beta从0升1；ramp的normalized power weights detach，score/prefix的梯度保留。DFlash ramp score floor=1e-6；DSpark ramp无此floor；block-log log summand floor=-80、summed length floor=1e-6。
+训练/日志区分gradient surrogate与power-mean scalar；BV+selector不支持；首版使用完整连续监督block。
+
+INTEGRATION OVERRIDE (user-confirmed): annealing score floor 1e-6 only for proposal=parallel; markov/rnn/sequential_rnn have no annealing floor. BV+selector remains unsupported.

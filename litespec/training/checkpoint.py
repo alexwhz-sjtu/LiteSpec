@@ -317,6 +317,9 @@ def load_distributed_training_state(
 
 def export_draft(model, save_dir, *, state_dict=None):
     """Export a self-contained model without importing the training package."""
+    if getattr(model, "method_config_key", None) == "composable_config":
+        from litespec.modeling.draft.composable.export import export_composable
+        return export_composable(model, save_dir, state_dict=state_dict)
     model.config.auto_map = {
         "AutoModel": f"{type(model).__module__.rsplit('.', 1)[-1]}.{type(model).__name__}"
     }

@@ -1,0 +1,77 @@
+{
+  "current_deliverable": "Implemented composable draft v1; see litespec/modeling/draft/composable/README.md and tests/composable_implementation_20261015/validation.json",
+  "modules": {
+    "context": "modeling/draft/composable/context",
+    "backbone": "modeling/draft/composable/backbone",
+    "proposal": "modeling/draft/composable/proposal",
+    "objective": "core/composable/objectives"
+  },
+  "first_complete_route": {
+    "context": "dflash",
+    "backbone": "transformer",
+    "representation": "mha",
+    "access": "dense",
+    "local_operator": "none",
+    "proposal": "parallel",
+    "objective": "hard_ce"
+  },
+  "boundaries": [
+    "ModelInputs -> ContextOutput",
+    "ContextOutput -> BackboneOutput",
+    "BackboneOutput + ContextOutput -> DraftOutput",
+    "DraftOutput + Supervision -> TrainingOutput"
+  ],
+  "stages": [
+    {
+      "id": "v1",
+      "work": "All user-approved components implemented; final validation recorded separately",
+      "done_in_this_task": true
+    }
+  ],
+  "deployment_export": "Collect nested inference-only dependency closure. Dedicated composable export can generate compatible flat remote-code artifacts with explicit import/name mappings while keeping development packages nested; exact format must pass clean-process AutoConfig/AutoModel loading. Never assume merely copying package directories is sufficient for Transformers 4.57.",
+  "reserved_unregistered": [
+    "dsa",
+    "gqa",
+    "ce_l1",
+    "additional confidence variants",
+    "gated_deltanet",
+    "qwen35_hybrid"
+  ],
+  "unsupported": [
+    "bv+selector",
+    "other_attention_representations",
+    "compressed_mla_target_cache_export_in_first_version"
+  ],
+  "workspace": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp",
+  "framework_branch": "optimize/10_14",
+  "qwen35_extension": {
+    "status": "reference_and_docstring_only",
+    "reference": "refrence/backbone/qwen35_integration.txt",
+    "source_revision": "aad13b87ed59f2afcfaebc985f403301887a35fc",
+    "source_tag": "v5.3.0",
+    "runtime_dependency_unchanged": "transformers==4.57.1",
+    "first_complete_route_unchanged": true,
+    "compatibility": "All context/proposal/objective/access combinations remain unvalidated; no executable builder or recipe added."
+  },
+  "deferred": [
+    "all target KV injection and migration",
+    "DSA",
+    "compressed MLA cache",
+    "extra confidence heads",
+    "BV+selector"
+  ],
+  "bv_annealing_floor": {
+    "parallel": 1e-06,
+    "markov": null,
+    "rnn": null,
+    "sequential_rnn": null
+  },
+  "runtime_support": [
+    "online",
+    "offline regen_full",
+    "FSDP",
+    "target TP",
+    "existing sample sharding by TP",
+    "disaggregate"
+  ]
+}

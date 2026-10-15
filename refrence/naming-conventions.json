@@ -1,0 +1,248 @@
+{
+  "scope": "new composable implementation only; reference excerpts and legacy algorithms keep their original names",
+  "style": {
+    "python": "PEP8 snake_case; same concept has one canonical name; keyword-only semantic options; typed contracts at package boundaries",
+    "factories": [
+      "build_context",
+      "build_backbone",
+      "build_attention",
+      "build_access",
+      "build_local_operator",
+      "build_proposal",
+      "build_objective"
+    ],
+    "registries": "Explicit registries in package __init__.py, implemented for approved v1 components.",
+    "parameter_names": "Descriptive context_key_projection/context_value_projection and source-to-integrated state_dict mapping; never rename frozen references."
+  },
+  "variables": [
+    {
+      "name": "batch_size",
+      "shape_or_symbol": "N",
+      "meaning": "原始训练样本数；不因anchor展开、padding或chunk改变。",
+      "source_aliases": "bsz, batch_size"
+    },
+    {
+      "name": "num_anchors",
+      "shape_or_symbol": "A",
+      "meaning": "每个样本的逻辑anchor预算。",
+      "source_aliases": "num_blocks, max_anchors"
+    },
+    {
+      "name": "padded_num_anchors",
+      "shape_or_symbol": "A_physical",
+      "meaning": "backend对齐后的物理anchor维度；不进入原始N或逻辑A计数。",
+      "source_aliases": "output_width, sampled_width"
+    },
+    {
+      "name": "num_prediction_tokens",
+      "shape_or_symbol": "B",
+      "meaning": "预测token个数；不包括anchor。",
+      "source_aliases": "proposal_len, prediction_length"
+    },
+    {
+      "name": "block_size",
+      "shape_or_symbol": "Q=B+1",
+      "meaning": "输入block宽度，含anchor。明确区别具体head的输出slot数。",
+      "source_aliases": "block_size"
+    },
+    {
+      "name": "hidden_size",
+      "shape_or_symbol": "D",
+      "meaning": "draft/target共同hidden宽度；不等于KV/head/latent维度。",
+      "source_aliases": "d, dim, hidden_size"
+    },
+    {
+      "name": "anchor_positions",
+      "shape_or_symbol": "[N,A]",
+      "meaning": "anchor绝对位置；顺序和padding沿用框架。",
+      "source_aliases": "anchor_positions"
+    },
+    {
+      "name": "block_keep_mask",
+      "shape_or_symbol": "[N,A] bool",
+      "meaning": "真实anchor槽位；padding位置为False。",
+      "source_aliases": "block_keep_mask"
+    },
+    {
+      "name": "loss_mask",
+      "shape_or_symbol": "[N,S]",
+      "meaning": "原始sequence监督mask；不与块内loss权重同名。",
+      "source_aliases": "loss_mask"
+    },
+    {
+      "name": "prediction_mask",
+      "shape_or_symbol": "[N,A,B] bool",
+      "meaning": "有效预测位置；排除anchor/padding/越界/跨文档。",
+      "source_aliases": "weight_mask, raw_weight_mask, binary_mask"
+    },
+    {
+      "name": "position_weights",
+      "shape_or_symbol": "[B] or broadcastable",
+      "meaning": "仅固定位置decay；不要与最终loss权重混用。",
+      "source_aliases": "decay_weights"
+    },
+    {
+      "name": "loss_weights",
+      "shape_or_symbol": "[N,A,B]",
+      "meaning": "某个recipe中最后作用于per-token项的权重。",
+      "source_aliases": "weights, flat_weights"
+    },
+    {
+      "name": "target_hidden_states",
+      "shape_or_symbol": "mapping[layer_id] -> [N,S,D]",
+      "meaning": "raw target feature，未融合；冻结。",
+      "source_aliases": "all_hidden_states, hidden_states (target)"
+    },
+    {
+      "name": "context_hidden_states",
+      "shape_or_symbol": "[N,S,D] or per-layer views",
+      "meaning": "融合后的prefix hidden；不是draft block hidden。",
+      "source_aliases": "target_hidden, context_feature, fused_context"
+    },
+    {
+      "name": "draft_hidden_states",
+      "shape_or_symbol": "[N,A,Q,D]",
+      "meaning": "draft block hidden；attention边界可显式flatten再恢复。",
+      "source_aliases": "hidden_states, draft_hidden, noise_embedding"
+    },
+    {
+      "name": "target_key_states",
+      "shape_or_symbol": "mapping[layer_id] -> typed KV",
+      "meaning": "raw target K；带post/pre-RoPE和head维度信息。",
+      "source_aliases": "large_key_values[0], target K"
+    },
+    {
+      "name": "target_value_states",
+      "shape_or_symbol": "mapping[layer_id] -> typed KV",
+      "meaning": "raw target V；与target K同token对齐。",
+      "source_aliases": "large_key_values[1], target V"
+    },
+    {
+      "name": "context_key_states",
+      "shape_or_symbol": "[N,Hkv,S_ctx,Dk] or declared view",
+      "meaning": "当前draft层的prefix K。",
+      "source_aliases": "k_ctx, context K"
+    },
+    {
+      "name": "context_value_states",
+      "shape_or_symbol": "[N,Hkv,S_ctx,Dv] or declared view",
+      "meaning": "当前draft层的prefix V。",
+      "source_aliases": "v_ctx, context V"
+    },
+    {
+      "name": "query_states",
+      "shape_or_symbol": "[N,Hq,A*Q,Dq]",
+      "meaning": "进入attention backend的Q。",
+      "source_aliases": "q, query"
+    },
+    {
+      "name": "key_states",
+      "shape_or_symbol": "[N,Hkv,S_total,Dk]",
+      "meaning": "进入attention backend的最终K；布局由契约声明。",
+      "source_aliases": "k, key"
+    },
+    {
+      "name": "value_states",
+      "shape_or_symbol": "[N,Hkv,S_total,Dv]",
+      "meaning": "进入attention backend的最终V。",
+      "source_aliases": "v, value"
+    },
+    {
+      "name": "context_position_ids",
+      "shape_or_symbol": "[N,S_ctx] or per-anchor view",
+      "meaning": "prefix绝对位置。",
+      "source_aliases": "context_position_ids"
+    },
+    {
+      "name": "draft_position_ids",
+      "shape_or_symbol": "[N,A,Q]",
+      "meaning": "当前block绝对位置；不能裁剪后重编号。",
+      "source_aliases": "position_ids (draft)"
+    },
+    {
+      "name": "history_window",
+      "shape_or_symbol": "W or null",
+      "meaning": "历史已确认draft KV预算，不包含当前完整block。",
+      "source_aliases": "sliding_window"
+    },
+    {
+      "name": "base_logits",
+      "shape_or_symbol": "[N,A,B,V]",
+      "meaning": "基础LM head输出/selector unary；未加因果修正。",
+      "source_aliases": "logits (unary), unary_logits"
+    },
+    {
+      "name": "draft_logits",
+      "shape_or_symbol": "[N,A,B,V]",
+      "meaning": "最终dense条件分布的logits；仅dense head可用。",
+      "source_aliases": "corrected_logits, final_logits"
+    },
+    {
+      "name": "candidate_ids",
+      "shape_or_symbol": "[N,A,B,K]",
+      "meaning": "selector支持集token IDs。",
+      "source_aliases": "candidates"
+    },
+    {
+      "name": "candidate_logits",
+      "shape_or_symbol": "[N,A,B,K]",
+      "meaning": "沿指定prefix得到的候选分数。",
+      "source_aliases": "scores, selector_logits"
+    },
+    {
+      "name": "labels",
+      "shape_or_symbol": "[N,A,B] int",
+      "meaning": "明确label_source的监督token。",
+      "source_aliases": "target_ids, target_tokens"
+    },
+    {
+      "name": "previous_token_ids",
+      "shape_or_symbol": "[N,A,B] training / [N*A] step",
+      "meaning": "实际条件前驱；训练teacher path，生成时sampled prefix。",
+      "source_aliases": "prev_token_ids, predecessor_ids (actual token)"
+    },
+    {
+      "name": "target_logits",
+      "shape_or_symbol": "[N,A,B,V]",
+      "meaning": "同预测位置的teacher监督logits；冻结。",
+      "source_aliases": "teacher_logits, targets (logits)"
+    },
+    {
+      "name": "target_probabilities",
+      "shape_or_symbol": "[N,A,B,V]",
+      "meaning": "teacher条件分布p；采样温度与ratio分母一致。",
+      "source_aliases": "target_p, target_probs, p"
+    },
+    {
+      "name": "draft_probabilities",
+      "shape_or_symbol": "dense or sparse support",
+      "meaning": "实际声明的draft分布q；selector main objective另指base分布。",
+      "source_aliases": "draft_p, draft_probs, q"
+    },
+    {
+      "name": "proposal_state",
+      "shape_or_symbol": "typed state",
+      "meaning": "Markov/RNN/selector内部状态；按块reset。",
+      "source_aliases": "state, s_k"
+    },
+    {
+      "name": "draft_state",
+      "shape_or_symbol": "DraftState",
+      "meaning": "context/backbone/proposal三个子状态的容器。",
+      "source_aliases": "past_key_values + per-head state"
+    },
+    {
+      "name": "loss_numerator",
+      "shape_or_symbol": "scalar gradient tensor",
+      "meaning": "符合native recipe的可累加分子；不是已经除过分母的loss。",
+      "source_aliases": "numerator, ce_loss_num"
+    },
+    {
+      "name": "loss_denominator",
+      "shape_or_symbol": "scalar detached tensor",
+      "meaning": "native可累加计数：token weights、N或block count。",
+      "source_aliases": "denominator, loss_den"
+    }
+  ],
+  "implementation_contract": "Public names use target_hidden_states/context_hidden_states/draft_hidden_states, labels/prediction_mask/previous_token_ids, base_logits/draft_logits/candidate_logits/draft_probabilities. SharedOps and legacy primitive keyword names are explicit framework boundaries."
+}

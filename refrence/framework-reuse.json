@@ -1,0 +1,71 @@
+{
+  "framework_revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+  "rules": [
+    {
+      "operation": "anchor_sampling",
+      "entry": "litespec/core/block_training.py::sample_sorted_anchors",
+      "decision": "reuse",
+      "contract": "First derive method-valid eligibility. DFlash requires clean anchor+first label; BV requires a complete continuous supervised B-token block. Then reuse uniform no-replacement sorted sampling and inactive-slot padding. Do not replace native sampling measures silently."
+    },
+    {
+      "operation": "gather",
+      "entry": "litespec/core/block_training.py::gather_block_values",
+      "decision": "reuse",
+      "contract": "Reuse bounds/safe indices; do not treat clamped padding indices as valid labels."
+    },
+    {
+      "operation": "block_embedding_and_positions",
+      "entry": "DFlashTrainingBase._create_noise_embed/_create_position_ids",
+      "decision": "adapt_existing",
+      "contract": "Reuse frozen embedding preparation and absolute positions. Any trainable context/fusion stays in TrainingModel FSDP forward."
+    },
+    {
+      "operation": "position_decay",
+      "entry": "litespec/core/block_training.py::apply_exponential_position_decay",
+      "decision": "conditional_reuse",
+      "contract": "Use for eligible CE/KL/TV native recipe; not on top of D-PACE/BV. NLA keeps the pinned source wrapper denominator."
+    },
+    {
+      "operation": "physical_alignment",
+      "entry": "litespec/core/block_training.py::aligned_width",
+      "decision": "reuse",
+      "contract": "Changes physical shapes only, never original batch_size or valid anchor/block counts."
+    },
+    {
+      "operation": "target_io",
+      "entry": "TrainingAdapter + setup/data/transport",
+      "decision": "reuse_or_extend_backend",
+      "contract": "Target execution/hidden capture/offline reading/transport/prefetch stay in runtime system. Add typed KV backend capability for KVShot rather than fetching inside Context."
+    },
+    {
+      "operation": "backward_optimizer",
+      "entry": "runner.OptimizerWindow + normalize_accumulated_gradients",
+      "decision": "reuse",
+      "contract": "Return the native numerator/denominator. Existing runner performs one global normalization."
+    },
+    {
+      "operation": "checkpoint",
+      "entry": "checkpoint.save_checkpoint",
+      "decision": "reuse",
+      "contract": "Wrapper uses draft_model; trainable parameters in前三 modules. Objective is parameter-free. Frozen shared_ops use existing handling."
+    },
+    {
+      "operation": "export",
+      "entry": "registry.draft_source_files + checkpoint.export_draft",
+      "decision": "new_composable_path",
+      "contract": "Existing path flat-only; new package-aware collector/export artifact path solely for composable. Test AutoConfig and AutoModel cold reload without training imports."
+    },
+    {
+      "operation": "launcher",
+      "entry": "scripts/config/training_launcher.py",
+      "decision": "reuse",
+      "contract": "JSON path for model recipe, YAML for runtime; no nested-dict injection into flat arguments_to_cli."
+    },
+    {
+      "operation": "sliding_window",
+      "entry": "attention_masks + attention dispatch + KV cache",
+      "decision": "intentional_change",
+      "contract": "New semantics W historical KV + full current block. Do not reuse old block-causal sliding mask/backend flag unchanged."
+    }
+  ]
+}

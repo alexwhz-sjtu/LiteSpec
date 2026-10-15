@@ -1,0 +1,45 @@
+# DESIGN SCHEMA — 实现完成后才能被 LiteSpec 读取
+schema_version: modular_parallel_v1
+hidden_size: inherit_target
+block:
+  prediction_tokens: 7
+  anchor_input_slot: true
+context:
+  injection: kvshot_kv_only
+  target_layers: evenly_spaced_5
+  kvshot:
+    fusion: concat_features_then_linear
+    projectors: per_draft_layer
+    rope_policy: projection_only
+backbone:
+  depth: 5
+  attention:
+    type: mha
+    history_window: 2048
+    mask_version: history_window_bidirectional_block_v1
+    intra_block: bidirectional
+    cache_representation: expanded_kv
+    backend: flex
+  layer_overrides:
+    "2":
+      attention:
+        type: mla
+        dimensions: from_explicit_mla_config
+  local_operator:
+    type: dflash2_conv
+    kernel_size: 2
+    group_size: 16
+    placement: [attn_pre_post, ffn_pre_post]
+head:
+  type: dspark_rnn
+  rank: 256
+  reset: per_block
+objective:
+  recipe: dpace_official_f36bad6
+  label_source: stored_target_sample
+  alpha: 0.5
+  # reduction 固定为 sum_all_predictions / original_batch_N
+  # 不提供 reduction override / fixed_decay 叠加
+verification:
+  algorithm: token_rejection
+  proposal_distribution: actual_head_output

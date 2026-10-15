@@ -1,0 +1,68 @@
+{
+  "architectures": [
+    "ComposableDraftModel"
+  ],
+  "block_size": 8,
+  "composable_config": {
+    "context": {
+      "type": "dflash"
+    },
+    "backbone": {
+      "type": "transformer",
+      "layers": [
+        {
+          "attention": {
+            "representation": "mha",
+            "access": "dense"
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        },
+        {
+          "attention": {
+            "representation": "mha",
+            "access": "dense"
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        },
+        {
+          "attention": {
+            "representation": "mha",
+            "access": "dense"
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        },
+        {
+          "attention": {
+            "representation": "mha",
+            "access": "dense"
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        },
+        {
+          "attention": {
+            "representation": "mha",
+            "access": "dense"
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        }
+      ]
+    },
+    "proposal": {
+      "type": "selector"
+    },
+    "objective": {
+      "type": "hard_ce",
+      "loss_decay_gamma": 4
+    }
+  }
+}

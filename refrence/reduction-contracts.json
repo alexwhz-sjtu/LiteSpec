@@ -1,0 +1,26 @@
+{
+  "runner": "Existing OptimizerWindow backpropagates numerator/accumulation_steps; optimizer-window normalization divides once by globally summed denominator.",
+  "recipes": {
+    "hard_ce_soft_ce_forward_kl_tv": {
+      "numerator": "sum(valid_token_loss * native_position_weight)",
+      "denominator": "sum(valid_native_position_weights)"
+    },
+    "nla": {
+      "numerator": "sum_n(per_sample_weighted_token_loss_sum / (per_sample_valid_mask_count + 1e-5))",
+      "denominator": "original_batch_size",
+      "note": "Per-sample normalization stays differentiable in numerator; no extra weighted-token reduction."
+    },
+    "dpace": {
+      "numerator": "sum over N,A,B of native masked detached_credit * unsmoothed_CE",
+      "denominator": "original_batch_size",
+      "note": "Do not divide numerator by N before returning RatioTerms; all chunks of one input batch contribute N exactly once."
+    },
+    "bv": {
+      "numerator": "sum of original per-complete-block training scalars/gradient surrogates",
+      "denominator": "number_of_valid_complete_blocks",
+      "note": "Retain original profile/schedule/numerics. Separate logged mathematical objective and gradient-surrogate scalar."
+    }
+  },
+  "mixed_objective_gate": "Implemented exact native independent normalizations: precompute optimizer-window layouts and global denominators; encode common reference denominator and reuse OptimizerWindow. Native denominators remain FP32/FP64, not BF16.",
+  "loss_field": "TrainingOutput.loss is for compatible logging/local view; runner backpropagates loss_terms.numerator. Do not assume loss.backward() matches the actual runner."
+}

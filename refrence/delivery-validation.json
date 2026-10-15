@@ -1,0 +1,13 @@
+{
+  "reference_excerpts": 29,
+  "paper_notes": 3,
+  "verbatim_source_fragments": 53,
+  "pinned_files_verified": 21,
+  "scaffold_files": 60,
+  "docstring_only_python_files": 58,
+  "local_links_valid": true,
+  "four_module_recipe_valid": true,
+  "scope": "Artifact/source-organization checks only; no model, training, forward or numerical-parity tests were run.",
+  "historical_scaffold_snapshot": true,
+  "superseded_by": "tests/composable_implementation_20261015/validation.json"
+}

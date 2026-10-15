@@ -1,0 +1,44 @@
+{
+  "_status": "design_only_not_loadable_yet",
+  "architectures": [
+    "ComposableDraftModel"
+  ],
+  "model_type": "litespec_composable",
+  "schema_version": "composable_v1",
+  "hidden_size": "inherit_target",
+  "composable_config": {
+    "context": {
+      "type": "dflash",
+      "target_layer_ids": "resolve_from_target_before_build"
+    },
+    "backbone": {
+      "type": "transformer",
+      "num_hidden_layers": 5,
+      "attention": {
+        "representation": "mha",
+        "access": "dense",
+        "backend": "eager",
+        "cache_representation": "expanded_kv"
+      },
+      "local_operator": {
+        "type": "none"
+      }
+    },
+    "proposal": {
+      "type": "parallel"
+    },
+    "objective": {
+      "type": "hard_ce",
+      "label_source": "stored_target_sample",
+      "position_weighting": "none"
+    }
+  },
+  "num_prediction_tokens": 7,
+  "block_size": 8,
+  "_notes": [
+    "First complete route: DFlash context + MHA + dense + parallel proposal + Hard CE.",
+    "Target dimensions, layer IDs and vocabulary must be resolved before training.",
+    "Objective recipe is serialized here; deployment code never imports objective implementations."
+  ]
+}
+

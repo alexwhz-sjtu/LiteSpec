@@ -14,6 +14,9 @@ if TYPE_CHECKING:
     from torch.distributed.fsdp import FullyShardedDataParallel
     from torch.utils.data import DataLoader
 
+    from litespec.core.composable.training_model import ComposableTrainingModel
+    from litespec.modeling.draft.composable import ComposableDraftModel
+    from litespec.training.recipes.composable import ComposableTrainingAdapter
     from litespec.core.dflash import OnlineDFlashModel
     from litespec.core.dflash2 import OnlineDFlash2Model
     from litespec.core.dlite import OnlineDLiteModel
@@ -73,15 +76,15 @@ class TrainingSession:
     instead of implicit globals.
     """
     args: Any
-    adapter: DFlashFamilyTrainingAdapter | DLiteTrainingAdapter
+    adapter: DFlashFamilyTrainingAdapter | DLiteTrainingAdapter | ComposableTrainingAdapter
     phases: list[Phase]
     state: RunState = field(default_factory=RunState)
     draft: (
-        DFlashDraftModel | DFlash2DraftModel | DSparkDraftModel | DLiteDraftModel | None
+        DFlashDraftModel | DFlash2DraftModel | DSparkDraftModel | DLiteDraftModel | ComposableDraftModel | None
     ) = None
     teacher: DLiteDraftModel | None = None
     draft_online: (
-        OnlineDFlashModel | OnlineDFlash2Model | OnlineDSparkModel | OnlineDLiteModel | None
+        OnlineDFlashModel | OnlineDFlash2Model | OnlineDSparkModel | OnlineDLiteModel | ComposableTrainingModel | None
     ) = None
     teacher_online: OnlineDLiteModel | None = None
     fsdp_model: FullyShardedDataParallel | None = None
@@ -195,6 +198,6 @@ class TrainingAdapter:
 
 
 def get_training_adapter(algorithm):
-    if algorithm not in ("dflash", "dflash2", "dspark", "dlite"):
+    if algorithm not in ("dflash", "dflash2", "dspark", "dlite", "composable"):
         raise ValueError(f"Unknown training algorithm {algorithm!r}")
     return import_module(f"litespec.training.recipes.{algorithm}").ADAPTER

@@ -1,0 +1,182 @@
+[
+  {
+    "file": "litespec/modeling/draft/dflash.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/core/attention_masks.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/modeling/draft/dflash2.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/core/dflash2.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/modeling/draft/dspark.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/modeling/draft/dlite.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/core/dlite.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/core/losses.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/core/_dflash_common.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/modeling/target/training_target_model.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/core/chunking.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/core/outputs.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/training/algorithms.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/modeling/draft/registry.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "litespec/training/recipes/_dflash_common.py",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "sha": "1c03830a64eb9a7d93ee74e5e4ff739bdc915b4c",
+    "matches": true
+  },
+  {
+    "file": "angelspec/models/draft/dflare.py",
+    "repo": "Tencent/AngelSpec",
+    "sha": "d3412bed231025ea85d35dbf5e0af44f1ac62a5b",
+    "matches": true
+  },
+  {
+    "file": "configs/vllm_qwen3_8b_dflare.yaml",
+    "repo": "Tencent/AngelSpec",
+    "sha": "d3412bed231025ea85d35dbf5e0af44f1ac62a5b",
+    "matches": true
+  },
+  {
+    "file": "angelspec/models/ops/loss.py",
+    "repo": "Tencent/AngelSpec",
+    "sha": "d3412bed231025ea85d35dbf5e0af44f1ac62a5b",
+    "matches": true
+  },
+  {
+    "file": "angelspec/models/dflash.py",
+    "repo": "Tencent/AngelSpec",
+    "sha": "d3412bed231025ea85d35dbf5e0af44f1ac62a5b",
+    "matches": true
+  },
+  {
+    "file": "dflash/model.py",
+    "repo": "z-lab/dflash",
+    "sha": "07ebd93db9f472af339b644bb70221ad8428328a",
+    "matches": true
+  },
+  {
+    "file": "deepspec/modeling/dspark/markov_head.py",
+    "repo": "deepseek-ai/DeepSpec",
+    "sha": "005e03b81cec38b7da6399833d609ee89a2587f2",
+    "matches": true
+  },
+  {
+    "file": "deepspec/modeling/dspark/loss.py",
+    "repo": "deepseek-ai/DeepSpec",
+    "sha": "005e03b81cec38b7da6399833d609ee89a2587f2",
+    "matches": true
+  },
+  {
+    "file": "inference/model.py",
+    "repo": "deepseek-ai/DeepSeek-V3.2-Exp",
+    "sha": "87e509a2e5a100d221c97df52c6e8be7835f0057",
+    "matches": true
+  },
+  {
+    "file": "inference/kernel.py",
+    "repo": "deepseek-ai/DeepSeek-V3.2-Exp",
+    "sha": "87e509a2e5a100d221c97df52c6e8be7835f0057",
+    "matches": true
+  },
+  {
+    "file": "inference/config_671B_v3.2.json",
+    "repo": "deepseek-ai/DeepSeek-V3.2-Exp",
+    "sha": "87e509a2e5a100d221c97df52c6e8be7835f0057",
+    "matches": true
+  },
+  {
+    "file": "specforge/core/dflash.py",
+    "repo": "Lucas-TY/D-PACE",
+    "sha": "f36bad6e6b0f9f5b59e1e6cf405c705b46d2b43f",
+    "matches": true
+  },
+  {
+    "file": "glide/glideModel.py",
+    "repo": "NonvolatileMemory/GliDe_with_a_CaPE_ICML_24",
+    "sha": "edf4c9a85d7d20a0c7d382f876ab501b8ee7d9ee",
+    "matches": true
+  },
+  {
+    "file": "src/speculators/losses/eager.py",
+    "repo": "vllm-project/speculators",
+    "sha": "c5d4f9dec9bddcad48b5611344ba19b8b6039dc0",
+    "matches": true
+  },
+  {
+    "file": "src/speculators/losses/utils.py",
+    "repo": "vllm-project/speculators",
+    "sha": "c5d4f9dec9bddcad48b5611344ba19b8b6039dc0",
+    "matches": true
+  },
+  {
+    "file": "angelspec/models/ops/edr.py",
+    "repo": "y-x-zhao/AngelSpec-EDR",
+    "sha": "0a31a8774a1484ed4af2aeb5ee70c77a4d026360",
+    "matches": true
+  }
+]

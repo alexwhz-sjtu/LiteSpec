@@ -36,6 +36,7 @@ def method_config(config) -> dict:
         "dflash2_config",
         "dspark_config",
         "dlite_config",
+        "composable_config",
     } - {key}
     if any(hasattr(config, other) for other in other_keys):
         raise ValueError(f"{architecture} only accepts {key}")

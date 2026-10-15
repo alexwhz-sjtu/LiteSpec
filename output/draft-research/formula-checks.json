@@ -1,0 +1,43 @@
+{
+  "scope": "Pure-Python toy algebra only; no model, GPU, or speed benchmark",
+  "checks": [
+    {
+      "name": "L1 = 2 TV = 2(1-overlap)",
+      "passed": true,
+      "l1": 0.4,
+      "tv": 0.19999999999999996
+    },
+    {
+      "name": "Integrated BV B=1 reduces to TV",
+      "passed": true,
+      "bv": 0.19999999999999996
+    },
+    {
+      "name": "BV running minimum differs from independent clipping",
+      "passed": true,
+      "scores": [
+        1,
+        1
+      ]
+    },
+    {
+      "name": "D-PACE padded suffix contributes no weight",
+      "passed": true,
+      "weights": [
+        2.092,
+        1.2920000000000003,
+        0.6120000000000001
+      ]
+    },
+    {
+      "name": "D-PACE alpha=0 detached weighted CE gradient matches confidence surrogate",
+      "passed": true,
+      "gradient": [
+        -0.415384196761348,
+        -0.22325158819391785,
+        -0.047200280023362844
+      ],
+      "max_error": 0.0
+    }
+  ]
+}

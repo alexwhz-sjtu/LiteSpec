@@ -1,0 +1,15 @@
+{
+  "status": "implemented_v1_validated",
+  "validation": "tests/composable_implementation_20261015/validation.json",
+  "usage": "litespec/modeling/draft/composable/README.md",
+  "unit_tests": 41,
+  "max_distributed_gradient_error": 5.960464477539063e-08,
+  "resume_max_weight_difference": 0.0,
+  "source_files": 59,
+  "bv_annealing_floor": {
+    "parallel": 1e-06,
+    "markov": null,
+    "rnn": null,
+    "sequential_rnn": null
+  }
+}

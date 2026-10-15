@@ -242,7 +242,7 @@ def run_draft(session, *, batch_source=iter_logical_batches, save=None, log=log_
             cur_phase.batch_count(session.steps_per_epoch) - state.phase_step
         )
         batch_iterator = iter(batch_source(session, cur_phase))
-        for _ in range(remaining_batches):
+        for batch_index in range(remaining_batches):
             try:
                 data = next(batch_iterator)
             except StopIteration as exc:
@@ -253,6 +253,14 @@ def run_draft(session, *, batch_source=iter_logical_batches, save=None, log=log_
             if pending_rng is not None:
                 restore_rng_state(pending_rng)
                 pending_rng = None
+            prepare_window = getattr(session.adapter, "prepare_optimizer_window", None)
+            if accumulated == 0 and prepare_window is not None:
+                prepared = prepare_window(session, data, batch_iterator,
+                    min(args.accumulation_steps, remaining_batches - batch_index))
+                if prepared is not None:
+                    from itertools import chain
+                    data = prepared[0]
+                    batch_iterator = iter(chain(prepared[1:], batch_iterator))
             epoch = state.epoch
             collect_detailed_metrics = (
                 (state.optimizer_step + 1) % args.log_interval == 0
@@ -277,6 +285,9 @@ def run_draft(session, *, batch_source=iter_logical_batches, save=None, log=log_
                 )
                 window.backward(output)
                 del output
+            release_batch = getattr(session.adapter, "release_batch", None)
+            if release_batch is not None:
+                release_batch(data)
             state.phase_step += 1
             state.global_step += 1
             state.epoch, state.next_batch = divmod(

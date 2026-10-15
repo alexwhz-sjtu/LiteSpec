@@ -12,6 +12,8 @@ from .dspark import DSparkDraftModel
 from .registry import DRAFT_REGISTRY, available_drafts, register_draft, resolve_draft
 
 __all__ = [
+    "ComposableDraftConfig",
+    "ComposableDraftModel",
     "DLiteDraftModel",
     "DLITE_ARCHITECTURE_VERSION",
     "DLITE_ARCHITECTURE_VERSIONS",
@@ -26,3 +28,5 @@ __all__ = [
     "register_draft",
     "resolve_draft",
 ]
+
+from .composable import ComposableDraftConfig, ComposableDraftModel

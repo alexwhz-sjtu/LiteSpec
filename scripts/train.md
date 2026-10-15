@@ -7,6 +7,7 @@ file, then launch it through its existing shell entrypoint:
 bash scripts/dflash2/run_training_dflash2.sh scripts/config/dflash2.yaml
 bash scripts/dlite/run_training_dlite_teacher.sh scripts/config/dlite_teacher.yaml
 bash scripts/dlite/run_training_dlite_two_stage.sh scripts/config/dlite_two_stage.yaml
+bash scripts/composable/run_training_composable.sh scripts/config/composable.yaml 
 ```
 
 Each YAML has a `launcher` section for paths and torchrun settings, plus an  
@@ -69,3 +70,4 @@ echo "训练已结束，退出码: $TRAIN_EXIT"
 
 exit "$TRAIN_EXIT"
 ```
+
