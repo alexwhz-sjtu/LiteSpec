@@ -1,0 +1,12 @@
+{
+  "pyproject.toml": "dbef280216fc52ef59131fd6d65a4caf95a14cb134c7a47fcdb13d5822106177",
+  "uv.lock": "60677c0d8e7046de2de5c2288a4983d8e88f14ed09d289e2914e40335fb2ca72",
+  "litespec/training/optimizer.py": "94a55b86f036a0f3c21dbd13658f7cbe4038e6997f7cb1f534036f8743257920",
+  "litespec/training/recipes/composable.py": "d246f0394dfb7cb9d8d955f51f3a8ad71649119737e3470ba9ddaf43cd2e4bed",
+  "litespec/modeling/draft/composable/configuration.py": "8f55fe0b26165328bf5e01400f1cca183766a4ec14672c23d692a9112e5b86be",
+  "litespec/modeling/draft/composable/contracts.py": "dd5e396b6604cb4e025830c9d0b76fb342330d42631def0b0a851b017fb43f9f",
+  "litespec/modeling/draft/composable/modeling.py": "8f19562cae4c5cb7fa333ed3774c11fe02fa2b02fb8e89f8398f2ad211aeca01",
+  "litespec/modeling/draft/composable/backbone/__init__.py": "ad80e2081a97320230d8201fba9f4f86e5c5e8fa9981d2a559c18c6ae40558dd",
+  "litespec/modeling/draft/composable/backbone/gated_delta_state.py": "80caafce7e473aac47139b8e7f1e3982ba263b700627a70f55dd550a313b40b4",
+  "litespec/modeling/draft/composable/backbone/attention/gated_deltanet.py": "c841785ea649e98c5a61d734df8c49667dbf1dea7f8ea731c6e000824f11c755"
+}

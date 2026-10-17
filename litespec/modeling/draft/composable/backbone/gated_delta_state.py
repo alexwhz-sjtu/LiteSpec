@@ -1,14 +1,31 @@
-"""文档占位；尚未集成实现。
+"""Confirmed-context GDN state, separate from attention and proposal caches."""
 
-GatedDeltaNet 状态契约文档占位；未来作为 DraftState.backbone_state 子状态。
-每层独立保存 conv_states [N, 2*Hk*Dk+Hv*Dv, Kconv] 和 recurrent_states [N,Hv,Dk,Dv]；
-多 anchor 的 N 展开须明确且状态隔离，不能把不同 anchor 当作同一序列直接串联。
-混合 full-attention 层另存普通 KV；state orientation、dtype、已确认位置需显式记录。
-投机拒绝时须同时恢复卷积和递推状态；普通 KV crop 不适用，待选快照/重放等策略。
-固定 v5.3.0 参考在 cached seq_len>1 时会走 initial_state=None 的 chunk 分支；
-不能据此宣称已经支持从已有 state 续算整个 draft block。本文件不实现缓存或回滚。
+from dataclasses import dataclass, field
 
-参考说明：refrence/backbone/qwen35_integration.txt
-官方源码：refrence/backbone/gated_deltanet.py
-参考索引：refrence/index.html
-"""
+import torch
+
+
+@dataclass
+class GDNLayerState:
+    recurrent_state: torch.Tensor
+    kv_conv_state: torch.Tensor | None
+    context_conv_kernel_size: int
+
+
+@dataclass
+class GDNBackboneState:
+    layers: dict[int, GDNLayerState] = field(default_factory=dict)
+    next_positions: torch.Tensor | None = None
+    document_ids: torch.Tensor | None = None
+
+    def validate_rollback(self, next_position):
+        if self.next_positions is None:
+            return
+        limits = torch.as_tensor(next_position, device=self.next_positions.device)
+        if limits.ndim > 1:
+            limits = limits.squeeze(-1)
+        if (limits < self.next_positions).any():
+            raise ValueError(
+                "GDN cannot crop confirmed recurrent history; restore a complete "
+                "state snapshot or rebuild the requested prefix"
+            )

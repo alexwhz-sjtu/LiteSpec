@@ -8,7 +8,7 @@
       "type": "dflash"
     },
     "backbone": {
-      "type": "transformer"∏,
+      "type": "transformer",
       "layers": [
         {
           "attention": {
@@ -65,8 +65,7 @@
       "stop_gradient": false
     },
     "objective": {
-      "type": "hard_ce",
-      "alpha": 0.5
+      "type": "hard_ce"
     }
   }
 }

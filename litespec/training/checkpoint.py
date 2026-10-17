@@ -91,7 +91,20 @@ def validate_session_resume(session):
         "selector_effective_alpha",
     }
     for key, value in expected.items():
-        if key not in progress_keys and session.resume_state.get(key) != value:
+        saved_value = session.resume_state.get(key)
+        if key == "phase_plan" and isinstance(saved_value, list):
+            # With a full-epoch LR schedule, max_batches is a run stop cap,
+            # not a scheduler/learning contract. Cursor validation below still
+            # rejects a requested cap before the saved optimizer boundary.
+            def schedule_contract(plan):
+                return [
+                    {k: v for k, v in phase.items()
+                     if k != "max_batches" or not phase.get("schedule_full_epochs")}
+                    for phase in plan
+                ]
+
+            saved_value, value = schedule_contract(saved_value), schedule_contract(value)
+        if key not in progress_keys and saved_value != value:
             raise ValueError(
                 f"Resume mismatch for {key}: saved={session.resume_state.get(key)!r}, "
                 f"requested={value!r}"

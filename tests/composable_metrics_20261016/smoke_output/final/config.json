@@ -1,0 +1,120 @@
+{
+  "architectures": [
+    "ComposableDraftModel"
+  ],
+  "attention_bias": false,
+  "attention_dropout": 0.0,
+  "auto_map": {
+    "AutoConfig": "cs_composable_configuration.ComposableDraftConfig",
+    "AutoModel": "cs_composable_modeling.ComposableDraftModel"
+  },
+  "block_size": 8,
+  "composable_config": {
+    "backbone": {
+      "layers": [
+        {
+          "attention": {
+            "access": "dense",
+            "backend": "sdpa",
+            "representation": "mha"
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        },
+        {
+          "attention": {
+            "access": "dense",
+            "backend": "sdpa",
+            "representation": "mha"
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        },
+        {
+          "attention": {
+            "access": "dense",
+            "backend": "sdpa",
+            "representation": "mha"
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        },
+        {
+          "attention": {
+            "access": "dense",
+            "backend": "sdpa",
+            "representation": "mha"
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        },
+        {
+          "attention": {
+            "access": "dense",
+            "backend": "sdpa",
+            "representation": "mha"
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        }
+      ],
+      "type": "transformer"
+    },
+    "context": {
+      "target_layer_ids": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "type": "dflash"
+    },
+    "mask_token_id": 0,
+    "objective": {
+      "type": "hard_ce"
+    },
+    "proposal": {
+      "loss_decay_gamma": 4.0,
+      "rank": 256,
+      "stop_gradient": false,
+      "top_k": 16,
+      "type": "selector"
+    }
+  },
+  "dtype": "bfloat16",
+  "head_dim": 8,
+  "hidden_act": "silu",
+  "hidden_size": 32,
+  "initializer_range": 0.02,
+  "intermediate_size": 64,
+  "layer_types": [
+    "full_attention",
+    "full_attention",
+    "full_attention",
+    "full_attention",
+    "full_attention"
+  ],
+  "max_position_embeddings": 512,
+  "max_window_layers": 28,
+  "model_type": "litespec_composable",
+  "num_attention_heads": 4,
+  "num_hidden_layers": 5,
+  "num_key_value_heads": 2,
+  "num_target_layers": 6,
+  "rms_norm_eps": 1e-06,
+  "rope_scaling": null,
+  "rope_theta": 10000.0,
+  "schema_version": "composable_v1",
+  "sliding_window": null,
+  "tie_word_embeddings": false,
+  "transformers_version": "4.57.1",
+  "use_cache": true,
+  "use_sliding_window": false,
+  "vocab_size": 128
+}

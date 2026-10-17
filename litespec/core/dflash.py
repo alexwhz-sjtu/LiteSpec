@@ -167,6 +167,13 @@ class OnlineDFlashModel(DFlashTrainingBase):
         if collect_detailed_metrics:
             assert metric_totals is not None
             terms = metric_totals
+            if candidate_selector is not None:
+                # Use final teacher-forced Selector scores. Gold tokens missing
+                # from top-K are incorrect, so the denominator includes all slots.
+                ratio_metrics["hard_label/token_accuracy"] = (
+                    terms.selector_conditional_correct_num.sum().detach(),
+                    terms.position_den.sum().detach(),
+                )
             ratio_metrics["hard_label/block_accepted_length"] = (
                 (
                     terms.selector_accepted_length_num

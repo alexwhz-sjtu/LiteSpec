@@ -1,0 +1,47 @@
+{
+  "architectures": [
+    "ComposableDraftModel"
+  ],
+  "block_size": 8,
+  "composable_config": {
+    "context": {
+      "type": "dflare"
+    },
+    "backbone": {
+      "type": "transformer",
+      "layers": [
+        {
+          "attention": {
+            "representation": "mha",
+            "access": "dense"
+          }
+        },
+        {
+          "attention": {
+            "representation": "mla",
+            "access": "sliding_window",
+            "window_size": 512,
+            "kv_lora_rank": 512,
+            "q_lora_rank": null,
+            "qk_nope_head_dim": 64,
+            "qk_rope_head_dim": 64,
+            "v_head_dim": 128,
+            "rope_interleave": true
+          },
+          "local_operator": {
+            "type": "dflash2_conv",
+            "kernel_size": 2,
+            "group_size": 16
+          }
+        }
+      ]
+    },
+    "proposal": {
+      "type": "parallel"
+    },
+    "objective": {
+      "type": "hard_ce",
+      "loss_decay_gamma": null
+    }
+  }
+}

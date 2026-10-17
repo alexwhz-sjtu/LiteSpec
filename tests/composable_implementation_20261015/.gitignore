@@ -1,0 +1,13 @@
+baseline/
+test_dependencies/
+fixtures/
+runs/
+cache*/
+gradient_cache/
+inductor_cache/
+triton_cache/
+pytest_tmp/
+__pycache__/
+*.log
+*.xml
+cli_help.txt

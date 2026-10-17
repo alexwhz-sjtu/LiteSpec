@@ -1,0 +1,43 @@
+{
+  "observed_at": "2026-10-15T21:16:42.915017+00:00",
+  "state": "complete",
+  "pid": 3073481,
+  "pid_exists": false,
+  "pid_identity_matches": false,
+  "last_metrics": [
+    [
+      "59700",
+      "59700",
+      "0.2024"
+    ],
+    [
+      "59724",
+      "59724",
+      "1.0160"
+    ]
+  ],
+  "disk_free_gib": 4.9,
+  "committed_checkpoints": [
+    "output/composable_1/epoch_1_step_10000/training_state.pt",
+    "output/composable_1/epoch_2_step_20000/training_state.pt",
+    "output/composable_1/epoch_3_step_30000/training_state.pt",
+    "output/composable_1/epoch_4_step_40000/training_state.pt",
+    "output/composable_1/epoch_5_step_50000/training_state.pt",
+    "output/composable_1/final/training_state.pt"
+  ],
+  "errors": [],
+  "log_tail": [
+    "wandb:            detail/composable/objective/loss 1.01604",
+    "wandb:            detail/composable/objective/main 0.83602",
+    "wandb:     detail/composable/objective/selector_ce 0.18002",
+    "wandb:                   train/adamw_learning_rate 0",
+    "wandb:                         train/learning_rate 0",
+    "wandb:                                          +2 ...",
+    "wandb: ",
+    "wandb: 🚀 View run composable_lite_spec_3 at: https://wandb.ai/alex-wang_sjtu-sjtu/spec-decoding/runs/zouq00gd",
+    "wandb: ⭐️ View project at: https://wandb.ai/alex-wang_sjtu-sjtu/spec-decoding",
+    "wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)",
+    "wandb: Find logs at: ./wandb/run-20261015_180054-zouq00gd/logs",
+    ""
+  ]
+}

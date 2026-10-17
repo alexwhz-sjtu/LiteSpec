@@ -1,0 +1,38 @@
+{
+  "architectures": [
+    "ComposableDraftModel"
+  ],
+  "block_size": 8,
+  "composable_config": {
+    "context": {
+      "type": "dflash"
+    },
+    "backbone": {
+      "type": "gdn_context_memory",
+      "layers": [
+        {},
+        {},
+        {},
+        {},
+        {}
+      ],
+      "query_conv_kernel_size": 2,
+      "context_conv_kernel_size": 4,
+      "linear_num_key_heads": 16,
+      "linear_num_value_heads": 16,
+      "linear_key_head_dim": 128,
+      "linear_value_head_dim": 128,
+      "backend": "auto"
+    },
+    "proposal": {
+      "type": "selector",
+      "rank": 256,
+      "top_k": 16,
+      "loss_decay_gamma": 4.0,
+      "stop_gradient": false
+    },
+    "objective": {
+      "type": "hard_ce"
+    }
+  }
+}

@@ -1,0 +1,254 @@
+[
+  {
+    "repo": "z-lab/dflash",
+    "revision": "07ebd93db9f472af339b644bb70221ad8428328a",
+    "path": "dflash/model.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "Tencent/AngelSpec",
+    "revision": "d3412bed231025ea85d35dbf5e0af44f1ac62a5b",
+    "path": "angelspec/models/draft/dflare.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/modeling/draft/dflash.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/modeling/draft/dflash2.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/core/attention_masks.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "deepseek-ai/DeepSpec",
+    "revision": "005e03b81cec38b7da6399833d609ee89a2587f2",
+    "path": "deepspec/modeling/dspark/markov_head.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/core/dflash2.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/modeling/draft/dlite.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/core/losses.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "vllm-project/speculators",
+    "revision": "c5d4f9dec9bddcad48b5611344ba19b8b6039dc0",
+    "path": "src/speculators/losses/eager.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "vllm-project/speculators",
+    "revision": "c5d4f9dec9bddcad48b5611344ba19b8b6039dc0",
+    "path": "src/speculators/losses/utils.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "Lucas-TY/D-PACE",
+    "revision": "f36bad6e6b0f9f5b59e1e6cf405c705b46d2b43f",
+    "path": "specforge/core/dflash.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/core/block_training.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/core/_dflash_common.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/core/outputs.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/training/runner.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/training/optimizer.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/training/algorithms.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/training/checkpoint.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/modeling/draft/registry.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "scripts/config/training_launcher.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "huggingface/transformers",
+    "revision": "aad13b87ed59f2afcfaebc985f403301887a35fc",
+    "path": "LICENSE",
+    "matches_pin": true,
+    "sha256": "77fd4710def9ec3c0f6225800e0235f15a425abd4a8b03559127fcd782612049",
+    "archive_path": "tests/composable_reference_sources/huggingface__transformers/aad13b87ed59f2afcfaebc985f403301887a35fc/LICENSE",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "NVlabs/GatedDeltaNet",
+    "revision": "b53d6d3a161267432a79c1c04af69fa52bddc921",
+    "path": "README.md",
+    "matches_pin": true,
+    "sha256": "6ea2aa74c32e739c7b1d20d97f43569effb1eed848d811c2576cb608546a3029",
+    "archive_path": "tests/composable_reference_sources/NVlabs__GatedDeltaNet/b53d6d3a161267432a79c1c04af69fa52bddc921/README.md",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "path": "LICENSE",
+    "matches_pin": true,
+    "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+    "archive_path": "tests/composable_reference_sources/Qwen__Qwen3.5-0.8B/2fc06364715b967f1860aea9cf38778875588b17/LICENSE",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "path": "README.md",
+    "matches_pin": true,
+    "sha256": "87a163af54f32fa608a0f8d3ac67945c53dd2b4a7c96740b3d7fdc28e8458864",
+    "archive_path": "tests/composable_reference_sources/Qwen__Qwen3.5-0.8B/2fc06364715b967f1860aea9cf38778875588b17/README.md",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "path": "config.json",
+    "matches_pin": true,
+    "sha256": "b90b86f35c8e6925ef74ee04d0e758f0a845c83a42089ad82bbaa948de9b4204",
+    "archive_path": "tests/composable_reference_sources/Qwen__Qwen3.5-0.8B/2fc06364715b967f1860aea9cf38778875588b17/config.json",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "fla-org/flash-linear-attention",
+    "revision": "9c8e42e762fce087c27b673af4922795d9edb85e",
+    "path": "LICENSE",
+    "matches_pin": true,
+    "sha256": "41a83c8187efc1e3ccc21909e806a9e52338e69448554d9754706c3d1cd610e7",
+    "archive_path": "tests/composable_reference_sources/fla-org__flash-linear-attention/9c8e42e762fce087c27b673af4922795d9edb85e/LICENSE",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "fla-org/flash-linear-attention",
+    "revision": "9c8e42e762fce087c27b673af4922795d9edb85e",
+    "path": "fla/ops/gated_delta_rule/__init__.py",
+    "matches_pin": true,
+    "sha256": "5edd21847af70840b26439812196a476e7e4ddbbef21afd5fe2066a64630a67c",
+    "archive_path": "tests/composable_reference_sources/fla-org__flash-linear-attention/9c8e42e762fce087c27b673af4922795d9edb85e/fla/ops/gated_delta_rule/__init__.py",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "fla-org/flash-linear-attention",
+    "revision": "9c8e42e762fce087c27b673af4922795d9edb85e",
+    "path": "fla/ops/gated_delta_rule/chunk.py",
+    "matches_pin": true,
+    "sha256": "fd4e01dc22a8c139c2a6eb61e47ae472a50322e4b4fff006cc5039a4602b310e",
+    "archive_path": "tests/composable_reference_sources/fla-org__flash-linear-attention/9c8e42e762fce087c27b673af4922795d9edb85e/fla/ops/gated_delta_rule/chunk.py",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "fla-org/flash-linear-attention",
+    "revision": "9c8e42e762fce087c27b673af4922795d9edb85e",
+    "path": "fla/ops/gated_delta_rule/fused_recurrent.py",
+    "matches_pin": true,
+    "sha256": "9c15dc68d37a150da5317431a51fe7def362264ac92770e32261c8557cd5889b",
+    "archive_path": "tests/composable_reference_sources/fla-org__flash-linear-attention/9c8e42e762fce087c27b673af4922795d9edb85e/fla/ops/gated_delta_rule/fused_recurrent.py",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "huggingface/transformers",
+    "revision": "aad13b87ed59f2afcfaebc985f403301887a35fc",
+    "path": "src/transformers/cache_utils.py",
+    "matches_pin": true,
+    "sha256": "e4fe20ca1eeb17ea0ce7e62d1dbd0d6eab32e7072044f293612403b8e0c477fd",
+    "archive_path": "tests/composable_reference_sources/huggingface__transformers/aad13b87ed59f2afcfaebc985f403301887a35fc/src/transformers/cache_utils.py",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "huggingface/transformers",
+    "revision": "aad13b87ed59f2afcfaebc985f403301887a35fc",
+    "path": "src/transformers/models/qwen3_5/configuration_qwen3_5.py",
+    "matches_pin": true,
+    "sha256": "2ec132e5ec5610d3c8110c65ed71cb4f49c98c49f1b79ead0ec973cdb949dd61",
+    "archive_path": "tests/composable_reference_sources/huggingface__transformers/aad13b87ed59f2afcfaebc985f403301887a35fc/src/transformers/models/qwen3_5/configuration_qwen3_5.py",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "huggingface/transformers",
+    "revision": "aad13b87ed59f2afcfaebc985f403301887a35fc",
+    "path": "src/transformers/models/qwen3_5/modeling_qwen3_5.py",
+    "matches_pin": true,
+    "sha256": "0e7410f5251e5c324a5628c5340ee3551f7a6a505ce398569fcc3b5f3ac07f7a",
+    "archive_path": "tests/composable_reference_sources/huggingface__transformers/aad13b87ed59f2afcfaebc985f403301887a35fc/src/transformers/models/qwen3_5/modeling_qwen3_5.py",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "huggingface/transformers",
+    "revision": "aad13b87ed59f2afcfaebc985f403301887a35fc",
+    "path": "src/transformers/models/qwen3_5/modular_qwen3_5.py",
+    "matches_pin": true,
+    "sha256": "b87fae46b15dad35e0da9bdaf7c287fe8990c167466d52309d27bfc24d73f6f7",
+    "archive_path": "tests/composable_reference_sources/huggingface__transformers/aad13b87ed59f2afcfaebc985f403301887a35fc/src/transformers/models/qwen3_5/modular_qwen3_5.py",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  },
+  {
+    "repo": "huggingface/transformers",
+    "revision": "aad13b87ed59f2afcfaebc985f403301887a35fc",
+    "path": "src/transformers/models/qwen3_next/modeling_qwen3_next.py",
+    "matches_pin": true,
+    "sha256": "3d2da762472e6b904cef1290d4ca03b15a6316f9269f6ca42f91bd60eb910337",
+    "archive_path": "tests/composable_reference_sources/huggingface__transformers/aad13b87ed59f2afcfaebc985f403301887a35fc/src/transformers/models/qwen3_next/modeling_qwen3_next.py",
+    "verification": "Fetched raw content at immutable revision; archive SHA-256 recorded."
+  }
+]

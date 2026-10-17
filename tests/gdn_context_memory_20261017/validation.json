@@ -1,0 +1,452 @@
+{
+  "remote_host": "Inf_H800_2",
+  "repository": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp",
+  "production_files": {
+    "configs/composable_gdn.json": "a4c404207497313362d4c53cd37157c0bc2a1b845d733eddb11241bbf2557f4b",
+    "litespec/modeling/draft/composable/backbone/__init__.py": "1cd1eec51868e26406b9d0c7567a9cb864c849cb10cc5c9e800128ca593ffa12",
+    "litespec/modeling/draft/composable/backbone/attention/gated_deltanet.py": "ecb02e04c48b68358e970cb1cb3a522f9c55164cb2e3019aa508ec6679e2a520",
+    "litespec/modeling/draft/composable/backbone/gated_delta_state.py": "d7d0f2434c851eb126ac0d0ad1cd702f6230c4845e5a850ac4a3aec65d72fb25",
+    "litespec/modeling/draft/composable/backbone/gdn.py": "751e9af9e140575ee34090ed1bba1f0a149890af59a437c89768ca513349116d",
+    "litespec/modeling/draft/composable/backbone/gdn_events.py": "7a4504e70e7d56886926e46c231bca027c67a10bc3ef01000b48a42ecb72e585",
+    "litespec/modeling/draft/composable/configuration.py": "43a31a60dbcf638b7da512cbe876315a4ab59af1841dfa8068e546d1fbf84c66",
+    "litespec/modeling/draft/composable/contracts.py": "994df58e527f845ae8d7e8d56a12babd1ce3bce33d3b2748643702d5b238ef21",
+    "litespec/modeling/draft/composable/modeling.py": "e870aadbeff3801f9541bce852990725befc6df3354a3f7f39553aaa4b21975f",
+    "litespec/training/checkpoint.py": "ce973c3ddf1352c09db23151938e193264578056f7aee7ee710dc5d28f416341",
+    "litespec/training/optimizer.py": "68a4fb3bf956a34b82c802448c33f6734d18e70c71cae5835daf6d5051322043",
+    "litespec/training/recipes/composable.py": "99fd0bd4924ed2f337a8e3b9a45f1eea0d199f54007557499b4aeb9defd68161",
+    "pyproject.toml": "1ee5aaeb307015b0b53d7ffca11d01421bae878f057f4c7765bb0cd842fa4551",
+    "scripts/config/composable_gdn.yaml": "803bf31294c9079eecebb716b003a577672c914edbe3f696aa6f6ab80148e5bb",
+    "uv.lock": "b68eab8730c78b19ed973accf883c6ce5c557e98a79c8c81f53b81c628a0ea13"
+  },
+  "dependencies": {
+    "torch": "2.9.1",
+    "transformers": "4.57.1",
+    "flash-linear-attention": "0.5.2",
+    "tilelang": "0.1.15",
+    "triton": "3.5.1"
+  },
+  "tests": {
+    "cpu_semantics": "32 passed in 8.04s",
+    "gpu_numerics": "6 passed, 11 warnings in 365.89s (0:06:05)",
+    "gpu_cache": "3 passed, 6 deselected in 27.55s",
+    "legacy_mha_mla": "41 passed in 20.73s"
+  },
+  "distributed": [
+    {
+      "zero_supervision_rank": false,
+      "checkpointing": false,
+      "gradient_relative_l2": 0.002388832829000626,
+      "global_parameter_change_l1": 37.56610107421875,
+      "grad_norm": 0.26061732370000507
+    },
+    {
+      "zero_supervision_rank": true,
+      "checkpointing": true,
+      "gradient_relative_l2": 0.00019869471760514438,
+      "global_parameter_change_l1": 29.374589920043945,
+      "grad_norm": 0.26174743724263116
+    }
+  ],
+  "checkpoint": {
+    "checkpoint": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017_1/final",
+    "standalone_loading": {
+      "missing_keys": [],
+      "unexpected_keys": [],
+      "mismatched_keys": [],
+      "error_msgs": []
+    },
+    "all_parameters_finite": true,
+    "independent_layer_position_tables": 5,
+    "output_shape": [
+      1,
+      8,
+      2560
+    ],
+    "cache_vs_full_max_absolute_error": 0.046875,
+    "cache_vs_full_relative_l2_error": 0.009883210994303226,
+    "repeat_read_relative_l2_error": 0.010429169051349163,
+    "bf16_relative_l2_acceptance_bound": 0.035,
+    "readonly_state_unchanged": true,
+    "matrix_shapes": [
+      [
+        1,
+        16,
+        128,
+        128
+      ],
+      [
+        1,
+        16,
+        128,
+        128
+      ],
+      [
+        1,
+        16,
+        128,
+        128
+      ],
+      [
+        1,
+        16,
+        128,
+        128
+      ],
+      [
+        1,
+        16,
+        128,
+        128
+      ]
+    ],
+    "query_kernel": 2,
+    "context_kernel": 4,
+    "fp32_reference_cache_max_absolute_error": 4.254281520843506e-06,
+    "fp32_reference_repeat_max_absolute_error": 0.0
+  },
+  "training": {
+    "state": "passed",
+    "checkpoint_20": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017/epoch_0_step_20",
+    "checkpoint_22": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017_1/epoch_0_step_22",
+    "scheduler_total_steps": 59724,
+    "scheduler_20": {
+      "adamw": {
+        "warmup_epochs": 2388,
+        "finished": false,
+        "base_lrs": [
+          0.0006
+        ],
+        "last_epoch": 20,
+        "_step_count": 21,
+        "_is_initial": false,
+        "_get_lr_called_within_step": false,
+        "_last_lr": [
+          5.2763819095477384e-06
+        ],
+        "after_scheduler_type": "CosineAnnealingLR",
+        "after_scheduler_dict": {
+          "T_max": 57336,
+          "eta_min": 0.0,
+          "base_lrs": [
+            0.0006
+          ],
+          "last_epoch": 0,
+          "_step_count": 1,
+          "_is_initial": false,
+          "_get_lr_called_within_step": false,
+          "_last_lr": [
+            0.0006
+          ]
+        }
+      },
+      "muon": {
+        "warmup_epochs": 2388,
+        "finished": false,
+        "base_lrs": [
+          0.02
+        ],
+        "last_epoch": 20,
+        "_step_count": 21,
+        "_is_initial": false,
+        "_get_lr_called_within_step": false,
+        "_last_lr": [
+          0.00017587939698492463
+        ],
+        "after_scheduler_type": "CosineAnnealingLR",
+        "after_scheduler_dict": {
+          "T_max": 57336,
+          "eta_min": 0.0,
+          "base_lrs": [
+            0.02
+          ],
+          "last_epoch": 0,
+          "_step_count": 1,
+          "_is_initial": false,
+          "_get_lr_called_within_step": false,
+          "_last_lr": [
+            0.02
+          ]
+        }
+      }
+    },
+    "scheduler_22": {
+      "adamw": {
+        "warmup_epochs": 2388,
+        "finished": false,
+        "base_lrs": [
+          0.0006
+        ],
+        "last_epoch": 22,
+        "_step_count": 23,
+        "_is_initial": false,
+        "_get_lr_called_within_step": false,
+        "_last_lr": [
+          5.7788944723618086e-06
+        ],
+        "after_scheduler_type": "CosineAnnealingLR",
+        "after_scheduler_dict": {
+          "T_max": 57336,
+          "eta_min": 0.0,
+          "base_lrs": [
+            0.0006
+          ],
+          "last_epoch": 0,
+          "_step_count": 1,
+          "_is_initial": false,
+          "_get_lr_called_within_step": false,
+          "_last_lr": [
+            0.0006
+          ]
+        }
+      },
+      "muon": {
+        "warmup_epochs": 2388,
+        "finished": false,
+        "base_lrs": [
+          0.02
+        ],
+        "last_epoch": 22,
+        "_step_count": 23,
+        "_is_initial": false,
+        "_get_lr_called_within_step": false,
+        "_last_lr": [
+          0.00019262981574539364
+        ],
+        "after_scheduler_type": "CosineAnnealingLR",
+        "after_scheduler_dict": {
+          "T_max": 57336,
+          "eta_min": 0.0,
+          "base_lrs": [
+            0.02
+          ],
+          "last_epoch": 0,
+          "_step_count": 1,
+          "_is_initial": false,
+          "_get_lr_called_within_step": false,
+          "_last_lr": [
+            0.02
+          ]
+        }
+      }
+    },
+    "optimizer_shards": [
+      {
+        "rank": 0,
+        "all_optimizer_tensors_finite": true,
+        "fp32_master_update_l1": 101.54467479139566
+      },
+      {
+        "rank": 1,
+        "all_optimizer_tensors_finite": true,
+        "fp32_master_update_l1": 185.14557391405106
+      },
+      {
+        "rank": 2,
+        "all_optimizer_tensors_finite": true,
+        "fp32_master_update_l1": 270.54931984096766
+      },
+      {
+        "rank": 3,
+        "all_optimizer_tensors_finite": true,
+        "fp32_master_update_l1": 321.6568211875856
+      },
+      {
+        "rank": 4,
+        "all_optimizer_tensors_finite": true,
+        "fp32_master_update_l1": 268.50260677188635
+      },
+      {
+        "rank": 5,
+        "all_optimizer_tensors_finite": true,
+        "fp32_master_update_l1": 266.87882369570434
+      },
+      {
+        "rank": 6,
+        "all_optimizer_tensors_finite": true,
+        "fp32_master_update_l1": 274.2214504693534
+      },
+      {
+        "rank": 7,
+        "all_optimizer_tensors_finite": true,
+        "fp32_master_update_l1": 0.0658552594527464
+      }
+    ],
+    "position_embedding_fp32_master_update_l1_during_resume": {
+      "backbone.layers.0.position_embedding.weight": 0.1687149703502655,
+      "backbone.layers.1.position_embedding.weight": 0.1874784380197525,
+      "backbone.layers.2.position_embedding.weight": 0.19400452077388763,
+      "backbone.layers.3.position_embedding.weight": 0.19658179581165314,
+      "backbone.layers.4.position_embedding.weight": 0.19817255437374115
+    },
+    "steps": [
+      {
+        "optimizer_step": 1,
+        "micro_step": 1,
+        "loss": 12.5089
+      },
+      {
+        "optimizer_step": 2,
+        "micro_step": 2,
+        "loss": 12.4945
+      },
+      {
+        "optimizer_step": 3,
+        "micro_step": 3,
+        "loss": 12.4754
+      },
+      {
+        "optimizer_step": 4,
+        "micro_step": 4,
+        "loss": 12.4869
+      },
+      {
+        "optimizer_step": 5,
+        "micro_step": 5,
+        "loss": 12.4739
+      },
+      {
+        "optimizer_step": 6,
+        "micro_step": 6,
+        "loss": 12.4958
+      },
+      {
+        "optimizer_step": 7,
+        "micro_step": 7,
+        "loss": 12.5138
+      },
+      {
+        "optimizer_step": 8,
+        "micro_step": 8,
+        "loss": 12.4988
+      },
+      {
+        "optimizer_step": 9,
+        "micro_step": 9,
+        "loss": 12.5104
+      },
+      {
+        "optimizer_step": 10,
+        "micro_step": 10,
+        "loss": 12.4495
+      },
+      {
+        "optimizer_step": 11,
+        "micro_step": 11,
+        "loss": 12.4531
+      },
+      {
+        "optimizer_step": 12,
+        "micro_step": 12,
+        "loss": 12.4435
+      },
+      {
+        "optimizer_step": 13,
+        "micro_step": 13,
+        "loss": 12.4644
+      },
+      {
+        "optimizer_step": 14,
+        "micro_step": 14,
+        "loss": 12.4106
+      },
+      {
+        "optimizer_step": 15,
+        "micro_step": 15,
+        "loss": 12.3866
+      },
+      {
+        "optimizer_step": 16,
+        "micro_step": 16,
+        "loss": 12.3288
+      },
+      {
+        "optimizer_step": 17,
+        "micro_step": 17,
+        "loss": 12.3397
+      },
+      {
+        "optimizer_step": 18,
+        "micro_step": 18,
+        "loss": 12.3017
+      },
+      {
+        "optimizer_step": 19,
+        "micro_step": 19,
+        "loss": 12.1925
+      },
+      {
+        "optimizer_step": 20,
+        "micro_step": 20,
+        "loss": 12.1624
+      },
+      {
+        "optimizer_step": 21,
+        "micro_step": 21,
+        "loss": 12.1647
+      },
+      {
+        "optimizer_step": 22,
+        "micro_step": 22,
+        "loss": 12.0231
+      }
+    ],
+    "resources": {
+      "state": "complete",
+      "first": {
+        "stage": "train_20",
+        "state": "complete",
+        "pid": 1303307,
+        "command": [
+          "bash",
+          "scripts/composable/run_training_composable.sh",
+          "scripts/config/composable_gdn.yaml"
+        ],
+        "started_at_utc": "2026-10-17T04:11:24.491949+00:00",
+        "elapsed_seconds": 234.95,
+        "peak_gpu_memory_used_mib": [
+          29863,
+          29843,
+          29757,
+          31285,
+          31373,
+          31343,
+          29989,
+          31043
+        ],
+        "returncode": 0
+      },
+      "resume": {
+        "stage": "resume_2",
+        "state": "complete",
+        "pid": 1322693,
+        "command": [
+          "bash",
+          "scripts/composable/run_training_composable.sh",
+          "scripts/config/composable_gdn.yaml",
+          "--resume-from",
+          "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017/epoch_0_step_20",
+          "--max-steps",
+          "22",
+          "--save-interval",
+          "22"
+        ],
+        "started_at_utc": "2026-10-17T04:15:19.444992+00:00",
+        "elapsed_seconds": 54.98,
+        "peak_gpu_memory_used_mib": [
+          30159,
+          30561,
+          30283,
+          30021,
+          30293,
+          30555,
+          29601,
+          30081
+        ],
+        "returncode": 0
+      },
+      "resume_checkpoint": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017/epoch_0_step_20"
+    }
+  },
+  "lock_check": "Resolved 229 packages in 3ms\n",
+  "dependency_check": "Checked 194 packages in 3ms\nAll installed packages are compatible\n"
+}

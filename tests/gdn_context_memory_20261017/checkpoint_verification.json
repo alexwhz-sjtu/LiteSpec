@@ -1,0 +1,57 @@
+{
+  "checkpoint": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017_1/final",
+  "standalone_loading": {
+    "missing_keys": [],
+    "unexpected_keys": [],
+    "mismatched_keys": [],
+    "error_msgs": []
+  },
+  "all_parameters_finite": true,
+  "independent_layer_position_tables": 5,
+  "output_shape": [
+    1,
+    8,
+    2560
+  ],
+  "cache_vs_full_max_absolute_error": 0.046875,
+  "cache_vs_full_relative_l2_error": 0.009883210994303226,
+  "repeat_read_relative_l2_error": 0.010429169051349163,
+  "bf16_relative_l2_acceptance_bound": 0.035,
+  "readonly_state_unchanged": true,
+  "matrix_shapes": [
+    [
+      1,
+      16,
+      128,
+      128
+    ],
+    [
+      1,
+      16,
+      128,
+      128
+    ],
+    [
+      1,
+      16,
+      128,
+      128
+    ],
+    [
+      1,
+      16,
+      128,
+      128
+    ],
+    [
+      1,
+      16,
+      128,
+      128
+    ]
+  ],
+  "query_kernel": 2,
+  "context_kernel": 4,
+  "fp32_reference_cache_max_absolute_error": 4.254281520843506e-06,
+  "fp32_reference_repeat_max_absolute_error": 0.0
+}

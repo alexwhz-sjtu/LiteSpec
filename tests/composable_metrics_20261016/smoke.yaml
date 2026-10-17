@@ -1,0 +1,28 @@
+algorithm: composable
+launcher:
+  target_model: /data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_implementation_20261015/fixtures/target
+  train_data: /data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_implementation_20261015/fixtures/data.jsonl
+  output_dir: /data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_metrics_20261016/smoke_output
+  nproc_per_node: 2
+  master_port: 29628
+arguments:
+  draft_config: /data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_metrics_20261016/smoke_draft.json
+  target_model_backend: hf
+  attention_backend: sdpa
+  target_layer_ids: 0,1,2,3,4
+  max_length: 32
+  num_anchors: 3
+  objective_chunk_blocks: 1
+  accumulation_steps: 2
+  num_epochs: 1
+  max_steps: 2
+  mask_token_id: 0
+  dataloader_num_workers: 0
+  build_dataset_num_proc: 1
+  log_interval: 1
+  save_interval: 100000
+  dist_timeout: 180
+  cache_dir: /data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_metrics_20261016/cache
+  report_to: wandb
+  wandb_project: spec-decoding
+  wandb_name: composable_metrics_integration_20261016

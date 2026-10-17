@@ -13,7 +13,7 @@ launcher:
   master_port: 29501
 
 arguments:
-  draft_config: /data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/configs/composable_heterogeneous.json
+  draft_config: /data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/configs/composable_selector_dpace.json
   target_model_backend: sglang
   sglang_attention_backend: fa3
   sglang_mem_fraction_static: 0.30

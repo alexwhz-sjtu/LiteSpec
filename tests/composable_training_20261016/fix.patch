@@ -1,0 +1,101 @@
+--- tests/composable_training_20261016/attention_base.before.py
++++ litespec/modeling/draft/composable/backbone/attention/base.py
+@@ -137,34 +137,40 @@
+                 attention_probabilities.to(value_states.dtype), value_states
+             )
+         elif self.backend == "flex_attention":
+-            from torch.nn.attention.flex_attention import create_block_mask
+-
+             from ....flex_attention import (
++                FLASH_KV_TILE,
++                FLASH_Q_TILE,
++                TRITON_MASK_TILE,
+                 compile_friendly_flex_attention,
++                create_flex_block_mask,
+                 flex_kernel_options,
+             )
+ 
+-            flat_visibility = visibility[:, 0]
++            q_tile, kv_tile = (
++                (FLASH_Q_TILE, FLASH_KV_TILE)
++                if self.flex_backend.upper() == "FLASH"
++                else (TRITON_MASK_TILE, TRITON_MASK_TILE)
++            )
++            # Block-mask construction visits complete tiles, including padding.
++            # Pad with False so the callback only loads a tensor; querying shapes
++            # inside mask_mod breaks PyTorch 2.9's dynamic FlexAttention lowering.
++            flat_visibility = F.pad(
++                visibility[:, 0],
++                (0, -visibility.size(3) % kv_tile, 0, -visibility.size(2) % q_tile),
++                value=False,
++            )
+ 
+             def mask_mod(b, h, q, k):
+-                return (
+-                    (q < visibility.size(2))
+-                    & (k < visibility.size(3))
+-                    & flat_visibility[
+-                        b,
+-                        q.clamp(max=visibility.size(2) - 1),
+-                        k.clamp(max=visibility.size(3) - 1),
+-                    ]
+-                )
++                return flat_visibility[b, q, k]
+ 
+-            mask = create_block_mask(
++            mask = create_flex_block_mask(
+                 mask_mod,
+-                query_states.size(0),
+-                None,
+-                query_states.size(2),
+-                key_states.size(2),
++                B=query_states.size(0),
++                H=None,
++                Q_LEN=query_states.size(2),
++                KV_LEN=key_states.size(2),
+                 device=str(query_states.device),
+-                _compile=True,
++                backend=self.flex_backend,
+             )
+             output = compile_friendly_flex_attention(
+                 query_states,
+--- tests/composable_training_20261016/recipe.before.py
++++ litespec/training/recipes/composable.py
+@@ -41,6 +41,10 @@
+         "--override-attention-backend", choices=["eager", "sdpa", "flex_attention"]
+     )
+     parser.add_argument("--num-epochs", type=int, default=6)
++    parser.add_argument(
++        "--max-steps", type=int, default=None,
++        help="Stop after this many optimizer updates, preserving the full-epoch LR schedule.",
++    )
+     parser.add_argument("--learning-rate", type=float, default=6e-4)
+     parser.add_argument("--warmup-ratio", type=float, default=0.04)
+     parser.add_argument("--objective-chunk-blocks", type=int, default=32)
+@@ -60,12 +64,26 @@
+         or not 0 <= args.selector_ramp_ratio <= 1
+     ):
+         parser.error("Invalid selector weight/schedule")
++    if args.max_steps is not None and args.max_steps <= 0:
++        parser.error("--max-steps must be positive")
+     args.require_target_last_hidden = True
+     get_tracker_class(args.report_to).validate_args(parser, args)
+     return args
+ 
+ 
+ class ComposableTrainingAdapter(DFlashFamilyTrainingAdapter):
++    def phases(self, args):
++        from dataclasses import replace
++
++        phases = super().phases(args)
++        if args.max_steps is not None:
++            phases[0] = replace(
++                phases[0],
++                max_batches=args.max_steps * args.accumulation_steps,
++                schedule_full_epochs=True,
++            )
++        return phases
++
+     def build_config(self, args, *, source_config=None, model_role=None):
+         target = (
+             load_text_model_config(

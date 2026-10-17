@@ -7,6 +7,7 @@ from ..dflash import build_target_layer_ids
 from ..dflash2 import DFlashGroupedConv
 from ..registry import register_draft
 from .backbone import build_backbone
+from .backbone.attention.gated_deltanet import GDNContextMemoryMixer
 from .configuration import ComposableDraftConfig
 from .context import build_context
 from .context.hidden_gated import HiddenGatedContext
@@ -17,7 +18,7 @@ from .proposal import build_proposal
 class ComposableDraftModel(Qwen3PreTrainedModel):
     config_class = ComposableDraftConfig
     method_config_key = "composable_config"
-    _no_split_modules = ["DraftLayer"]
+    _no_split_modules = ["DraftLayer", "GDNLayer"]
     supports_gradient_checkpointing = True
 
     def __init__(self, config):
@@ -50,6 +51,8 @@ class ComposableDraftModel(Qwen3PreTrainedModel):
                 torch.nn.init.zeros_(module.kernel_projection.weight)
             if isinstance(module, HiddenGatedContext):
                 module.reset_fusion_prior()
+            if isinstance(module, GDNContextMemoryMixer):
+                module.reset_gdn_parameters()
         head = getattr(self.proposal, "markov_head", None)
         if head is not None:
             torch.nn.init.zeros_(head.markov_w2.weight)

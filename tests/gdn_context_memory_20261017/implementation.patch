@@ -1,0 +1,1142 @@
+--- /dev/null
++++ b/configs/composable_gdn.json
+@@ -0,0 +1,38 @@
++{
++  "architectures": [
++    "ComposableDraftModel"
++  ],
++  "block_size": 8,
++  "composable_config": {
++    "context": {
++      "type": "dflash"
++    },
++    "backbone": {
++      "type": "gdn_context_memory",
++      "layers": [
++        {},
++        {},
++        {},
++        {},
++        {}
++      ],
++      "query_conv_kernel_size": 2,
++      "context_conv_kernel_size": 4,
++      "linear_num_key_heads": 16,
++      "linear_num_value_heads": 16,
++      "linear_key_head_dim": 128,
++      "linear_value_head_dim": 128,
++      "backend": "auto"
++    },
++    "proposal": {
++      "type": "selector",
++      "rank": 256,
++      "top_k": 16,
++      "loss_decay_gamma": 4.0,
++      "stop_gradient": false
++    },
++    "objective": {
++      "type": "hard_ce"
++    }
++  }
++}
+--- a/litespec/modeling/draft/composable/backbone/__init__.py
++++ b/litespec/modeling/draft/composable/backbone/__init__.py
+@@ -1,6 +1,7 @@
+ from .transformer import TransformerBackbone
++from .gdn import GDNBackbone
+ 
+-BACKBONES = {"transformer": TransformerBackbone}
++BACKBONES = {"transformer": TransformerBackbone, "gdn_context_memory": GDNBackbone}
+ 
+ 
+ def build_backbone(config):
+--- a/litespec/modeling/draft/composable/backbone/attention/gated_deltanet.py
++++ b/litespec/modeling/draft/composable/backbone/attention/gated_deltanet.py
+@@ -1,14 +1,171 @@
+-"""文档占位；尚未集成实现。
++# Copyright 2025 The Qwen Team and The HuggingFace Inc. team.
++# Adapted from Transformers Qwen3.5, aad13b87ed59f2afcfaebc985f403301887a35fc.
++# Licensed under the Apache License, Version 2.0.
++# https://www.apache.org/licenses/LICENSE-2.0
++"""GDN context writes and identity-transition block reads (not softmax attention).
+ 
+-Qwen3.5 GatedDeltaNet 占位，未来放入 backbone 的序列混合子层；暂不注册。
+-接收 draft_hidden_states；上下文注入方式仍须显式设计，输出维度恢复 hidden_size。
+-保留官方 in_proj_qkv / in_proj_z / in_proj_b / in_proj_a 的独立参数与 Q/K/V 顺序。
+-QKV 内部 causal depthwise conv、QK L2 norm、beta/g、gated RMSNorm 和 out_proj 是本组件数学；
+-不能替换为 operators/dflash2_conv，也不能当作 MHA/MLA 的 KV representation 或 access policy。
+-原生是因果递推，不能直接套用当前并行 block 的任意二维访问关系；多 anchor 隔离待设计。
+-实现前须核对 chunk/recurrent 前后向及 FLA 路径，当前无类、函数、导入或工厂。
++Q/Z come from draft blocks; K/V/a/b come from confirmed target context. Q and
++context use independent causal depthwise convolutions. Read-only events reuse
++the official chunk recurrence with exactly zero beta and log-decay.
++"""
+ 
+-参考说明：refrence/backbone/qwen35_integration.txt
+-官方源码：refrence/backbone/gated_deltanet.py
+-参考索引：refrence/index.html
+-"""
++import math
++
++import torch
++from torch import nn
++from torch.nn import functional as F
++
++from ..gated_delta_state import GDNLayerState
++
++
++def l2norm(x):
++    x = x.float()
++    return x * torch.rsqrt(x.square().sum(-1, keepdim=True) + 1e-6)
++
++
++def reference_event_scan(q, k, v, g, beta, cu_seqlens_cpu, initial_state=None):
++    """Small, differentiable FP32 oracle; never a silent CUDA training fallback."""
++    outputs, states = [], []
++    boundaries = cu_seqlens_cpu.tolist()
++    for seq, (start, end) in enumerate(zip(boundaries, boundaries[1:])):
++        state = (
++            v.new_zeros(v.size(2), k.size(-1), v.size(-1), dtype=torch.float32)
++            if initial_state is None else initial_state[seq].float()
++        )
++        for t in range(start, end):
++            qt, kt = l2norm(q[0, t]), l2norm(k[0, t])
++            repeat = v.size(2) // k.size(2)
++            if repeat != 1:
++                qt = qt.repeat_interleave(repeat, 0)
++                kt = kt.repeat_interleave(repeat, 0)
++            state = state * g[0, t].float().exp()[:, None, None]
++            old = (state * kt[:, :, None]).sum(-2)
++            delta = beta[0, t].float()[:, None] * (v[0, t].float() - old)
++            state = state + kt[:, :, None] * delta[:, None, :]
++            outputs.append((state * (qt / math.sqrt(q.size(-1)))[:, :, None]).sum(-2))
++        states.append(state)
++    return torch.stack(outputs)[None].to(q.dtype), torch.stack(states)
++
++
++class GDNRMSNormGated(nn.Module):
++    def __init__(self, dim, eps):
++        super().__init__()
++        self.weight = nn.Parameter(torch.ones(dim))
++        self.eps = eps
++
++    def forward(self, x, z):
++        dtype = x.dtype
++        x = x.float()
++        x = x * torch.rsqrt(x.square().mean(-1, keepdim=True) + self.eps)
++        x = self.weight * x.to(dtype)
++        return (x * F.silu(z.float())).to(dtype)
++
++
++class GDNContextMemoryMixer(nn.Module):
++    def __init__(self, config, recipe):
++        super().__init__()
++        self.hk = recipe["linear_num_key_heads"]
++        self.hv = recipe["linear_num_value_heads"]
++        self.dk = recipe["linear_key_head_dim"]
++        self.dv = recipe["linear_value_head_dim"]
++        self.q_kernel = recipe["query_conv_kernel_size"]
++        self.context_kernel = recipe["context_conv_kernel_size"]
++        self.backend = recipe["backend"]
++        self.key_dim, self.value_dim = self.hk * self.dk, self.hv * self.dv
++        self.in_proj_q = nn.Linear(config.hidden_size, self.key_dim, bias=False)
++        self.in_proj_kv = nn.Linear(config.hidden_size, self.key_dim + self.value_dim, bias=False)
++        self.in_proj_a = nn.Linear(config.hidden_size, self.hv, bias=False)
++        self.in_proj_b = nn.Linear(config.hidden_size, self.hv, bias=False)
++        self.in_proj_z = nn.Linear(config.hidden_size, self.value_dim, bias=False)
++        self.query_conv = nn.Conv1d(
++            self.key_dim, self.key_dim, self.q_kernel, groups=self.key_dim, bias=False
++        )
++        channels = self.key_dim + self.value_dim
++        self.context_conv = nn.Conv1d(
++            channels, channels, self.context_kernel, groups=channels, bias=False
++        )
++        self.A_log = nn.Parameter(torch.empty(self.hv))
++        self.dt_bias = nn.Parameter(torch.ones(self.hv))
++        self.norm = GDNRMSNormGated(self.dv, config.rms_norm_eps)
++        self.out_proj = nn.Linear(self.value_dim, config.hidden_size, bias=False)
++        self.reset_gdn_parameters()
++
++    def reset_gdn_parameters(self):
++        with torch.no_grad():
++            self.dt_bias.fill_(1)
++            self.A_log.copy_(torch.empty_like(self.A_log).uniform_(0, 16).clamp_min_(1e-6).log_())
++
++    def context_convolution(self, raw, layout, previous):
++        """Pack real context only; document loops do not replicate prefixes."""
++        outputs, tails, offset = [], [], 0
++        history = self.context_kernel - 1
++        for sample, length in zip(layout.samples, layout.context_lengths):
++            part = raw[offset:offset + length].T[None]
++            tail = (
++                part.new_zeros(1, raw.size(-1), history)
++                if previous is None or previous.kv_conv_state is None
++                else previous.kv_conv_state[sample:sample + 1].to(part)
++            )
++            joined = torch.cat((tail, part), -1)
++            if length:
++                value = F.silu(self.context_conv(joined)).squeeze(0).T
++            else:
++                value = raw[offset:offset] + self.context_conv.weight.sum() * 0
++            outputs.append(value)
++            if history:
++                tails.append(joined[0, :, -history:])
++            offset += length
++        value = torch.cat(outputs) if outputs else raw + self.context_conv.weight.sum() * 0
++        return value, torch.stack(tails) if tails else None
++
++    def forward(self, hidden, context, layout, block_size, previous=None):
++        n, length, _ = hidden.shape
++        a = length // block_size
++        raw_q = self.in_proj_q(hidden).reshape(n * a, block_size, self.key_dim).transpose(1, 2)
++        q = F.silu(self.query_conv(F.pad(raw_q, (self.q_kernel - 1, 0))))
++        q = q.transpose(1, 2).reshape(n * length, self.hk, self.dk)
++        z = self.in_proj_z(hidden).reshape(n, length, self.hv, self.dv)
++        c = context.flatten(0, 1).index_select(0, layout.context_indices)
++        raw_kv = self.in_proj_kv(c)
++        mixed, tails = self.context_convolution(raw_kv, layout, previous)
++        k, v = mixed.split((self.key_dim, self.value_dim), -1)
++        k, v = k.reshape(-1, self.hk, self.dk), v.reshape(-1, self.hv, self.dv)
++        beta = self.in_proj_b(c).sigmoid()
++        g = -self.A_log.float().exp() * F.softplus(self.in_proj_a(c).float() + self.dt_bias.float())
++        # index_copy is differentiable, including empty source indices. Read
++        # gates MUST stay zero: never activate/sigmoid these events in-kernel.
++        e = layout.num_events
++        if e:
++            qe = q.new_zeros(1, e, self.hk, self.dk).index_copy(
++                1, layout.read_events, q.index_select(0, layout.query_indices)[None]
++            )
++            ke = k.new_zeros(1, e, self.hk, self.dk).index_copy(1, layout.write_events, k[None])
++            ve = v.new_zeros(1, e, self.hv, self.dv).index_copy(1, layout.write_events, v[None])
++            ge = g.new_zeros(1, e, self.hv).index_copy(1, layout.write_events, g[None])
++            be = beta.new_zeros(1, e, self.hv).index_copy(1, layout.write_events, beta[None])
++            initial = None if previous is None else previous.recurrent_state
++            if self.backend == "reference" or (self.backend == "auto" and not hidden.is_cuda):
++                output, final = reference_event_scan(qe, ke, ve, ge, be, layout.cu_seqlens_cpu, initial)
++            else:
++                if not hidden.is_cuda:
++                    raise ValueError("GDN FLA backend requires CUDA; use backend=reference on CPU")
++                from fla.ops.gated_delta_rule import chunk_gated_delta_rule
++
++                output, final = chunk_gated_delta_rule(
++                    qe, ke, ve, ge, be,
++                    initial_state=initial, output_final_state=previous is not None,
++                    use_qk_l2norm_in_kernel=True, use_beta_sigmoid_in_kernel=False,
++                    use_gate_in_kernel=False, state_v_first=False,
++                    cu_seqlens=layout.cu_seqlens, cu_seqlens_cpu=layout.cu_seqlens_cpu,
++                )
++            selected = output[0].index_select(0, layout.read_events)
++            out = v.new_zeros(n * length, self.hv, self.dv).index_copy(0, layout.query_indices, selected)
++        else:
++            out = z.flatten(0, 1) * 0 + (q.sum() + mixed.sum() + beta.sum() + g.sum()) * 0
++            final = None
++        out = self.norm(out.reshape(n, length, self.hv, self.dv), z)
++        result = self.out_proj(out.flatten(-2))
++        state = None
++        if previous is not None:
++            state = GDNLayerState(final.float().detach(), None if tails is None else tails.detach(), self.context_kernel)
++        return result, state
+--- a/litespec/modeling/draft/composable/backbone/gated_delta_state.py
++++ b/litespec/modeling/draft/composable/backbone/gated_delta_state.py
+@@ -1,14 +1,31 @@
+-"""文档占位；尚未集成实现。
++"""Confirmed-context GDN state, separate from attention and proposal caches."""
+ 
+-GatedDeltaNet 状态契约文档占位；未来作为 DraftState.backbone_state 子状态。
+-每层独立保存 conv_states [N, 2*Hk*Dk+Hv*Dv, Kconv] 和 recurrent_states [N,Hv,Dk,Dv]；
+-多 anchor 的 N 展开须明确且状态隔离，不能把不同 anchor 当作同一序列直接串联。
+-混合 full-attention 层另存普通 KV；state orientation、dtype、已确认位置需显式记录。
+-投机拒绝时须同时恢复卷积和递推状态；普通 KV crop 不适用，待选快照/重放等策略。
+-固定 v5.3.0 参考在 cached seq_len>1 时会走 initial_state=None 的 chunk 分支；
+-不能据此宣称已经支持从已有 state 续算整个 draft block。本文件不实现缓存或回滚。
++from dataclasses import dataclass, field
+ 
+-参考说明：refrence/backbone/qwen35_integration.txt
+-官方源码：refrence/backbone/gated_deltanet.py
+-参考索引：refrence/index.html
+-"""
++import torch
++
++
++@dataclass
++class GDNLayerState:
++    recurrent_state: torch.Tensor
++    kv_conv_state: torch.Tensor | None
++    context_conv_kernel_size: int
++
++
++@dataclass
++class GDNBackboneState:
++    layers: dict[int, GDNLayerState] = field(default_factory=dict)
++    next_positions: torch.Tensor | None = None
++    document_ids: torch.Tensor | None = None
++
++    def validate_rollback(self, next_position):
++        if self.next_positions is None:
++            return
++        limits = torch.as_tensor(next_position, device=self.next_positions.device)
++        if limits.ndim > 1:
++            limits = limits.squeeze(-1)
++        if (limits < self.next_positions).any():
++            raise ValueError(
++                "GDN cannot crop confirmed recurrent history; restore a complete "
++                "state snapshot or rebuild the requested prefix"
++            )
+--- /dev/null
++++ b/litespec/modeling/draft/composable/backbone/gdn.py
+@@ -0,0 +1,141 @@
++"""GDN backbone with independent per-layer slot embeddings and prefix memory."""
++
++import torch
++from torch import nn
++from torch.utils.checkpoint import checkpoint
++from transformers.models.qwen3.modeling_qwen3 import Qwen3RMSNorm
++
++from ...dflash_kernels import DEFAULT_DFLASH_KERNELS
++from ..contracts import BackboneOutput
++from .attention.gated_deltanet import GDNContextMemoryMixer
++from .base import Backbone
++from .gated_delta_state import GDNBackboneState, GDNLayerState
++from .gdn_events import build_event_layout
++
++
++class GDNLayer(nn.Module):
++    def __init__(self, config, recipe):
++        super().__init__()
++        self.block_size = config.block_size
++        self.position_embedding = nn.Embedding(config.block_size, config.hidden_size)
++        kernels = DEFAULT_DFLASH_KERNELS
++        self.input_norm = kernels.make_rms_norm(config.hidden_size, config.rms_norm_eps)
++        self.post_attention_norm = kernels.make_rms_norm(config.hidden_size, config.rms_norm_eps)
++        self.mixer = GDNContextMemoryMixer(config, recipe)
++        self.mlp = kernels.make_mlp(config)
++
++    def forward(self, hidden, context, layout, previous=None):
++        n, length, d = hidden.shape
++        # One independent table per layer; add exactly once, including residual.
++        hidden = (hidden.reshape(n, -1, self.block_size, d) + self.position_embedding.weight).reshape(n, length, d)
++        mixed, state = self.mixer(self.input_norm(hidden), context, layout, self.block_size, previous)
++        hidden = hidden + mixed
++        return hidden + self.mlp(self.post_attention_norm(hidden)), state
++
++
++class GDNBackbone(Backbone):
++    def __init__(self, config):
++        super().__init__()
++        recipe = config.composable_config["backbone"]
++        self.block_size = config.block_size
++        self.layers = nn.ModuleList([GDNLayer(config, recipe) for _ in recipe["layers"]])
++        self.norm = Qwen3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
++        self.gradient_checkpointing = False
++        self.last_event_count = 0
++
++    def prepare_cache(self, inputs):
++        """Validate the complete commit before publishing any layer's new state."""
++        if inputs.draft_state is None:
++            return None, None
++        if inputs.draft_state.layers:
++            raise ValueError("GDN cannot reuse an attention KV cache")
++        old = inputs.draft_state.backbone_state
++        n, a = inputs.anchor_positions.shape
++        if a != 1 or not inputs.block_keep_mask.all():
++            raise ValueError("Cached GDN inference requires one active block per sample")
++        if old is not None and not isinstance(old, GDNBackboneState):
++            raise ValueError("Unsupported backbone state type")
++        device = inputs.draft_embeddings.device
++        docs = (
++            torch.zeros(n, dtype=torch.long, device=device)
++            if inputs.anchor_document_ids is None else inputs.anchor_document_ids[:, 0].to(device)
++        )
++        if old is None:
++            start = torch.zeros(n, dtype=torch.long, device=device)
++            reset = torch.ones(n, dtype=torch.bool, device=device)
++        else:
++            if old.next_positions.shape != (n,) or old.document_ids.shape != (n,):
++                raise ValueError("GDN cached batch size changed")
++            reset = docs != old.document_ids.to(device)
++            start = torch.where(reset, 0, old.next_positions.to(device))
++        s = inputs.target_hidden_states.size(1)
++        if inputs.context_position_ids is None and s and (start > 0).any():
++            raise ValueError("GDN continuation requires absolute context_position_ids")
++        positions = (
++            torch.arange(s).expand(n, -1)
++            if inputs.context_position_ids is None else inputs.context_position_ids.detach().cpu()
++        )
++        valid = (
++            torch.ones(n, s, dtype=torch.bool)
++            if inputs.context_valid_mask is None else inputs.context_valid_mask.detach().cpu().bool()
++        )
++        context_docs = (
++            torch.zeros(n, s, dtype=torch.long)
++            if inputs.document_ids is None else inputs.document_ids.detach().cpu()
++        )
++        end = inputs.anchor_positions[:, 0].to(device)
++        for sample in range(n):
++            selected = positions[sample, valid[sample]]
++            expected = torch.arange(int(start[sample]), int(end[sample]))
++            if int(end[sample]) < int(start[sample]) or not torch.equal(selected, expected):
++                raise ValueError("GDN commit has duplicate, missing, future or out-of-order context positions")
++            if (context_docs[sample, valid[sample]] != int(docs[sample])).any():
++                raise ValueError("Cached GDN context must belong to the active document")
++        previous = {}
++        for index, layer in enumerate(self.layers):
++            mixer = layer.mixer
++            shape = (n, mixer.hv, mixer.dk, mixer.dv)
++            history = mixer.context_kernel - 1
++            tail_shape = (n, mixer.key_dim + mixer.value_dim, history)
++            state = None if old is None else old.layers.get(index)
++            if old is not None and state is None:
++                raise ValueError("Incomplete GDN layer state")
++            if state is not None:
++                if state.context_conv_kernel_size != mixer.context_kernel or state.recurrent_state.shape != shape:
++                    raise ValueError("GDN state layout does not match the model recipe")
++                if history and (state.kv_conv_state is None or state.kv_conv_state.shape != tail_shape):
++                    raise ValueError("Invalid GDN convolution state layout")
++                if not history and state.kv_conv_state is not None:
++                    raise ValueError("kernel=1 must not have historical convolution state")
++                matrix = state.recurrent_state.to(device=device, dtype=torch.float32)
++                matrix = matrix.masked_fill(reset[:, None, None, None], 0)
++                tail = None if not history else state.kv_conv_state.to(device).masked_fill(reset[:, None, None], 0)
++            else:
++                matrix = torch.zeros(shape, device=device, dtype=torch.float32)
++                tail = None if not history else inputs.draft_embeddings.new_zeros(tail_shape)
++            previous[index] = GDNLayerState(matrix, tail, mixer.context_kernel)
++        return previous, GDNBackboneState(next_positions=end.detach().clone(), document_ids=docs.detach().clone())
++
++    def forward(self, context):
++        inputs = context.inputs
++        previous, updated = self.prepare_cache(inputs)
++        layout = build_event_layout(inputs, self.block_size)
++        self.last_event_count = layout.num_events
++        hidden = inputs.draft_embeddings
++        if len(context.context_hidden_states) != len(self.layers):
++            raise ValueError("Context layer count does not match the GDN backbone")
++        for index, (layer, c) in enumerate(zip(self.layers, context.context_hidden_states)):
++            if self.gradient_checkpointing and self.training:
++                # Bind each module independently for non-reentrant replay.
++                def operation(x, features, module=layer):
++                    return module(x, features, layout)[0]
++
++                hidden = checkpoint(operation, hidden, c, use_reentrant=False)
++            else:
++                hidden, state = layer(hidden, c, layout, None if previous is None else previous[index])
++                if updated is not None:
++                    updated.layers[index] = state
++        if updated is not None:
++            inputs.draft_state.backbone_state = updated
++        valid = inputs.block_keep_mask.repeat_interleave(self.block_size, -1)
++        return BackboneOutput(self.norm(hidden) * valid[..., None].to(hidden.dtype), inputs.draft_state)
+--- /dev/null
++++ b/litespec/modeling/draft/composable/backbone/gdn_events.py
+@@ -0,0 +1,99 @@
++"""Integer event topology; all trainable tensors stay inside model forward.
++
++Write events follow real context order. Read events precede the write at the
++same absolute position and have an identity state transition. This permits a
++single differentiable chunk scan without replicating any anchor's prefix.
++"""
++
++from dataclasses import dataclass
++
++import torch
++
++
++@dataclass(frozen=True)
++class GDNEventLayout:
++    context_indices: torch.Tensor
++    query_indices: torch.Tensor
++    write_events: torch.Tensor
++    read_events: torch.Tensor
++    cu_seqlens: torch.Tensor
++    cu_seqlens_cpu: torch.Tensor
++    context_lengths: tuple[int, ...]
++    samples: tuple[int, ...]
++    num_events: int
++
++
++def build_event_layout(inputs, block_size):
++    """Build once per forward; metadata work is per document, not per anchor."""
++    device = inputs.draft_embeddings.device
++    n, a = inputs.anchor_positions.shape
++    if inputs.draft_embeddings.shape[:2] != (n, a * block_size):
++        raise ValueError("draft_embeddings must have shape [N,A*block_size,D]")
++    s = inputs.target_hidden_states.size(1)
++    positions = (
++        torch.arange(s).expand(n, -1)
++        if inputs.context_position_ids is None
++        else inputs.context_position_ids.detach().cpu()
++    )
++    valid = (
++        torch.ones(n, s, dtype=torch.bool)
++        if inputs.context_valid_mask is None
++        else inputs.context_valid_mask.detach().cpu().bool()
++    )
++    docs = (
++        torch.zeros(n, s, dtype=torch.long)
++        if inputs.document_ids is None else inputs.document_ids.detach().cpu()
++    )
++    anchor_docs = (
++        torch.zeros(n, a, dtype=torch.long)
++        if inputs.anchor_document_ids is None else inputs.anchor_document_ids.detach().cpu()
++    )
++    anchors = inputs.anchor_positions.detach().cpu()
++    keep = inputs.block_keep_mask.detach().cpu().bool()
++    if any(x.shape != (n, s) for x in (positions, valid, docs)):
++        raise ValueError("context positions, validity and documents must be [N,S]")
++    if anchor_docs.shape != (n, a) or keep.shape != (n, a):
++        raise ValueError("anchor documents and validity must be [N,A]")
++    if positions.is_floating_point() or anchors.is_floating_point():
++        raise ValueError("context and anchor positions must be integers")
++    if (anchors[keep] < 0).any():
++        raise ValueError("anchor positions must be nonnegative")
++    contexts, queries, writes, reads = [], [], [], []
++    lengths, samples, boundaries = [], [], [0]
++    slots = torch.arange(block_size)
++    for sample in range(n):
++        sequence_docs = docs[sample, valid[sample]]
++        if sequence_docs.unique_consecutive().numel() != sequence_docs.unique().numel():
++            raise ValueError("A document must occupy one contiguous context segment")
++        for document in anchor_docs[sample, keep[sample]].unique().tolist():
++            ai = torch.where(keep[sample] & (anchor_docs[sample] == document))[0]
++            ap = anchors[sample, ai]
++            ci = torch.where(valid[sample] & (docs[sample] == document))[0]
++            cp = positions[sample, ci]
++            if cp.numel() and ((cp < 0).any() or (cp[1:] <= cp[:-1]).any()):
++                raise ValueError("Context positions must increase within each document")
++            ci = ci[cp < ap.max()]
++            cp = positions[sample, ci]
++            qi = (sample * a * block_size + ai[:, None] * block_size + slots).flatten()
++            keys = torch.cat((2 * cp + 1, (2 * ap[:, None]).expand(-1, block_size).flatten()))
++            order = keys.argsort(stable=True)
++            inverse = torch.empty_like(order)
++            inverse[order] = torch.arange(order.numel())
++            offset = boundaries[-1]
++            contexts.append(sample * s + ci)
++            queries.append(qi)
++            writes.append(offset + inverse[:ci.numel()])
++            reads.append(offset + inverse[ci.numel():])
++            lengths.append(ci.numel())
++            samples.append(sample)
++            boundaries.append(offset + order.numel())
++
++    def indices(parts):
++        return (torch.cat(parts) if parts else torch.empty(0, dtype=torch.long)).to(device)
++
++    cpu_boundaries = torch.tensor(boundaries, dtype=torch.long)
++    return GDNEventLayout(
++        indices(contexts), indices(queries), indices(writes), indices(reads),
++        cpu_boundaries.to(device), cpu_boundaries, tuple(lengths), tuple(samples),
++        boundaries[-1],
++    )
+--- a/litespec/modeling/draft/composable/configuration.py
++++ b/litespec/modeling/draft/composable/configuration.py
+@@ -48,13 +48,29 @@
+                 "Only dflash/dflare hidden injection is supported; target KV is deferred"
+             )
+         layers = recipe["backbone"].get("layers")
+-        if recipe["backbone"].get("type", "transformer") != "transformer" or not layers:
+-            raise ValueError(
+-                "backbone.layers must explicitly describe each transformer layer"
+-            )
++        backbone_type = recipe["backbone"].get("type", "transformer")
++        if backbone_type not in ("transformer", "gdn_context_memory") or not layers:
++            raise ValueError("Unsupported backbone type or empty backbone.layers")
+         if len(layers) != self.num_hidden_layers:
+             raise ValueError("backbone.layers length must equal num_hidden_layers")
+-        for layer in layers:
++        if backbone_type == "gdn_context_memory":
++            backbone = recipe["backbone"]
++            defaults = {
++                "linear_num_key_heads": 16, "linear_num_value_heads": 16,
++                "linear_key_head_dim": 128, "linear_value_head_dim": 128,
++                "query_conv_kernel_size": 2, "context_conv_kernel_size": 4,
++            }
++            for key, default in defaults.items():
++                value = backbone.setdefault(key, default)
++                if isinstance(value, bool) or not isinstance(value, int) or value < 1:
++                    raise ValueError(key + " must be a positive integer")
++            if backbone["linear_num_value_heads"] % backbone["linear_num_key_heads"]:
++                raise ValueError("GDN value heads must be a multiple of key heads")
++            if backbone.setdefault("backend", "auto") not in ("auto", "fla", "reference"):
++                raise ValueError("Unsupported GDN backend")
++            if any(layer != {} for layer in layers):
++                raise ValueError("GDN layers must be empty recipes; settings belong to backbone")
++        for layer in layers if backbone_type == "transformer" else []:
+             attn = layer["attention"]
+             if attn["representation"] not in ("mha", "mla"):
+                 raise ValueError("Only mha and mla are supported")
+--- a/litespec/modeling/draft/composable/contracts.py
++++ b/litespec/modeling/draft/composable/contracts.py
+@@ -1,7 +1,10 @@
+ """Explicit axes: N samples, A anchors, Q=1+B query slots, S context."""
+ 
+ from dataclasses import dataclass, field
+-from typing import Optional
++from typing import TYPE_CHECKING, Optional
++
++if TYPE_CHECKING:
++    from .backbone.gated_delta_state import GDNBackboneState
+ 
+ import torch
+ 
+@@ -18,8 +21,11 @@
+ @dataclass
+ class DraftState:
+     layers: dict[int, LayerState] = field(default_factory=dict)
++    backbone_state: Optional["GDNBackboneState"] = None
+ 
+     def rollback(self, next_position: int | torch.Tensor):
++        if self.backbone_state is not None:
++            self.backbone_state.validate_rollback(next_position)
+         for index, draft_state in list(self.layers.items()):
+             limits = torch.as_tensor(next_position, device=draft_state.positions.device)
+             if limits.ndim == 1:
+--- a/litespec/modeling/draft/composable/modeling.py
++++ b/litespec/modeling/draft/composable/modeling.py
+@@ -7,6 +7,7 @@
+ from ..dflash2 import DFlashGroupedConv
+ from ..registry import register_draft
+ from .backbone import build_backbone
++from .backbone.attention.gated_deltanet import GDNContextMemoryMixer
+ from .configuration import ComposableDraftConfig
+ from .context import build_context
+ from .context.hidden_gated import HiddenGatedContext
+@@ -17,7 +18,7 @@
+ class ComposableDraftModel(Qwen3PreTrainedModel):
+     config_class = ComposableDraftConfig
+     method_config_key = "composable_config"
+-    _no_split_modules = ["DraftLayer"]
++    _no_split_modules = ["DraftLayer", "GDNLayer"]
+     supports_gradient_checkpointing = True
+ 
+     def __init__(self, config):
+@@ -50,6 +51,8 @@
+                 torch.nn.init.zeros_(module.kernel_projection.weight)
+             if isinstance(module, HiddenGatedContext):
+                 module.reset_fusion_prior()
++            if isinstance(module, GDNContextMemoryMixer):
++                module.reset_gdn_parameters()
+         head = getattr(self.proposal, "markov_head", None)
+         if head is not None:
+             torch.nn.init.zeros_(head.markov_w2.weight)
+--- a/litespec/training/checkpoint.py
++++ b/litespec/training/checkpoint.py
+@@ -91,7 +91,20 @@
+         "selector_effective_alpha",
+     }
+     for key, value in expected.items():
+-        if key not in progress_keys and session.resume_state.get(key) != value:
++        saved_value = session.resume_state.get(key)
++        if key == "phase_plan" and isinstance(saved_value, list):
++            # With a full-epoch LR schedule, max_batches is a run stop cap,
++            # not a scheduler/learning contract. Cursor validation below still
++            # rejects a requested cap before the saved optimizer boundary.
++            def schedule_contract(plan):
++                return [
++                    {k: v for k, v in phase.items()
++                     if k != "max_batches" or not phase.get("schedule_full_epochs")}
++                    for phase in plan
++                ]
++
++            saved_value, value = schedule_contract(saved_value), schedule_contract(value)
++        if key not in progress_keys and saved_value != value:
+             raise ValueError(
+                 f"Resume mismatch for {key}: saved={session.resume_state.get(key)!r}, "
+                 f"requested={value!r}"
+--- a/litespec/training/optimizer.py
++++ b/litespec/training/optimizer.py
+@@ -43,6 +43,10 @@
+                 or isinstance(module, torch.nn.Embedding)
+                 or "norm" in type(module).__name__.lower()
+                 or name in ("bias", "base_kernel", "layer_fusion_weights")
++                or (isinstance(module, torch.nn.Conv1d)
++                    and module.groups == module.in_channels == module.out_channels)
++                or (type(module).__name__ == "GDNContextMemoryMixer"
++                    and name in ("A_log", "dt_bias"))
+             ):
+                 kind = "adamw"
+             elif (
+--- a/litespec/training/recipes/composable.py
++++ b/litespec/training/recipes/composable.py
+@@ -94,7 +94,10 @@
+         )
+         payload = json.loads(Path(args.draft_config).read_text())
+         recipe = copy.deepcopy(payload.get("composable_config", payload))
+-        for layer in recipe["backbone"]["layers"]:
++        is_transformer = recipe["backbone"].get("type", "transformer") == "transformer"
++        if not is_transformer and args.override_attention_backend is not None:
++            raise ValueError("--override-attention-backend only applies to transformer backbones")
++        for layer in recipe["backbone"]["layers"] if is_transformer else []:
+             attention = layer["attention"]
+             attention.setdefault("backend", args.attention_backend)
+             if args.override_attention_backend is not None:
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -43,6 +43,7 @@
+ Issues = "https://github.com/alexwhz-sjtu/LiteSpec/issues"
+ 
+ [project.optional-dependencies]
++gdn = ["tilelang==0.1.15; platform_system == 'Linux'"]
+ fa = ["flash-attn"]
+ cu128 = ["torch==2.9.1", "torchaudio==2.9.1", "torchvision==0.24.1"]
+ cu130 = ["torch==2.9.1", "torchaudio==2.9.1", "torchvision==0.24.1", "sgl-kernel==0.3.21"]
+--- /dev/null
++++ b/scripts/config/composable_gdn.yaml
+@@ -0,0 +1,71 @@
++# GDN short-run validation. max_steps preserves the full-epoch LR schedule.
++algorithm: composable
++
++launcher:
++  target_model: /data/wanghanzhen/models/Qwen3-4B
++  # Online mode. Comment this and enable train_hidden_states for offline mode.
++  train_data: /data/wanghanzhen/projects/SpecDecoding/training_data/generated/qwen3-4b/open_perfectblend_80k_qwen3_4b.jsonl
++  # train_hidden_states: /data/wanghanzhen/projects/SpecDecoding/LiteSpec/cache/data/regen_full/wildchat_chinese_qwen3_4b
++  output_dir: output/composable_gdn_smoke_20261017
++  nnodes: 1
++  node_rank: 0
++  nproc_per_node: 8
++  master_addr: 127.0.0.1
++  master_port: 29617
++
++arguments:
++  draft_config: /data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/configs/composable_gdn.json
++  target_model_backend: sglang
++  sglang_attention_backend: fa3
++  sglang_mem_fraction_static: 0.30
++  sglang_ep_size: 1
++  attention_backend: flex_attention
++  flex_attention_backend: TRITON
++  chat_template: qwen
++  max_length: 4096
++  batch_size: 1
++  accumulation_steps: 1
++  tp_size: 1
++  shard_draft_by_tp: false
++  dist_timeout: 1200
++  block_size: 8
++  num_draft_layers: 5
++  # target_layer_ids: 0,8,16,24,31
++  num_anchors: 512
++  num_epochs: 6
++  max_steps: 20
++  learning_rate: 0.0006
++  # AdamW-only weight decay; ignored when use_muon is true.
++  weight_decay: 0.0
++  warmup_ratio: 0.04
++  max_grad_norm: 1.0
++  # Optional FSDP1 Muon + AdamW; these settings are ignored when disabled.
++  use_muon: true
++  muon_lr: 0.02
++  muon_momentum: 0.95
++  muon_weight_decay: 0.0
++  # Each batch handles up to world_size * this many same-shape matrices.
++  muon_matrices_per_rank: 1
++  muon_adamw_lr: 0.0006
++  muon_adamw_weight_decay: 0.0
++  seed: 42
++  selector_loss_alpha: 1.0
++  objective_chunk_blocks: 512
++  cache_dir: ./cache/train
++  build_dataset_num_proc: 8
++  dataloader_num_workers: 8
++  log_interval: 1
++  save_interval: 20
++  report_to: none
++  wandb_project: spec-decoding
++  wandb_name: composable_gdn_smoke_20261017
++  # D-Train disaggregate settings
++  # false: every rank runs target + draft; true: split target and draft ranks.
++  disaggregate: false
++  target_ranks_per_node: 4
++  draft_ranks_per_node: 4
++  target_tp_size: 1
++  node_batch_size: 4
++  draft_micro_batch_size: 1
++  pipeline_depth: 2
++  profile: false
+--- a/uv.lock
++++ b/uv.lock
+@@ -1,20 +1,23 @@
+ version = 1
+-revision = 5
++revision = 3
+ requires-python = "==3.11.*"
+ resolution-markers = [
+     "sys_platform == 'win32' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
+     "sys_platform == 'emscripten' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
+-    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')",
++    "sys_platform == 'darwin' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')",
+     "platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
+     "platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
+     "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
+     "sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
+     "sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
+-    "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')",
++    "sys_platform == 'darwin' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')",
+     "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
+     "sys_platform == 'win32' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
+     "sys_platform == 'emscripten' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
+-    "sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform == 'darwin' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
+ ]
+ conflicts = [[
+     { package = "litespec", extra = "cu128" },
+@@ -158,10 +161,49 @@
+ 
+ [[package]]
+ name = "apache-tvm-ffi"
++version = "0.1.12"
++source = { registry = "https://pypi.org/simple" }
++resolution-markers = [
++    "sys_platform == 'darwin' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')",
++    "platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "sys_platform == 'darwin' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')",
++    "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform == 'darwin' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++]
++dependencies = [
++    { name = "typing-extensions", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/ff/95/ef83880657e89a0ce0f1ad79cbff11698286d00522dbc290d34a8458e9c2/apache_tvm_ffi-0.1.12.tar.gz", hash = "sha256:2aa5c8ece3144dad11afd6d0f10191d03cdb368bbcd9c92f9fb919f35906223d", size = 2843816, upload-time = "2026-06-09T18:17:31.68Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/f9/4c/720c64fe82121c1b617cc2a63c3a4f9a8a5c32ced22fd448a89644fd675c/apache_tvm_ffi-0.1.12-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:e4e22dd0128bd8b671d19b074201e94d39c8a4580822fc153e593741ef7355ff", size = 2508770, upload-time = "2026-06-09T18:16:30.007Z" },
++    { url = "https://files.pythonhosted.org/packages/2b/9b/39dbc81718ea7e7adb6e6326675c065bf0b90f4ebba6dde878a77b792cda/apache_tvm_ffi-0.1.12-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:9892c39a037bcf0e4ca0da1693f1193ccc2c0f02b899402e88011847980d98f6", size = 2687418, upload-time = "2026-06-09T18:16:32.005Z" },
++    { url = "https://files.pythonhosted.org/packages/1b/9e/bc4fdd679105d0617ebf6e89036967d3560ab7e4422a22df741b493470b2/apache_tvm_ffi-0.1.12-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:c418fea49b9146d692af40f0b655df68870a032041dd27c0f468d646eda5f8bc", size = 2821462, upload-time = "2026-06-09T18:16:34.202Z" },
++    { url = "https://files.pythonhosted.org/packages/31/5c/2a311cf5bb49575cec99de45887bc76aefa43a0cd3a3f29cb71e92c8100c/apache_tvm_ffi-0.1.12-cp311-cp311-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:0fec41a0633af57bcae552d662cfd096c57db685b752d1898087ca484f060e9f", size = 2598686, upload-time = "2026-06-09T18:16:36.174Z" },
++    { url = "https://files.pythonhosted.org/packages/93/e9/923843463730aa1add10c26b45110fb6a13a68dfdb48e1cd9e325b04e331/apache_tvm_ffi-0.1.12-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:011e372fb9b169c3bd57f63e03fa1383cee6f1ef47a4932c4ff552f29db281c3", size = 2783994, upload-time = "2026-06-09T18:16:38.13Z" },
++    { url = "https://files.pythonhosted.org/packages/63/d9/de68905c24ea6bc1fbed2021b700b9ca27a2b601fb6db43de37132c21407/apache_tvm_ffi-0.1.12-cp311-cp311-win_amd64.whl", hash = "sha256:06bcc161c020dc83e9db33b63b01c21815eab2cca3ca876748664bacd319cf9c", size = 2755540, upload-time = "2026-06-09T18:16:40.028Z" },
++    { url = "https://files.pythonhosted.org/packages/7d/ef/8f2ea57791e8df55c5a52e20d415c01032ef5fa3761574268201b7cc2c79/apache_tvm_ffi-0.1.12-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:218e55c807d49182710ef2ab0336313ba6becccb7e565f4941d23bded09646d4", size = 2463724, upload-time = "2026-06-09T18:16:41.904Z" },
++    { url = "https://files.pythonhosted.org/packages/bc/c4/34aec1f10353eee555687f3196241457b8e8a06da2014a176f5b022e24bd/apache_tvm_ffi-0.1.12-cp312-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:557d8deb672f2ad7f445399e3fa0c727a6e11472e19c895ee244cbb8cfd99a66", size = 2616513, upload-time = "2026-06-09T18:16:44.115Z" },
++    { url = "https://files.pythonhosted.org/packages/c8/2a/bff8d73841b49f196852edd8460241d3a363e6b0d64c3a9367542658394f/apache_tvm_ffi-0.1.12-cp312-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:817af52916ca9987e019ae9c811406835c7f26c590b2a7bcfa9db0e3809f4228", size = 2757612, upload-time = "2026-06-09T18:16:45.987Z" },
++    { url = "https://files.pythonhosted.org/packages/9c/20/51d0c31c76bef0f21c11bce0465598d1ea5fdaca22e47a69c29deadeada7/apache_tvm_ffi-0.1.12-cp312-abi3-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8a7b08f377ea2663dae10e3045f8d0215f0378ee975096174a8af6381eeb1504", size = 2533956, upload-time = "2026-06-09T18:16:47.891Z" },
++    { url = "https://files.pythonhosted.org/packages/52/f3/fba607d803cb081be2d66ea51865492b42872898bd271d9bcc3e1ced4ef3/apache_tvm_ffi-0.1.12-cp312-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:dc0acd7eeb0e451d5e3f686af3ba0b495fdbf97b5b54cf9a0f770cdafe0e691a", size = 2719638, upload-time = "2026-06-09T18:16:50.021Z" },
++    { url = "https://files.pythonhosted.org/packages/06/d7/a25f51156358c631114e16cb09ca91188b3b79677369e111216d6fa7f83d/apache_tvm_ffi-0.1.12-cp312-abi3-win_amd64.whl", hash = "sha256:23eefd1094a41faae2bb7b9cc5816aa938101b624d48ebb724881f1a89b78e99", size = 2725953, upload-time = "2026-06-09T18:16:52.215Z" },
++]
++
++[[package]]
++name = "apache-tvm-ffi"
+ version = "0.1.14.post1"
+ source = { registry = "https://pypi.org/simple" }
+-dependencies = [
+-    { name = "typing-extensions" },
++resolution-markers = [
++    "sys_platform == 'win32'",
++    "sys_platform == 'emscripten'",
++]
++dependencies = [
++    { name = "typing-extensions", marker = "sys_platform == 'emscripten' or sys_platform == 'win32' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/ed/50/2b9d308f34843b99e763ac7d510ba6400dbb3e86b3f04fd206be0dc9cd46/apache_tvm_ffi-0.1.14.post1.tar.gz", hash = "sha256:8ebd92dc97cdcb22ab494aa252c868ddd6a9b6c89be69188562e0f236652429f", size = 3232883, upload-time = "2026-09-24T07:52:45.671Z" }
+ wheels = [
+@@ -225,7 +267,7 @@
+ version = "1.5.0"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "colorama", marker = "(os_name == 'nt' and platform_machine != 'aarch64' and platform_machine != 'x86_64') or (os_name == 'nt' and platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (os_name == 'nt' and platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and extra != 'extra-8-litespec-cu130') or (os_name == 'nt' and platform_machine == 'x86_64' and extra == 'extra-8-litespec-cu128') or (os_name == 'nt' and platform_machine == 'x86_64' and extra != 'extra-8-litespec-cu130') or (os_name == 'nt' and platform_machine == 'aarch64' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (os_name == 'nt' and sys_platform != 'linux') or (os_name != 'nt' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "colorama", marker = "(os_name == 'nt' and platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (os_name == 'nt' and platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (os_name == 'nt' and platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (os_name == 'nt' and platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (os_name == 'nt' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (os_name == 'nt' and sys_platform != 'darwin' and sys_platform != 'linux') or (os_name != 'nt' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'darwin' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "packaging" },
+     { name = "pyproject-hooks" },
+ ]
+@@ -583,7 +625,8 @@
+ version = "0.6.3"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "apache-tvm-ffi" },
++    { name = "apache-tvm-ffi", version = "0.1.12", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "apache-tvm-ffi", version = "0.1.14.post1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'emscripten' or sys_platform == 'win32' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "click" },
+     { name = "einops" },
+     { name = "ninja" },
+@@ -1041,8 +1084,59 @@
+ fa = [
+     { name = "flash-attn" },
+ ]
++gdn = [
++    { name = "tilelang", marker = "sys_platform == 'linux' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
+ 
+ [package.dev-dependencies]
++dev = [
++    { name = "build" },
++    { name = "pre-commit" },
++    { name = "pytest" },
++]
++
++[package.metadata]
++requires-dist = [
++    { name = "accelerate" },
++    { name = "causal-conv1d", specifier = "==1.7.0" },
++    { name = "datasets" },
++    { name = "flash-attn", marker = "extra == 'fa'" },
++    { name = "flash-linear-attention", extras = ["conv1d"], specifier = "==0.5.2" },
++    { name = "huggingface-hub" },
++    { name = "loguru" },
++    { name = "ninja" },
++    { name = "numpy" },
++    { name = "openai-harmony" },
++    { name = "packaging" },
++    { name = "psutil" },
++    { name = "pydantic" },
++    { name = "pyyaml", specifier = ">=6.0" },
++    { name = "qwen-vl-utils", specifier = "==0.0.11" },
++    { name = "rich" },
++    { name = "safetensors" },
++    { name = "sgl-kernel", marker = "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'cu130'", url = "https://github.com/sgl-project/whl/releases/download/v0.3.21/sgl_kernel-0.3.21%2Bcu130-cp310-abi3-manylinux2014_aarch64.whl" },
++    { name = "sgl-kernel", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'cu130'", url = "https://github.com/sgl-project/whl/releases/download/v0.3.21/sgl_kernel-0.3.21%2Bcu130-cp310-abi3-manylinux2014_x86_64.whl" },
++    { name = "sgl-kernel", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'cu130') or (sys_platform != 'linux' and extra == 'cu130')", specifier = "==0.3.21" },
++    { name = "sglang", specifier = "==0.5.9" },
++    { name = "tilelang", marker = "sys_platform == 'linux' and extra == 'gdn'", specifier = "==0.1.15" },
++    { name = "torch", specifier = "==2.9.1" },
++    { name = "torch", marker = "extra == 'cu128'", specifier = "==2.9.1", index = "https://download.pytorch.org/whl/cu128", conflict = { package = "litespec", extra = "cu128" } },
++    { name = "torch", marker = "extra == 'cu130'", specifier = "==2.9.1", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "litespec", extra = "cu130" } },
++    { name = "torchaudio", specifier = "==2.9.1" },
++    { name = "torchaudio", marker = "extra == 'cu128'", specifier = "==2.9.1", index = "https://download.pytorch.org/whl/cu128", conflict = { package = "litespec", extra = "cu128" } },
++    { name = "torchaudio", marker = "extra == 'cu130'", specifier = "==2.9.1", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "litespec", extra = "cu130" } },
++    { name = "torchvision", specifier = "==0.24.1" },
++    { name = "torchvision", marker = "extra == 'cu128'", specifier = "==0.24.1", index = "https://download.pytorch.org/whl/cu128", conflict = { package = "litespec", extra = "cu128" } },
++    { name = "torchvision", marker = "extra == 'cu130'", specifier = "==0.24.1", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "litespec", extra = "cu130" } },
++    { name = "tqdm" },
++    { name = "transformers", specifier = "==4.57.1" },
++    { name = "typing-extensions" },
++    { name = "wandb" },
++    { name = "yunchang" },
++]
++provides-extras = ["gdn", "fa", "cu128", "cu130"]
++
++[package.metadata.requires-dev]
+ dev = [
+     { name = "build" },
+     { name = "pre-commit" },
+@@ -1160,6 +1254,22 @@
+ ]
+ 
+ [[package]]
++name = "ml-dtypes"
++version = "0.6.0"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "numpy", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/12/72/307d7c4bd0600601c7133fba5cb78af7db968152951c1cd473abb1cda782/ml_dtypes-0.6.0.tar.gz", hash = "sha256:5e60251d32ced5598972e4d5e06a2f044341f9291402551a3f6f0ec44f9299b0", size = 3032327, upload-time = "2026-08-13T14:14:40.215Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/b8/2c/318cd1a9014c63939ffe687e19559ae12831fcc37d66c71ad1f616f1ffd6/ml_dtypes-0.6.0-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:f4f59f83c82ab480e924b988e7b1b4eb4de836dfcf5390c6f59148d1a00e1d02", size = 566813, upload-time = "2026-08-13T14:13:55.053Z" },
++    { url = "https://files.pythonhosted.org/packages/d9/83/706b8a39449f0d55a7d5f7d07a169da4decfafae8a1f4983a9236d4b49e8/ml_dtypes-0.6.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:7728c0420ec1c338564fc8b01015ff2d58567e70f17fedce5a0a7c0308c0d5b9", size = 356864, upload-time = "2026-08-13T14:13:56.249Z" },
++    { url = "https://files.pythonhosted.org/packages/2e/b1/135a7bf47633f5b9184f0d0316af819884124d12b40965064bd216266514/ml_dtypes-0.6.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:6c8e39b53e90afda8ce52859c93de4dba3e02b76d85dcf091cc469f9184c6dae", size = 412043, upload-time = "2026-08-13T14:13:57.614Z" },
++    { url = "https://files.pythonhosted.org/packages/07/23/8870bb62d6e499d6bcbc1242b9f11689bae00a3d39d3684a9aefad8b6ee6/ml_dtypes-0.6.0-cp311-cp311-win_amd64.whl", hash = "sha256:3035518e3e19add1a4cac9236ab22888b208a4074912514313ccb2d6d242cde8", size = 433670, upload-time = "2026-08-13T14:13:59.097Z" },
++    { url = "https://files.pythonhosted.org/packages/cf/7a/5d8fbe24d0bffd0d7cb5165a89f8ab7c3de000f26d6705242aeed99d583c/ml_dtypes-0.6.0-cp311-cp311-win_arm64.whl", hash = "sha256:5a519c9e95a216fbcb8e759793ef7fb40793fc803ed839142d6dc5be9be5bc89", size = 551915, upload-time = "2026-08-13T14:14:00.368Z" },
++]
++
++[[package]]
+ name = "mlx"
+ version = "0.31.2"
+ source = { registry = "https://pypi.org/simple" }
+@@ -1179,13 +1289,13 @@
+ version = "0.29.1"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "jinja2", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "jinja2", marker = "sys_platform == 'darwin' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "mlx", marker = "sys_platform == 'darwin' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+-    { name = "numpy", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+-    { name = "protobuf", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+-    { name = "pyyaml", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+-    { name = "sentencepiece", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+-    { name = "transformers", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "numpy", marker = "sys_platform == 'darwin' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "protobuf", marker = "sys_platform == 'darwin' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "pyyaml", marker = "sys_platform == 'darwin' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "sentencepiece", marker = "sys_platform == 'darwin' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "transformers", marker = "sys_platform == 'darwin' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/e3/62/f46e1355256a114808517947f8e83ad6be310c7288c551db0fa678f47923/mlx_lm-0.29.1.tar.gz", hash = "sha256:b99180d8f33d33a077b814e550bfb2d8a59ae003d668fd1f4b3fff62a381d34b", size = 232302, upload-time = "2025-12-16T16:58:27.959Z" }
+ wheels = [
+@@ -2335,7 +2445,8 @@
+ version = "0.2.4"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "apache-tvm-ffi" },
++    { name = "apache-tvm-ffi", version = "0.1.12", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "apache-tvm-ffi", version = "0.1.14.post1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'emscripten' or sys_platform == 'win32' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "nvidia-cutlass-dsl" },
+     { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
+     { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-8-litespec-cu128'" },
+@@ -2572,14 +2683,17 @@
+ resolution-markers = [
+     "sys_platform == 'win32' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
+     "sys_platform == 'emscripten' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
+-    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')",
++    "sys_platform == 'darwin' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130'",
++    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')",
+     "sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
+     "sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
+-    "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')",
++    "sys_platform == 'darwin' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')",
+     "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
+     "sys_platform == 'win32' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
+     "sys_platform == 'emscripten' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
+-    "sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform == 'darwin' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
++    "sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130'",
+ ]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/eb/2b/f1aeca98bc856c14d870f1dcf38bca35cf84ffe58874c67402b0f862ed18/sgl_kernel-0.3.21-cp310-abi3-manylinux2014_aarch64.whl", hash = "sha256:bafdcc26e9ce1e9102b99e4186d652fefbafe5c22ea2cbb5ffe07b331e83be1f", size = 626572173, upload-time = "2026-01-15T03:48:32.615Z" },
+@@ -2616,7 +2730,8 @@
+ dependencies = [
+     { name = "aiohttp" },
+     { name = "anthropic" },
+-    { name = "apache-tvm-ffi" },
++    { name = "apache-tvm-ffi", version = "0.1.12", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "apache-tvm-ffi", version = "0.1.14.post1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'emscripten' or sys_platform == 'win32' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "av", marker = "(platform_machine != 'aarch64' and platform_machine != 'arm64' and platform_machine != 'armv7l' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'arm64' and sys_platform == 'linux') or (platform_machine == 'armv7l' and sys_platform == 'linux') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+     { name = "blobfile" },
+     { name = "build" },
+@@ -2823,6 +2938,32 @@
+ ]
+ 
+ [[package]]
++name = "tilelang"
++version = "0.1.15"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "apache-tvm-ffi", version = "0.1.12", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "cloudpickle", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "ml-dtypes", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "numpy", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "psutil", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "setuptools", marker = "sys_platform == 'darwin' or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu128') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torch", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "torch-c-dlpack-ext", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "tqdm", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "typing-extensions", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++    { name = "z3-solver", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (sys_platform == 'win32' and extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
++]
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/2c/2b/0a1f8fcacf5c99c95ccec5878b51a5adbf2d3299b5d7c5feb2d84fc5abf3/tilelang-0.1.15-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:dcffc9aa8d4cd086dd93090f5afeeaa38aa621d2bb80998c4e5f5ee07be116aa", size = 33667284, upload-time = "2026-09-30T00:52:46.227Z" },
++    { url = "https://files.pythonhosted.org/packages/87/7c/eeda90666b629bc92e8a775ea219f91b8696d8592d7a5c7dff7067dd2642/tilelang-0.1.15-cp39-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ca021a3450ad84b8fe7deb1b659c8d3d2e4b0855fdb59e2992a5349acf019881", size = 49554040, upload-time = "2026-09-30T00:52:52.493Z" },
++    { url = "https://files.pythonhosted.org/packages/b2/cc/74b077cfd53ca589c76e9f4dfb02016a83c8683b17c93b120da480ab51d4/tilelang-0.1.15-cp39-abi3-manylinux_2_34_aarch64.whl", hash = "sha256:77343b47643eaab07d8c1f8314c6c33e4992cb07883207796c900b719626524f", size = 44775917, upload-time = "2026-09-30T00:52:56.713Z" },
++    { url = "https://files.pythonhosted.org/packages/09/28/53f6e47fefe7dc18882745bac4db86a4b5ad5c3a52b89f652e278d75f3d3/tilelang-0.1.15-cp39-abi3-win_amd64.whl", hash = "sha256:398086288ae3fabb01120a1834e7ac7143d3a10d592154e789b535d874e4754f", size = 29504125, upload-time = "2026-09-30T00:53:01.978Z" },
++]
++
++[[package]]
+ name = "timm"
+ version = "1.0.16"
+ source = { registry = "https://pypi.org/simple" }
+@@ -2877,7 +3018,8 @@
+ resolution-markers = [
+     "sys_platform == 'win32'",
+     "sys_platform == 'emscripten'",
+-    "sys_platform != 'emscripten' and sys_platform != 'win32'",
++    "sys_platform == 'darwin'",
++    "sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+ ]
+ dependencies = [
+     { name = "filelock", marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
+@@ -2917,7 +3059,8 @@
+ resolution-markers = [
+     "sys_platform == 'win32'",
+     "sys_platform == 'emscripten'",
+-    "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
++    "sys_platform == 'darwin'",
++    "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
+     "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
+ ]
+ dependencies = [
+@@ -2957,7 +3100,8 @@
+ resolution-markers = [
+     "sys_platform == 'win32'",
+     "sys_platform == 'emscripten'",
+-    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
++    "sys_platform == 'darwin'",
++    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
+     "platform_machine == 'x86_64' and sys_platform == 'linux'",
+     "platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux'",
+     "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
+@@ -3062,7 +3206,8 @@
+ resolution-markers = [
+     "sys_platform == 'win32'",
+     "sys_platform == 'emscripten'",
+-    "sys_platform != 'emscripten' and sys_platform != 'win32'",
++    "sys_platform == 'darwin'",
++    "sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+ ]
+ dependencies = [
+     { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
+@@ -3081,7 +3226,8 @@
+ resolution-markers = [
+     "sys_platform == 'win32'",
+     "sys_platform == 'emscripten'",
+-    "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
++    "sys_platform == 'darwin'",
++    "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
+ ]
+ dependencies = [
+     { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+@@ -3098,7 +3244,8 @@
+ resolution-markers = [
+     "sys_platform == 'win32'",
+     "sys_platform == 'emscripten'",
+-    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
++    "sys_platform == 'darwin'",
++    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
+     "platform_machine == 'x86_64' and sys_platform == 'linux'",
+     "platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux'",
+ ]
+@@ -3159,7 +3306,8 @@
+ resolution-markers = [
+     "sys_platform == 'win32'",
+     "sys_platform == 'emscripten'",
+-    "sys_platform != 'emscripten' and sys_platform != 'win32'",
++    "sys_platform == 'darwin'",
++    "sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+ ]
+ dependencies = [
+     { name = "numpy", marker = "(extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130') or (extra != 'extra-8-litespec-cu128' and extra != 'extra-8-litespec-cu130')" },
+@@ -3180,7 +3328,8 @@
+ resolution-markers = [
+     "sys_platform == 'win32'",
+     "sys_platform == 'emscripten'",
+-    "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
++    "sys_platform == 'darwin'",
++    "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
+ ]
+ dependencies = [
+     { name = "numpy", marker = "(platform_machine != 'aarch64' and extra == 'extra-8-litespec-cu128') or (platform_python_implementation != 'CPython' and extra == 'extra-8-litespec-cu128') or (sys_platform != 'linux' and extra == 'extra-8-litespec-cu128') or (extra == 'extra-8-litespec-cu128' and extra == 'extra-8-litespec-cu130')" },
+@@ -3199,7 +3348,8 @@
+ resolution-markers = [
+     "sys_platform == 'win32'",
+     "sys_platform == 'emscripten'",
+-    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
++    "sys_platform == 'darwin'",
++    "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')",
+     "platform_machine == 'x86_64' and sys_platform == 'linux'",
+     "platform_machine == 'aarch64' and platform_python_implementation != 'CPython' and sys_platform == 'linux'",
+ ]
+@@ -3494,3 +3644,17 @@
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/49/77/9395c44f515dbabbd465f71dfd2026d1e523febb2ba2e65e41a32cdaa5e4/yunchang-0.6.4-py3-none-any.whl", hash = "sha256:cce4295058e9de2c0592d69cfe1e3e679711def5f315fd1b68dbed2d54bc9255", size = 55254, upload-time = "2026-01-13T08:14:18.439Z" },
+ ]
++
++[[package]]
++name = "z3-solver"
++version = "4.15.4.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/8a/8e/0c8f17309549d2e5cde9a3ccefa6365437f1e7bafe71878eaf9478e47b18/z3_solver-4.15.4.0.tar.gz", hash = "sha256:928c29b58c4eb62106da51c1914f6a4a55d0441f8f48a81b9da07950434a8946", size = 5018600, upload-time = "2025-10-29T18:12:03.062Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/63/33/a3d5d2eaeb0f7b3174d57d405437eabb2075d4d50bd9ea0957696c435c7b/z3_solver-4.15.4.0-py3-none-macosx_13_0_arm64.whl", hash = "sha256:407e825cc9211f95ef46bdc8d151bf630e7ab2d62a21d24cd74c09cc5b73f3aa", size = 37052538, upload-time = "2025-10-29T18:11:46.233Z" },
++    { url = "https://files.pythonhosted.org/packages/47/84/fd7ffac1551cd9f8d44fe41358f738be670fc4c24dfd514fab503f2cf3e7/z3_solver-4.15.4.0-py3-none-macosx_13_0_x86_64.whl", hash = "sha256:00bd10c5a6a5f6112d3a9a810d0799227e52f76caa860dafa5e00966bb47eb13", size = 39807925, upload-time = "2025-10-29T18:11:49.81Z" },
++    { url = "https://files.pythonhosted.org/packages/21/c9/bb51a96af0091324c81b803f16c49f719f9f6ea0b0bb52200f5c97ec4892/z3_solver-4.15.4.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7e103a6f203f505b8b8b8e5c931cc407c95b61556512d4921c1ddc0b3f41b08e", size = 29268352, upload-time = "2025-10-29T18:11:53.032Z" },
++    { url = "https://files.pythonhosted.org/packages/bf/2e/0b49f7e4e53817cfb09a0f6585012b782dfe0b666e8abefcb4fac0570606/z3_solver-4.15.4.0-py3-none-manylinux_2_34_aarch64.whl", hash = "sha256:62c7e9cbdd711932301f29919ad9158de9b2f58b4d281dd259bbcd0a2f408ba1", size = 27226534, upload-time = "2025-10-29T18:11:55.59Z" },
++    { url = "https://files.pythonhosted.org/packages/26/91/33de49538444d4aafbe47415c450c2f9abab1733e1226f276b496672f46c/z3_solver-4.15.4.0-py3-none-win32.whl", hash = "sha256:be3bc916545c96ffbf89e00d07104ff14f78336e55db069177a1bfbcc01b269d", size = 13191672, upload-time = "2025-10-29T18:11:58.424Z" },
++    { url = "https://files.pythonhosted.org/packages/03/d6/a0b135e4419df475177ae78fc93c422430b0fd8875649486f9a5989772e6/z3_solver-4.15.4.0-py3-none-win_amd64.whl", hash = "sha256:00e35b02632ed085ea8199fb230f6015e6fc40554a6680c097bd5f060e827431", size = 16259597, upload-time = "2025-10-29T18:12:01.14Z" },
++]

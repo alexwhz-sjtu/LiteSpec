@@ -1,0 +1,6 @@
+{
+  "max_weight_difference": 0.0,
+  "tensors": 36,
+  "baseline": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_implementation_20261015/runs/online_verified_1",
+  "resumed": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/composable_implementation_20261015/runs/resume_verified_2"
+}

@@ -1,0 +1,65 @@
+{
+  "current_deliverable": "Reference filling, docstring-only package skeletons, model/runtime design configs, and detailed plan. No class/factory/registry/forward/training/export implementation.",
+  "modules": {
+    "context": "modeling/draft/composable/context",
+    "backbone": "modeling/draft/composable/backbone",
+    "proposal": "modeling/draft/composable/proposal",
+    "objective": "core/composable/objectives"
+  },
+  "first_complete_route": {
+    "context": "dflash",
+    "backbone": "transformer",
+    "representation": "mha",
+    "access": "dense",
+    "local_operator": "none",
+    "proposal": "parallel",
+    "objective": "hard_ce"
+  },
+  "boundaries": [
+    "ModelInputs -> ContextOutput",
+    "ContextOutput -> BackboneOutput",
+    "BackboneOutput + ContextOutput -> DraftOutput",
+    "DraftOutput + Supervision -> TrainingOutput"
+  ],
+  "stages": [
+    {
+      "id": "0",
+      "work": "Current: references, naming map, reuse policies, empty files, plan",
+      "done_in_this_task": true
+    },
+    {
+      "id": "1",
+      "work": "Implement exact first complete route; contracts/config/builders/wrapper/adapter/native RatioTerms/checkpoint/export reload",
+      "done_in_this_task": false
+    },
+    {
+      "id": "2",
+      "work": "Add six objective families incrementally, explicit native source parity and reduction invariants",
+      "done_in_this_task": false
+    },
+    {
+      "id": "3",
+      "work": "Add DFlare, KVShot parallel context, MLA, new historical-window access; preserve deployed forward contract",
+      "done_in_this_task": false
+    },
+    {
+      "id": "4",
+      "work": "Add conv, Markov, RNN, DLite and selector; mixed denominator gate and real proposal verification",
+      "done_in_this_task": false
+    }
+  ],
+  "deployment_export": "Collect nested inference-only dependency closure. Dedicated composable export can generate compatible flat remote-code artifacts with explicit import/name mappings while keeping development packages nested; exact format must pass clean-process AutoConfig/AutoModel loading. Never assume merely copying package directories is sufficient for Transformers 4.57.",
+  "reserved_unregistered": [
+    "dsa",
+    "gqa",
+    "ce_l1",
+    "additional confidence variants"
+  ],
+  "unsupported": [
+    "bv+selector",
+    "other_attention_representations",
+    "compressed_mla_target_cache_export_in_first_version"
+  ],
+  "workspace": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp",
+  "framework_branch": "optimize/10_14"
+}

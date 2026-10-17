@@ -1,0 +1,86 @@
+[
+  {
+    "component": "dflash",
+    "source_name": "fc",
+    "integrated_name": "hidden_fusion_projection",
+    "invariant": "Linear parameter transfer; no extra nonlinear activation."
+  },
+  {
+    "component": "dflash",
+    "source_name": "hidden_norm",
+    "integrated_name": "context_norm",
+    "invariant": "Same RMSNorm placement and epsilon."
+  },
+  {
+    "component": "dflare",
+    "source_name": "layer_fusion_weights",
+    "integrated_name": "target_layer_weights",
+    "invariant": "Same learned static logits and row-wise softmax; no token gate."
+  },
+  {
+    "component": "dflare",
+    "source_name": "k_proj_target/v_proj_target",
+    "integrated_name": "context_key_projection/context_value_projection",
+    "invariant": "Source context projection separate from local block projection."
+  },
+  {
+    "component": "dspark",
+    "source_name": "markov_w1",
+    "integrated_name": "previous_token_embedding",
+    "invariant": "Same embedding lookup and rank."
+  },
+  {
+    "component": "dspark",
+    "source_name": "markov_w2",
+    "integrated_name": "logit_bias_projection",
+    "invariant": "Additive correction only; do not confuse with replacement output."
+  },
+  {
+    "component": "dspark",
+    "source_name": "joint_proj",
+    "integrated_name": "recurrent_projection",
+    "invariant": "Chunk order gate/candidate/output remains source order."
+  },
+  {
+    "component": "dlite",
+    "source_name": "state_proj",
+    "integrated_name": "state_projection",
+    "invariant": "Recurrence input excludes current hidden, unlike DSpark RNN."
+  },
+  {
+    "component": "dlite",
+    "source_name": "state_hidden_mlp",
+    "integrated_name": "state_hidden_projection",
+    "invariant": "Source is Linear; naming must not add nonlinear MLP."
+  },
+  {
+    "component": "dlite",
+    "source_name": "output_proj",
+    "integrated_name": "output_projection",
+    "invariant": "Produces replacement final logits."
+  },
+  {
+    "component": "selector",
+    "source_name": "predecessor_codebook/successor_codebook",
+    "integrated_name": "previous_token_codebook/current_token_codebook",
+    "invariant": "Same lookup factors; track weight mapping explicitly."
+  },
+  {
+    "component": "dpace",
+    "source_name": "prob/smooth/prefix/suffix",
+    "integrated_name": "label_probabilities/smoothed_label_probabilities/prefix_confidences/position_credit",
+    "invariant": "Names only; same arithmetic/dtype/mask/detach and original /batch_size."
+  },
+  {
+    "component": "nla",
+    "source_name": "overlap/_NLA_EPS",
+    "integrated_name": "distribution_overlap/nla_epsilon",
+    "invariant": "Preserve 1e-5 constant and full wrapper reduction."
+  },
+  {
+    "component": "bv",
+    "source_name": "r_i/A_i/bar_alpha_i",
+    "integrated_name": "prefix_likelihood_ratio/prefix_retention/integrated_retention",
+    "invariant": "Paper-only mapping; do not detach prefix states."
+  }
+]

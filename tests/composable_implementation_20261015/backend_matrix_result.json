@@ -1,0 +1,111 @@
+{
+  "runtime_injection": [
+    {
+      "recipe": "configs/composable_bv.json",
+      "backend": "eager"
+    },
+    {
+      "recipe": "configs/composable_bv.json",
+      "backend": "sdpa"
+    },
+    {
+      "recipe": "configs/composable_bv.json",
+      "backend": "flex_attention"
+    },
+    {
+      "recipe": "configs/composable_draft.json",
+      "backend": "eager"
+    },
+    {
+      "recipe": "configs/composable_draft.json",
+      "backend": "sdpa"
+    },
+    {
+      "recipe": "configs/composable_draft.json",
+      "backend": "flex_attention"
+    },
+    {
+      "recipe": "configs/composable_heterogeneous.json",
+      "backend": "eager"
+    },
+    {
+      "recipe": "configs/composable_heterogeneous.json",
+      "backend": "sdpa"
+    },
+    {
+      "recipe": "configs/composable_heterogeneous.json",
+      "backend": "flex_attention"
+    },
+    {
+      "recipe": "configs/composable_selector_dpace.json",
+      "backend": "eager"
+    },
+    {
+      "recipe": "configs/composable_selector_dpace.json",
+      "backend": "sdpa"
+    },
+    {
+      "recipe": "configs/composable_selector_dpace.json",
+      "backend": "flex_attention"
+    }
+  ],
+  "flex_vs_sdpa": [
+    {
+      "context": "dflash",
+      "representation": "mha",
+      "access": "dense",
+      "loss_error": 0.0,
+      "max_gradient_error": 7.450580596923828e-09
+    },
+    {
+      "context": "dflash",
+      "representation": "mha",
+      "access": "sliding_window",
+      "loss_error": 2.384185791015625e-07,
+      "max_gradient_error": 7.450580596923828e-09
+    },
+    {
+      "context": "dflash",
+      "representation": "mla",
+      "access": "dense",
+      "loss_error": 0.0,
+      "max_gradient_error": 4.190951585769653e-09
+    },
+    {
+      "context": "dflash",
+      "representation": "mla",
+      "access": "sliding_window",
+      "loss_error": 0.0,
+      "max_gradient_error": 1.1175870895385742e-08
+    },
+    {
+      "context": "dflare",
+      "representation": "mha",
+      "access": "dense",
+      "loss_error": 0.0,
+      "max_gradient_error": 7.450580596923828e-09
+    },
+    {
+      "context": "dflare",
+      "representation": "mha",
+      "access": "sliding_window",
+      "loss_error": 0.0,
+      "max_gradient_error": 7.450580596923828e-09
+    },
+    {
+      "context": "dflare",
+      "representation": "mla",
+      "access": "dense",
+      "loss_error": 0.0,
+      "max_gradient_error": 5.587935447692871e-09
+    },
+    {
+      "context": "dflare",
+      "representation": "mla",
+      "access": "sliding_window",
+      "loss_error": 0.0,
+      "max_gradient_error": 7.450580596923828e-09
+    }
+  ],
+  "torch_version": "2.9.1+cu128"
+}

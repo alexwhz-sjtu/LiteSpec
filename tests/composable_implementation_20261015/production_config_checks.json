@@ -1,0 +1,46 @@
+[
+  {
+    "recipe": "configs/composable_bv.json",
+    "inherited": {
+      "hidden_size": 2560,
+      "num_attention_heads": 32,
+      "num_key_value_heads": 8,
+      "head_dim": 128,
+      "vocab_size": 151936
+    },
+    "draft_layers": 5
+  },
+  {
+    "recipe": "configs/composable_draft.json",
+    "inherited": {
+      "hidden_size": 2560,
+      "num_attention_heads": 32,
+      "num_key_value_heads": 8,
+      "head_dim": 128,
+      "vocab_size": 151936
+    },
+    "draft_layers": 5
+  },
+  {
+    "recipe": "configs/composable_heterogeneous.json",
+    "inherited": {
+      "hidden_size": 2560,
+      "num_attention_heads": 32,
+      "num_key_value_heads": 8,
+      "head_dim": 128,
+      "vocab_size": 151936
+    },
+    "draft_layers": 5
+  },
+  {
+    "recipe": "configs/composable_selector_dpace.json",
+    "inherited": {
+      "hidden_size": 2560,
+      "num_attention_heads": 32,
+      "num_key_value_heads": 8,
+      "head_dim": 128,
+      "vocab_size": 151936
+    },
+    "draft_layers": 5
+  }
+]

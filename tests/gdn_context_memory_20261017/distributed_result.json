@@ -1,0 +1,16 @@
+[
+  {
+    "zero_supervision_rank": false,
+    "checkpointing": false,
+    "gradient_relative_l2": 0.002388832829000626,
+    "global_parameter_change_l1": 37.56610107421875,
+    "grad_norm": 0.26061732370000507
+  },
+  {
+    "zero_supervision_rank": true,
+    "checkpointing": true,
+    "gradient_relative_l2": 0.00019869471760514438,
+    "global_parameter_change_l1": 29.374589920043945,
+    "grad_norm": 0.26174743724263116
+  }
+]

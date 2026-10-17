@@ -1,0 +1,39 @@
+{
+  "verified": true,
+  "returncode": 0,
+  "optimizer_step": 59724,
+  "global_step": 59724,
+  "cursor": {
+    "phase_index": 1,
+    "epoch": 0,
+    "next_batch": 0,
+    "phase_step": 0,
+    "global_step": 59724,
+    "optimizer_step": 59724
+  },
+  "epochs": 6,
+  "steps_per_epoch": 9954,
+  "max_batches": null,
+  "rank_state_files": 8,
+  "weights": [
+    {
+      "name": "model.safetensors",
+      "bytes": 1231754592
+    }
+  ],
+  "objective": {
+    "type": "hard_ce"
+  },
+  "proposal": {
+    "type": "selector",
+    "rank": 256,
+    "top_k": 16,
+    "loss_decay_gamma": 4.0,
+    "stop_gradient": false
+  },
+  "final_loss": 1.016,
+  "elapsed_seconds": 11199.060460090637,
+  "checkpoint": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_1/final",
+  "wandb_url": "https://wandb.ai/alex-wang_sjtu-sjtu/spec-decoding/runs/zouq00gd",
+  "finished_at": "2026-10-15T21:06:54.214559+00:00"
+}

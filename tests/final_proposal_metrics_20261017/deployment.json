@@ -1,0 +1,16 @@
+{
+  "root": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp",
+  "role": "inf",
+  "before": {
+    "litespec/core/composable/metrics.py": "0bdcb64695f2f0271559cb5a570bc7a533e123fd27e7888e204fb976eee18ea0",
+    "litespec/core/composable/training_model.py": "13163629820df71bf17696d8d42eda03066e4275b4f0b5c4d9557ef4dbca8fdc",
+    "litespec/core/dflash.py": "34e2a856fbb6ed5c3de6d13d10497c71f108d3861f9ef8cb8c0f2295405229d3"
+  },
+  "after": {
+    "litespec/core/composable/metrics.py": "3632e2f0fbcabd097119d6ebed25fabc526c2d31bf6012c210bf5f64c2f010c1",
+    "litespec/core/composable/training_model.py": "3fcb885a56cdde5c961a5d5f56b2da1a575e28f9e61fa50fa99e13c8c6c2ec90",
+    "litespec/core/dflash.py": "e41098f8f66a5eb4c48009c180cd32ed69426dc31d70742b1c8352891f841468"
+  },
+  "backup": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/tests/final_proposal_metrics_20261017/before_20261017T135337Z",
+  "applied_at": "2026-10-17T13:53:37.384676+00:00"
+}

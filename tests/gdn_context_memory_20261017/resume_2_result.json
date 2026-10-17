@@ -1,0 +1,343 @@
+{
+  "stage": "resume_2",
+  "state": "complete",
+  "pid": 1322693,
+  "command": [
+    "bash",
+    "scripts/composable/run_training_composable.sh",
+    "scripts/config/composable_gdn.yaml",
+    "--resume-from",
+    "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017/epoch_0_step_20",
+    "--max-steps",
+    "22",
+    "--save-interval",
+    "22"
+  ],
+  "started_at_utc": "2026-10-17T04:15:19.444992+00:00",
+  "elapsed_seconds": 54.98,
+  "peak_gpu_memory_used_mib": [
+    30159,
+    30561,
+    30283,
+    30021,
+    30293,
+    30555,
+    29601,
+    30081
+  ],
+  "returncode": 0,
+  "samples": [
+    {
+      "seconds": 0.2,
+      "gpu_memory_used_mib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "seconds": 2.4,
+      "gpu_memory_used_mib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "seconds": 5.3,
+      "gpu_memory_used_mib": [
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        1,
+        1
+      ]
+    },
+    {
+      "seconds": 7.5,
+      "gpu_memory_used_mib": [
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4
+      ]
+    },
+    {
+      "seconds": 10.1,
+      "gpu_memory_used_mib": [
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4
+      ]
+    },
+    {
+      "seconds": 12.2,
+      "gpu_memory_used_mib": [
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4
+      ]
+    },
+    {
+      "seconds": 14.4,
+      "gpu_memory_used_mib": [
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4
+      ]
+    },
+    {
+      "seconds": 17.1,
+      "gpu_memory_used_mib": [
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4
+      ]
+    },
+    {
+      "seconds": 19.4,
+      "gpu_memory_used_mib": [
+        729,
+        729,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4
+      ]
+    },
+    {
+      "seconds": 21.7,
+      "gpu_memory_used_mib": [
+        1125,
+        1125,
+        1125,
+        1125,
+        1125,
+        1125,
+        1125,
+        1125
+      ]
+    },
+    {
+      "seconds": 23.8,
+      "gpu_memory_used_mib": [
+        2501,
+        2501,
+        2501,
+        2501,
+        2501,
+        2501,
+        2501,
+        2501
+      ]
+    },
+    {
+      "seconds": 25.9,
+      "gpu_memory_used_mib": [
+        10277,
+        10277,
+        10277,
+        10277,
+        10277,
+        10277,
+        10277,
+        10277
+      ]
+    },
+    {
+      "seconds": 28.1,
+      "gpu_memory_used_mib": [
+        11067,
+        11067,
+        11067,
+        11067,
+        11067,
+        11067,
+        11067,
+        11067
+      ]
+    },
+    {
+      "seconds": 30.2,
+      "gpu_memory_used_mib": [
+        12391,
+        11067,
+        11067,
+        11067,
+        11067,
+        11067,
+        11067,
+        11067
+      ]
+    },
+    {
+      "seconds": 32.4,
+      "gpu_memory_used_mib": [
+        12391,
+        12391,
+        12391,
+        12391,
+        12391,
+        12391,
+        12391,
+        12391
+      ]
+    },
+    {
+      "seconds": 34.5,
+      "gpu_memory_used_mib": [
+        15135,
+        15135,
+        15135,
+        15135,
+        15135,
+        15135,
+        15133,
+        15133
+      ]
+    },
+    {
+      "seconds": 36.7,
+      "gpu_memory_used_mib": [
+        27177,
+        28717,
+        28455,
+        28205,
+        28375,
+        27405,
+        27841,
+        28609
+      ]
+    },
+    {
+      "seconds": 39.0,
+      "gpu_memory_used_mib": [
+        29845,
+        30061,
+        29799,
+        29549,
+        29719,
+        30073,
+        29185,
+        29953
+      ]
+    },
+    {
+      "seconds": 41.2,
+      "gpu_memory_used_mib": [
+        30159,
+        30561,
+        30283,
+        30021,
+        30293,
+        30555,
+        29601,
+        30081
+      ]
+    },
+    {
+      "seconds": 43.3,
+      "gpu_memory_used_mib": [
+        30159,
+        30561,
+        30283,
+        30021,
+        30293,
+        30555,
+        29601,
+        30081
+      ]
+    },
+    {
+      "seconds": 45.5,
+      "gpu_memory_used_mib": [
+        30159,
+        30561,
+        30283,
+        30021,
+        30293,
+        30555,
+        29601,
+        30081
+      ]
+    },
+    {
+      "seconds": 47.6,
+      "gpu_memory_used_mib": [
+        30159,
+        30561,
+        30283,
+        30021,
+        30293,
+        30555,
+        29601,
+        30081
+      ]
+    },
+    {
+      "seconds": 49.8,
+      "gpu_memory_used_mib": [
+        30159,
+        30561,
+        30283,
+        30021,
+        30293,
+        30555,
+        29601,
+        30081
+      ]
+    },
+    {
+      "seconds": 53.0,
+      "gpu_memory_used_mib": [
+        30159,
+        30561,
+        30283,
+        30021,
+        30293,
+        30555,
+        29601,
+        30081
+      ]
+    }
+  ]
+}

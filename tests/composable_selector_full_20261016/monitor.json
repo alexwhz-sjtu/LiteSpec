@@ -1,0 +1,11 @@
+{
+  "automation_id": "selector",
+  "interval_minutes": 15,
+  "output_dir": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_1",
+  "wandb_url": "https://wandb.ai/alex-wang_sjtu-sjtu/spec-decoding/runs/zouq00gd",
+  "expected_optimizer_steps": 59724,
+  "expected_epochs": 6,
+  "objective": "hard_ce",
+  "proposal": "selector",
+  "note": "User requested use of file as currently configured. Fixed only stray ∏ JSON syntax character; preserved hard_ce despite dpace filename."
+}

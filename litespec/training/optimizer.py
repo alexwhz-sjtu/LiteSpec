@@ -43,6 +43,10 @@ def register_optimizer_parameters(model, parameters=None):
                 or isinstance(module, torch.nn.Embedding)
                 or "norm" in type(module).__name__.lower()
                 or name in ("bias", "base_kernel", "layer_fusion_weights")
+                or (isinstance(module, torch.nn.Conv1d)
+                    and module.groups == module.in_channels == module.out_channels)
+                or (type(module).__name__ == "GDNContextMemoryMixer"
+                    and name in ("A_log", "dt_bias"))
             ):
                 kind = "adamw"
             elif (

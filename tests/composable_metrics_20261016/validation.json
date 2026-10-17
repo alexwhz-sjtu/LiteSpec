@@ -1,0 +1,35 @@
+{
+  "passed": true,
+  "distributed_ranks": 2,
+  "accumulation_steps": 2,
+  "optimizer_steps": 2,
+  "wandb_state": "finished",
+  "wandb_url": "https://wandb.ai/alex-wang_sjtu-sjtu/spec-decoding/runs/o7u60cvq",
+  "metrics": [
+    {
+      "_step": 1,
+      "train/walk_accepted_length": 1,
+      "train/expected_accept_len": 1.1450700759887695
+    },
+    {
+      "_step": 2,
+      "train/walk_accepted_length": 1,
+      "train/expected_accept_len": 1.1438747644424438
+    }
+  ],
+  "unit_checks": "59 passed",
+  "checks": [
+    "five proposal types",
+    "hard_ce/tv/dpace gradient equivalence",
+    "corrected selector greedy walk",
+    "sparse full-vocabulary overlap",
+    "chunk and mask handling",
+    "BF16 block count precision",
+    "two-rank FSDP and gradient accumulation",
+    "W&B public metric keys"
+  ],
+  "source_sha256": {
+    "litespec/core/composable/metrics.py": "0bdcb64695f2f0271559cb5a570bc7a533e123fd27e7888e204fb976eee18ea0",
+    "litespec/core/composable/training_model.py": "13163629820df71bf17696d8d42eda03066e4275b4f0b5c4d9557ef4dbca8fdc"
+  }
+}

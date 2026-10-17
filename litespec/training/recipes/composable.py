@@ -94,7 +94,10 @@ class ComposableTrainingAdapter(DFlashFamilyTrainingAdapter):
         )
         payload = json.loads(Path(args.draft_config).read_text())
         recipe = copy.deepcopy(payload.get("composable_config", payload))
-        for layer in recipe["backbone"]["layers"]:
+        is_transformer = recipe["backbone"].get("type", "transformer") == "transformer"
+        if not is_transformer and args.override_attention_backend is not None:
+            raise ValueError("--override-attention-backend only applies to transformer backbones")
+        for layer in recipe["backbone"]["layers"] if is_transformer else []:
             attention = layer["attention"]
             attention.setdefault("backend", args.attention_backend)
             if args.override_attention_backend is not None:

@@ -1,0 +1,128 @@
+[
+  {
+    "repo": "z-lab/dflash",
+    "revision": "07ebd93db9f472af339b644bb70221ad8428328a",
+    "path": "dflash/model.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "Tencent/AngelSpec",
+    "revision": "d3412bed231025ea85d35dbf5e0af44f1ac62a5b",
+    "path": "angelspec/models/draft/dflare.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/modeling/draft/dflash.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/modeling/draft/dflash2.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/core/attention_masks.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "deepseek-ai/DeepSpec",
+    "revision": "005e03b81cec38b7da6399833d609ee89a2587f2",
+    "path": "deepspec/modeling/dspark/markov_head.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/core/dflash2.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/modeling/draft/dlite.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/core/losses.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "vllm-project/speculators",
+    "revision": "c5d4f9dec9bddcad48b5611344ba19b8b6039dc0",
+    "path": "src/speculators/losses/eager.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "vllm-project/speculators",
+    "revision": "c5d4f9dec9bddcad48b5611344ba19b8b6039dc0",
+    "path": "src/speculators/losses/utils.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "Lucas-TY/D-PACE",
+    "revision": "f36bad6e6b0f9f5b59e1e6cf405c705b46d2b43f",
+    "path": "specforge/core/dflash.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/core/block_training.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/core/_dflash_common.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/core/outputs.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/training/runner.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/training/optimizer.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/training/algorithms.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/training/checkpoint.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "litespec/modeling/draft/registry.py",
+    "matches_pin": true
+  },
+  {
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "path": "scripts/config/training_launcher.py",
+    "matches_pin": true
+  }
+]

@@ -1,0 +1,56 @@
+{
+  "state": "complete",
+  "first": {
+    "stage": "train_20",
+    "state": "complete",
+    "pid": 1303307,
+    "command": [
+      "bash",
+      "scripts/composable/run_training_composable.sh",
+      "scripts/config/composable_gdn.yaml"
+    ],
+    "started_at_utc": "2026-10-17T04:11:24.491949+00:00",
+    "elapsed_seconds": 234.95,
+    "peak_gpu_memory_used_mib": [
+      29863,
+      29843,
+      29757,
+      31285,
+      31373,
+      31343,
+      29989,
+      31043
+    ],
+    "returncode": 0
+  },
+  "resume": {
+    "stage": "resume_2",
+    "state": "complete",
+    "pid": 1322693,
+    "command": [
+      "bash",
+      "scripts/composable/run_training_composable.sh",
+      "scripts/config/composable_gdn.yaml",
+      "--resume-from",
+      "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017/epoch_0_step_20",
+      "--max-steps",
+      "22",
+      "--save-interval",
+      "22"
+    ],
+    "started_at_utc": "2026-10-17T04:15:19.444992+00:00",
+    "elapsed_seconds": 54.98,
+    "peak_gpu_memory_used_mib": [
+      30159,
+      30561,
+      30283,
+      30021,
+      30293,
+      30555,
+      29601,
+      30081
+    ],
+    "returncode": 0
+  },
+  "resume_checkpoint": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017/epoch_0_step_20"
+}

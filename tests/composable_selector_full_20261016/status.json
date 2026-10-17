@@ -1,0 +1,26 @@
+{
+  "state": "complete",
+  "started_at": "2026-10-15T18:00:15.154177+00:00",
+  "command": [
+    "bash",
+    "scripts/composable/run_training_composable.sh",
+    "scripts/config/composable.yaml"
+  ],
+  "configured_epochs": 6,
+  "max_steps": null,
+  "wandb_mode": "online",
+  "supervisor_pid": 3073480,
+  "pid": 3073481,
+  "returncode": 0,
+  "finished_at": "2026-10-15T21:06:54.214559+00:00",
+  "elapsed_seconds": 11199.060460090637,
+  "last_metrics": [
+    [
+      "59724",
+      "59724",
+      "1.0160"
+    ]
+  ],
+  "output_dir": "output/composable_1",
+  "wandb_url": "https://wandb.ai/alex-wang_sjtu-sjtu/spec-decoding/runs/zouq00gd"
+}

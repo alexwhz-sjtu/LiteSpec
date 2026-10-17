@@ -43,6 +43,7 @@ Repository = "https://github.com/alexwhz-sjtu/LiteSpec"
 Issues = "https://github.com/alexwhz-sjtu/LiteSpec/issues"
 
 [project.optional-dependencies]
+gdn = ["tilelang==0.1.15; platform_system == 'Linux'"]
 fa = ["flash-attn"]
 cu128 = ["torch==2.9.1", "torchaudio==2.9.1", "torchvision==0.24.1"]
 cu130 = ["torch==2.9.1", "torchaudio==2.9.1", "torchvision==0.24.1", "sgl-kernel==0.3.21"]

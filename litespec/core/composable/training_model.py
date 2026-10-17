@@ -15,6 +15,7 @@ from litespec.modeling.draft.composable.contracts import (
 )
 
 from .batch import prepare_layout
+from .metrics import acceptance_metric_terms, final_token_accuracy_terms
 from .objectives import build_objective
 from .objectives.base import Supervision
 from .objectives.selector import build_selector_objective
@@ -61,6 +62,10 @@ class ComposableTrainingModel(nn.Module):
         context_valid_mask=None,
     ):
         model = self.draft_model
+        if collect_detailed_metrics and target_last_hidden_states is None:
+            raise ValueError(
+                "Acceptance metrics require target_last_hidden_states"
+            )
         if layout is None:
             layout = prepare_layout(
                 input_ids,
@@ -93,11 +98,14 @@ class ComposableTrainingModel(nn.Module):
         main_loss_denominator = main_loss_numerator.detach().clone()
         selector_loss_numerator = main_loss_numerator
         selector_loss_denominator = main_loss_denominator.clone()
-        correct_num, accuracy_den = (
-            main_loss_denominator.clone(),
-            main_loss_denominator.clone(),
-        )
+        correct_num = torch.zeros((), device=input_ids.device, dtype=torch.float32)
+        accuracy_den = correct_num.clone()
         mathematical_num = main_loss_denominator.clone()
+        # Keep block counts exact when the model uses BF16 (odd counts >256
+        # cannot be represented by a BF16 scalar).
+        walk_num = torch.zeros((), device=input_ids.device, dtype=torch.float32)
+        expected_num = walk_num.clone()
+        block_den = walk_num.clone()
         for start in range(0, num_anchors, chunk_size):
             end = min(start + chunk_size, num_anchors)
             block_hidden = prediction.backbone_hidden_states.reshape(
@@ -108,7 +116,8 @@ class ComposableTrainingModel(nn.Module):
             mask = layout.prediction_mask[:, start:end]
             teacher_hidden = (
                 None
-                if target_last_hidden_states is None or not self.objective.needs_teacher
+                if target_last_hidden_states is None
+                or not (self.objective.needs_teacher or collect_detailed_metrics)
                 else torch.gather(
                     target_last_hidden_states,
                     1,
@@ -140,7 +149,7 @@ class ComposableTrainingModel(nn.Module):
                         features, context, SharedOps(self.embed_tokens, self.lm_head)
                     )
                     teacher_logits = None
-                    if self.objective.needs_teacher:
+                    if self.objective.needs_teacher or collect_detailed_metrics:
                         if teacher_hidden is None:
                             raise ValueError(
                                 "This objective requires target_last_hidden_states"
@@ -171,24 +180,39 @@ class ComposableTrainingModel(nn.Module):
                             selector_terms.denominator,
                         )
                     with torch.no_grad():
-                        correct = (
-                            (objective_prediction.draft_logits.argmax(-1) == labels)
-                            * mask
-                        ).sum()
+                        # The base logits remain the main-loss input for Selector;
+                        # public accuracy measures its final reranked proposal.
+                        correct, token_count = final_token_accuracy_terms(
+                            output, labels, mask
+                        )
                         metric = terms.ratio_metrics.get("bv/mathematical_loss")
                         mathematical = (
                             metric.numerator
                             if metric is not None
                             else mask.new_zeros(())
                         )
+                    if collect_detailed_metrics:
+                        walk, expected, blocks = acceptance_metric_terms(
+                            model.proposal,
+                            output,
+                            teacher_logits,
+                            labels,
+                            previous_token_ids,
+                            mask,
+                        )
+                    else:
+                        walk = expected = blocks = mask.new_zeros(())
                     return (
                         terms.loss_terms.numerator,
                         terms.loss_terms.denominator,
                         auxiliary,
                         auxiliary_den,
                         correct,
-                        mask.sum(),
+                        token_count,
                         mathematical,
+                        walk,
+                        expected,
+                        blocks,
                     )
 
                 return run_chunk
@@ -211,6 +235,9 @@ class ComposableTrainingModel(nn.Module):
                 accuracy_den + values[5],
             )
             mathematical_num = mathematical_num + values[6]
+            walk_num = walk_num + values[7]
+            expected_num = expected_num + values[8]
+            block_den = block_den + values[9]
         if self.selector_enabled:
             if window_denominators is None:
                 # Direct, single-forward API; distributed runner always supplies window totals.
@@ -238,6 +265,13 @@ class ComposableTrainingModel(nn.Module):
                 correct_num.detach(), accuracy_den.detach()
             ),
         }
+        if collect_detailed_metrics:
+            metrics["hard_label/block_accepted_length"] = RatioTerms(
+                walk_num.detach(), block_den.detach()
+            )
+            metrics["expected_accept_len"] = RatioTerms(
+                expected_num.detach(), block_den.detach()
+            )
         if self.selector_enabled:
             metrics["objective/selector_ce"] = RatioTerms(
                 selector_loss_numerator.detach(), selector_loss_denominator.detach()

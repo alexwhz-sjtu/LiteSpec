@@ -1,0 +1,34 @@
+{
+  "readme": "configs/README.md",
+  "relative_links_checked": 17,
+  "existing_recipe_fields_documented": true,
+  "example_model_checks": [
+    {
+      "backend": "eager",
+      "draft_layers": 2,
+      "head_dim": 128,
+      "target_layer_ids": [
+        1,
+        33
+      ]
+    },
+    {
+      "backend": "sdpa",
+      "draft_layers": 2,
+      "head_dim": 128,
+      "target_layer_ids": [
+        1,
+        33
+      ]
+    },
+    {
+      "backend": "flex_attention",
+      "draft_layers": 2,
+      "head_dim": 128,
+      "target_layer_ids": [
+        1,
+        33
+      ]
+    }
+  ]
+}

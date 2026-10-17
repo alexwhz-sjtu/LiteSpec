@@ -1,0 +1,8 @@
+torch==2.9.1
+torchaudio==2.9.1
+torchvision==0.24.1
+triton==3.5.1
+transformers==4.57.1
+flash-linear-attention==0.5.2
+causal-conv1d==1.7.0
+sglang==0.5.9

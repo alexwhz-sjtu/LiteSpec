@@ -1,0 +1,138 @@
+{
+  "architectures": [
+    "ComposableDraftModel"
+  ],
+  "attention_bias": false,
+  "attention_dropout": 0.0,
+  "auto_map": {
+    "AutoConfig": "cs_composable_configuration.ComposableDraftConfig",
+    "AutoModel": "cs_composable_modeling.ComposableDraftModel"
+  },
+  "block_size": 8,
+  "bos_token_id": 151643,
+  "composable_config": {
+    "backbone": {
+      "layers": [
+        {
+          "attention": {
+            "access": "sliding_window",
+            "backend": "flex_attention",
+            "flex_backend": "TRITON",
+            "representation": "mha",
+            "window_size": 512
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        },
+        {
+          "attention": {
+            "access": "sliding_window",
+            "backend": "flex_attention",
+            "flex_backend": "TRITON",
+            "kv_lora_rank": 512,
+            "q_lora_rank": 512,
+            "qk_nope_head_dim": 64,
+            "qk_rope_head_dim": 64,
+            "representation": "mla",
+            "v_head_dim": 128,
+            "window_size": 512
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        },
+        {
+          "attention": {
+            "access": "dense",
+            "backend": "flex_attention",
+            "flex_backend": "TRITON",
+            "representation": "mha"
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        },
+        {
+          "attention": {
+            "access": "sliding_window",
+            "backend": "flex_attention",
+            "flex_backend": "TRITON",
+            "kv_lora_rank": 512,
+            "q_lora_rank": 512,
+            "qk_nope_head_dim": 64,
+            "qk_rope_head_dim": 64,
+            "representation": "mla",
+            "v_head_dim": 128,
+            "window_size": 512
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        },
+        {
+          "attention": {
+            "access": "dense",
+            "backend": "flex_attention",
+            "flex_backend": "TRITON",
+            "representation": "mha"
+          },
+          "local_operator": {
+            "type": "none"
+          }
+        }
+      ],
+      "type": "transformer"
+    },
+    "context": {
+      "target_layer_ids": [
+        1,
+        9,
+        17,
+        25,
+        33
+      ],
+      "type": "dflare"
+    },
+    "mask_token_id": 151669,
+    "objective": {
+      "loss_decay_gamma": 4.0,
+      "type": "nla"
+    },
+    "proposal": {
+      "rank": 256,
+      "type": "rnn"
+    }
+  },
+  "dtype": "bfloat16",
+  "eos_token_id": 151645,
+  "head_dim": 128,
+  "hidden_act": "silu",
+  "hidden_size": 2560,
+  "initializer_range": 0.02,
+  "intermediate_size": 9728,
+  "layer_types": [
+    "full_attention",
+    "full_attention",
+    "full_attention",
+    "full_attention",
+    "full_attention"
+  ],
+  "max_position_embeddings": 40960,
+  "max_window_layers": 36,
+  "model_type": "litespec_composable",
+  "num_attention_heads": 32,
+  "num_hidden_layers": 5,
+  "num_key_value_heads": 8,
+  "num_target_layers": 36,
+  "rms_norm_eps": 1e-06,
+  "rope_scaling": null,
+  "rope_theta": 1000000,
+  "schema_version": "composable_v1",
+  "sliding_window": null,
+  "tie_word_embeddings": true,
+  "transformers_version": "4.57.1",
+  "use_cache": true,
+  "use_sliding_window": false,
+  "vocab_size": 151936
+}

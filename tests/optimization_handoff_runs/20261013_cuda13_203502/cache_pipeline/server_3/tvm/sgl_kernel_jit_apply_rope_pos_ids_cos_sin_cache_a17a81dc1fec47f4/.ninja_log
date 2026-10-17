@@ -1,3 +1,0 @@
-# ninja log v7
-3	20102	1791899851501042000	cuda_0.o	fb21ab33c716dfb
-20107	20229	1791899871604191806	sgl_kernel_jit_apply_rope_pos_ids_cos_sin_cache.so	9574d3258215c7d4

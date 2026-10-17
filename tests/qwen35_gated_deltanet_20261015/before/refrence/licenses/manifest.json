@@ -1,0 +1,50 @@
+[
+  {
+    "key": "dflash",
+    "repo": "z-lab/dflash",
+    "revision": "07ebd93db9f472af339b644bb70221ad8428328a",
+    "upstream_path": "LICENSE",
+    "path": "refrence/licenses/dflash-LICENSE",
+    "sha256": "6fd2aebd899c0b48ea9abb845aef043c6dadff00a6726a10a1bc32db528a5422"
+  },
+  {
+    "key": "dflare",
+    "repo": "Tencent/AngelSpec",
+    "revision": "d3412bed231025ea85d35dbf5e0af44f1ac62a5b",
+    "upstream_path": "LICENSE",
+    "path": "refrence/licenses/dflare-LICENSE",
+    "sha256": "e6b85cb9eb757d20d12f732b8850837668485286f6efd68c8218c48de3ec4f8b"
+  },
+  {
+    "key": "dspark",
+    "repo": "deepseek-ai/DeepSpec",
+    "revision": "005e03b81cec38b7da6399833d609ee89a2587f2",
+    "upstream_path": "LICENSE",
+    "path": "refrence/licenses/dspark-LICENSE",
+    "sha256": "474817ff0d848f0d44cea7f5ac0b488fe74f599f2a656476a94f215e5e4094c7"
+  },
+  {
+    "key": "dpace",
+    "repo": "Lucas-TY/D-PACE",
+    "revision": "f36bad6e6b0f9f5b59e1e6cf405c705b46d2b43f",
+    "upstream_path": "LICENSE",
+    "path": "refrence/licenses/dpace-LICENSE",
+    "sha256": "da25818d68a3da676fed16a019beadd6b12f5e4d59ade85840c23a6070240323"
+  },
+  {
+    "key": "nla",
+    "repo": "vllm-project/speculators",
+    "revision": "c5d4f9dec9bddcad48b5611344ba19b8b6039dc0",
+    "upstream_path": "LICENSE",
+    "path": "refrence/licenses/nla-LICENSE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+  },
+  {
+    "key": "litespec",
+    "repo": "alexwhz-sjtu/LiteSpec",
+    "revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+    "upstream_path": "LICENSE",
+    "path": "refrence/licenses/litespec-LICENSE",
+    "sha256": "da25818d68a3da676fed16a019beadd6b12f5e4d59ade85840c23a6070240323"
+  }
+]

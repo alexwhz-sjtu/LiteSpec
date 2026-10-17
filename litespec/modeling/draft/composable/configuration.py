@@ -48,13 +48,29 @@ class ComposableDraftConfig(Qwen3Config):
                 "Only dflash/dflare hidden injection is supported; target KV is deferred"
             )
         layers = recipe["backbone"].get("layers")
-        if recipe["backbone"].get("type", "transformer") != "transformer" or not layers:
-            raise ValueError(
-                "backbone.layers must explicitly describe each transformer layer"
-            )
+        backbone_type = recipe["backbone"].get("type", "transformer")
+        if backbone_type not in ("transformer", "gdn_context_memory") or not layers:
+            raise ValueError("Unsupported backbone type or empty backbone.layers")
         if len(layers) != self.num_hidden_layers:
             raise ValueError("backbone.layers length must equal num_hidden_layers")
-        for layer in layers:
+        if backbone_type == "gdn_context_memory":
+            backbone = recipe["backbone"]
+            defaults = {
+                "linear_num_key_heads": 16, "linear_num_value_heads": 16,
+                "linear_key_head_dim": 128, "linear_value_head_dim": 128,
+                "query_conv_kernel_size": 2, "context_conv_kernel_size": 4,
+            }
+            for key, default in defaults.items():
+                value = backbone.setdefault(key, default)
+                if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                    raise ValueError(key + " must be a positive integer")
+            if backbone["linear_num_value_heads"] % backbone["linear_num_key_heads"]:
+                raise ValueError("GDN value heads must be a multiple of key heads")
+            if backbone.setdefault("backend", "auto") not in ("auto", "fla", "reference"):
+                raise ValueError("Unsupported GDN backend")
+            if any(layer != {} for layer in layers):
+                raise ValueError("GDN layers must be empty recipes; settings belong to backbone")
+        for layer in layers if backbone_type == "transformer" else []:
             attn = layer["attention"]
             if attn["representation"] not in ("mha", "mla"):
                 raise ValueError("Only mha and mla are supported")

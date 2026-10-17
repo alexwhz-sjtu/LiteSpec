@@ -1,0 +1,25 @@
+algorithm: composable
+launcher:
+  target_model: /data/wanghanzhen/models/Qwen3-4B
+  train_data: /data/wanghanzhen/training_data/generated/qwen3-4b/open_perfectblend_80k_qwen3_4b.jsonl
+  output_dir: output/composable
+  nproc_per_node: 1
+  master_port: 29615
+arguments:
+  draft_config: configs/composable_draft.json
+  target_model_backend: sglang
+  sglang_attention_backend: fa3
+  sglang_mem_fraction_static: 0.4
+  sglang_ep_size: 1
+  attention_backend: flex_attention
+  flex_attention_backend: TRITON
+  max_length: 4096
+  batch_size: 1
+  num_anchors: 512
+  objective_chunk_blocks: 512
+  accumulation_steps: 1
+  num_epochs: 6
+  learning_rate: 0.0006
+  log_interval: 50
+  save_interval: 10000
+  report_to: wandb

@@ -1,0 +1,385 @@
+{
+  "scope": "New files only in the existing remote checkout; no existing package __init__ is replaced.",
+  "framework_revision": "7fa8b08ddaa29d619dc193d073185e197f77b230",
+  "files": [
+    {
+      "path": "litespec/modeling/draft/composable/__init__.py",
+      "role": "未来导出并注册 ComposableDraftModel。当前不导入、不注册、不创建注册表。",
+      "status": "docstring_only",
+      "sha256": "abfa6ef9bc4dae3d5ae4e84af6fc7dbcdf52d5dde2ff8c2f9877589b133c57df"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/configuration.py",
+      "role": "ComposableDraftConfig：四模块配方、逐层配置、能力检查、recipe 与 schema 版本。固定 hidden_size；拒绝 BV+selector 和首版未支持的 attention。",
+      "status": "docstring_only",
+      "sha256": "54f7e2e98427ea3ca1ba79d63cd01ef11fd48ccf3fa3c4f78ce205fcc4b737ae"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/contracts.py",
+      "role": "ModelInputs -> ContextOutput -> BackboneOutput -> DraftOutput；DraftState 持有 context/backbone/proposal 子状态。字段命名、布局和 mask 语义见 refrence/naming-conventions.json。",
+      "status": "docstring_only",
+      "sha256": "4e9e2d5d8b6e5fd2356d0f48e3d62ef45a883d0210fc16df4c6cae40f1704507"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/modeling.py",
+      "role": "ComposableDraftModel：仅编排 context、backbone、proposal。forward(model_inputs, *, shared_ops=None)。不导入 objective、training、FSDP 或 refrence。可训练融合在 FSDP forward 内执行。",
+      "status": "docstring_only",
+      "sha256": "1dd5067e823b1d37871dffea9c25fcad00cafee381b645bbbe175b77e6e515bb"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/export.py",
+      "role": "仅为 composable 增加嵌套源码依赖收集与独立模型导出路径；旧 draft_source_files/export_draft 路径保留。导出闭包只含前三模块、配置与必要推理公共操作；AutoConfig/AutoModel 以冷环境重载验收。",
+      "status": "docstring_only",
+      "sha256": "822df69c17a0e7e4c8dddd574cd796d95cce8ffb5b5c0c2addd671695258446f"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/context/__init__.py",
+      "role": "未来显式 CONTEXT_REGISTRY 与 build_context(config)。首版仅 dflash、dflare、kvshot_kv_only；此文件当前没有注册动作。",
+      "status": "docstring_only",
+      "sha256": "c2a29fa964a1e3730fe73162f1b4ba2a7e88eb61c7065af5dab44ceafe08285f"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/context/base.py",
+      "role": "Context 接口：接收原始 TargetFeatures 与 model_inputs，输出 ContextOutput。仅使用 target 信息；不启动 target、不读取离线文件、不处理网络传输。",
+      "status": "docstring_only",
+      "sha256": "79a0887faae95f908259920eab26ff7ef73acc23ef92bb99ff503af0101eabc1"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/context/hidden_mlp.py",
+      "role": "DFlash context。历史文件名保留 hidden_mlp；首版实际是 concat -> Linear -> RMSNorm，不擅自增加非线性 MLP。",
+      "status": "docstring_only",
+      "sha256": "562a5f47c60e7602085d24df4252b1c2864dd195a495a3aea61d87d1764d91a0"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/context/hidden_gated.py",
+      "role": "DFlare context。逐 draft 层学习静态 target-layer softmax weights；不是 token-dynamic gate。连同 context/draft KV 分离投影元数据组成 DFlare preset。",
+      "status": "docstring_only",
+      "sha256": "56b2d9a07d1ac6565100196f2dc615bd79648a5dc53a6b6109e15696215f20a3"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/context/target_kv.py",
+      "role": "KVShot KV-only parallel adapter。逐 token 多层 target K/V 拼接，分别投影为每个 draft 层的 expanded context KV。原文定义与待移植内容见 refrence/context/kvshot_kv_only.paper.txt。",
+      "status": "docstring_only",
+      "sha256": "6bf41a75483f6a039276d63b6978c3a6da24384046096c011d5310b74ccbd623"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/__init__.py",
+      "role": "未来显式 BACKBONE_REGISTRY 与 build_backbone(config)。首版 transformer；不添加第五个顶层模块。",
+      "status": "docstring_only",
+      "sha256": "0b2dac34620127d0302845e5042aba2be42e3a221ec80047b5471b5a8f308f06"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/base.py",
+      "role": "Backbone 接口：ContextOutput -> BackboneOutput；固定最终 hidden_size，允许 attention 内部 KV 布局不同。",
+      "status": "docstring_only",
+      "sha256": "fdb4a1b6c8a9b86de97c636bed332c8ae07fb0b20faa29992b15c818e06854ae"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/transformer.py",
+      "role": "组装多层网络，按层构造 attention 与可选局部算子；不实现 context 或 objective 数学。",
+      "status": "docstring_only",
+      "sha256": "ff69936aa0a79a00cf74715d37ccfc075392c83fac51046197902a06c3b50676"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/layer.py",
+      "role": "单层 norm、attention、FFN、residual 的确定顺序；conv 使用 operators 包的 prepare/finish，不能改变原残差位置。",
+      "status": "docstring_only",
+      "sha256": "b1e4b13b068ac966172afceb4cbc11b6cc2d4b0ef1a8ca60e7ad4ed42130ad58"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/operators/__init__.py",
+      "role": "未来显式 LOCAL_OPERATOR_REGISTRY 与 build_local_operator(config)。none / dflash2_conv。",
+      "status": "docstring_only",
+      "sha256": "0236de1fc029dd8c4b81fd9f3143982a813bf31c5c67261a9da5949e88546708"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/operators/base.py",
+      "role": "局部算子接口：prepare(hidden_states, layout) -> transformed_input, coefficients；finish(sublayer_output, coefficients)。",
+      "status": "docstring_only",
+      "sha256": "d7d045de3e4eb03c8da979b7f74f54df38fa81fbd720e39ef3ce96d04d857a86"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/operators/dflash2_conv.py",
+      "role": "DFlash2 block-local grouped dynamic depthwise convolution；in/out kernel 来自同一子层输入；identity 初始化与分块移位不变。",
+      "status": "docstring_only",
+      "sha256": "d181d859a1e4de29e9dcacd33208af2327d9e5c1479c3457a430ab654aeb6d83"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/attention/__init__.py",
+      "role": "未来显式 ATTENTION_REGISTRY 与 build_attention(config)。首版 representation 仅 mha / mla；访问方式与 backend 分开。",
+      "status": "docstring_only",
+      "sha256": "ded16d94d5ed7a7e92bdf99efb784fde41c3af468a9f33f06026f616f30d9c59"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/attention/base.py",
+      "role": "Attention 接口：draft_hidden_states、逐层 context view、positions、access mask 与 cache state -> draft_hidden_states 与子状态。",
+      "status": "docstring_only",
+      "sha256": "f972cd43efcf02c116be03cac30f1b19060e80afbc20ef7f99d04325d8810d57"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/attention/mha.py",
+      "role": "MHA；第一版要求 num_key_value_heads == num_attention_heads。GQA 可复用既有类但不作为首版可注册变体。",
+      "status": "docstring_only",
+      "sha256": "47134e798ba0d04c14ea9a4c3cdb37e405cb51cff3ec6bd83329b9e1e2de5b8a"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/attention/mla.py",
+      "role": "保留既有 MLA 参数化和 expanded KV cache。KVShot 接外部 expanded context KV；不重复 KV projection 或 RoPE。",
+      "status": "docstring_only",
+      "sha256": "aff49785034f287e8c2cc53569216bb19c054209e7a2624598ec9491c2d15d2e"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/attention/access/__init__.py",
+      "role": "未来显式 ACCESS_REGISTRY 与 build_access(config)。首版 dense / sliding_window；与 mha / mla 按能力组合。",
+      "status": "docstring_only",
+      "sha256": "9059e2cc2a95a05d1bd0d6be08c48f0f724be3f21bf1fe5e43a9667bdb2449f6"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/attention/access/base.py",
+      "role": "访问策略接口：BlockLayout 与 HistoryWindow -> 可见关系/cache view；不定义 Q/K/V 投影或算子 backend。",
+      "status": "docstring_only",
+      "sha256": "a6278e4f50627d09b1c99fedc8842e5d3559d8dbcd0ed9fa162d61a2257db894"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/attention/access/dense.py",
+      "role": "已确认历史 prefix + 整个当前 block；不同 anchor/document 隔离。",
+      "status": "docstring_only",
+      "sha256": "b691bec32bccf3b99d3f4ff8bb934c8f6ed488a46e9c56d218ad5724ae868506"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/attention/access/sliding_window.py",
+      "role": "最近 history_window 个已确认历史 KV + 整个当前 block。block 双向；所有 query 共用同一历史切片；裁剪后绝对位置不重编号。",
+      "status": "docstring_only",
+      "sha256": "02daf9c749d86c9fd6510fd9d63a4580f1d6657cbc741afc6a419c14deb978c4"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/attention/access/dsa.py",
+      "role": "仅预留文件；第一版不注册、不允许在配置中选择。后续索引策略不得与 MHA/MLA 写成同一互斥枚举。",
+      "status": "docstring_only",
+      "sha256": "42f9a9da20bf5f74d24633a0657f624c7495ffc69628681e2ae9b759e24d3d96"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/proposal/__init__.py",
+      "role": "未来显式 PROPOSAL_REGISTRY 与 build_proposal(config)。parallel、markov、rnn、selector、sequential_rnn。",
+      "status": "docstring_only",
+      "sha256": "f3c0967942421a34304347244e13975305d8a910df9e4674d566a0697b01cde3"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/proposal/base.py",
+      "role": "Proposal 接口：BackboneOutput、ContextOutput、shared_ops -> DraftOutput。teacher_forcing / sample / score 的模式显式传递，不以 train()/eval() 偷换条件前缀。",
+      "status": "docstring_only",
+      "sha256": "10437741def2d19789d114ea32612fb75eae10e446706a749170b57f7cafaba4"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/proposal/parallel.py",
+      "role": "基础并行 dense prediction；冻结 target LM head 通过 shared_ops 访问；输出 base_logits 与 draft_logits。",
+      "status": "docstring_only",
+      "sha256": "d721ed956aa6f9f8cefa8a57a671d6cb0c6a3203bf1dec76a5848ef43eab9f28"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/proposal/serial.py",
+      "role": "串行依赖的共同执行协议，保留 teacher forcing 与生成的前缀关系；具体数学在 markov/rnn/sequential_rnn 各自文件。",
+      "status": "docstring_only",
+      "sha256": "2a66883710e84dee409fe2ba85ca4e71eabc596ad7a24fe0712bcc44f0bb037e"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/proposal/markov.py",
+      "role": "DSpark Markov additive correction；draft_logits = base_logits + logit_bias；previous_token_ids 含真实条件前驱。",
+      "status": "docstring_only",
+      "sha256": "445a917113dd0fa332ef0aee5740a7a2c3bcec5c82960382e4c139e4fa2a97dc"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/proposal/rnn.py",
+      "role": "DSpark RNN additive correction；state、previous token embedding 与当前 hidden 的联合投影顺序保持官方实现；proposal_state 按块重置。",
+      "status": "docstring_only",
+      "sha256": "ea99e0d263f67b28747b1ca0ecd930a9aa0b865ff92abcbd0ea7aa055187b442"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/proposal/sequential_rnn.py",
+      "role": "DLite replacement head；state 与前驱更新后融合当前 hidden；输出最终 dense draft_logits，不与基础 logits 相加。",
+      "status": "docstring_only",
+      "sha256": "56b0b624e1bea756665c94b7a1270354192b71daf9bdd9cd53ee2604a52607fd"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/proposal/selector.py",
+      "role": "DFlash2 top-K selector；输出 candidate_ids、candidate_logits、实际 proposal probabilities。可训练 selector/未来 confidence 归前三模块；BV 禁止组合。",
+      "status": "docstring_only",
+      "sha256": "7d64e4b2964f22f5e81d031b5c0826488afe3333307dc2e3f5e2e5bf1c4b6f27"
+    },
+    {
+      "path": "litespec/core/composable/__init__.py",
+      "role": "未来导出 ComposableTrainingModel。部署模型包不得依赖此训练包。",
+      "status": "docstring_only",
+      "sha256": "691007481fa879c1388b0211bbbd565fbe7f7d587c3cea5a7dd71a373ee02f85"
+    },
+    {
+      "path": "litespec/core/composable/training_model.py",
+      "role": "ComposableTrainingModel 持有 draft_model 与 objective；forward 内执行三个部署模块与目标，返回现有 TrainingOutput。Objective 首版无参数；不在 wrapper 调用 backward/optimizer.step。",
+      "status": "docstring_only",
+      "sha256": "81a1c51c2e642929a30abd621e4c00b4a03e15c0707515b50dfce81ababc62e0"
+    },
+    {
+      "path": "litespec/core/composable/batch.py",
+      "role": "无参数训练 batch 准备。复用现有 sample_sorted_anchors/gather_block_values 等操作；按方法先构造合法 anchors，再调用同一 sampler。此模块不执行可训练融合。",
+      "status": "docstring_only",
+      "sha256": "5762442d06b3a1b39e374502a894f9619c6703a00c93335fb617a545a271009f"
+    },
+    {
+      "path": "litespec/core/composable/objectives/__init__.py",
+      "role": "未来显式 OBJECTIVE_REGISTRY 与 build_objective(config)。hard_ce、soft_ce、forward_kl、tv、nla、dpace、bv。recipe 来源与 reduction 固定。",
+      "status": "docstring_only",
+      "sha256": "bf38d311b396f3919703a81bbd8e2baedd5392b9631c0edbdffac064e3baea47"
+    },
+    {
+      "path": "litespec/core/composable/objectives/base.py",
+      "role": "Objective 接口：DraftOutput + Supervision -> TrainingOutput。无可训练参数；loss_terms.numerator 保留梯度，denominator 可累加且 detach。首个闭环只启用一个主 recipe。",
+      "status": "docstring_only",
+      "sha256": "80cbf5f6f1fedb27a0e3493b2b13e323808a49da99165f548f8440ee507e029f"
+    },
+    {
+      "path": "litespec/core/composable/objectives/ce.py",
+      "role": "Hard CE，显式 label_source；首个闭环选择此目标。复用现有 CE 计算与 token-weighted 归约。",
+      "status": "docstring_only",
+      "sha256": "9d89ea324b10ef3b132ebc883823fc8f8fed3a20cc6e7f2200705db0353dfb28"
+    },
+    {
+      "path": "litespec/core/composable/objectives/soft_ce.py",
+      "role": "Soft CE，全 vocab detached target probabilities。与 forward KL 只差 target entropy；不把新公式冒充已有作者代码。",
+      "status": "docstring_only",
+      "sha256": "db9bfccc5af3e9eff30f58e0c70428aa5c43ebc75ab721c7ca8991b3ef077e78"
+    },
+    {
+      "path": "litespec/core/composable/objectives/kl.py",
+      "role": "Forward KL(target || draft)，复用现有 weighted_kl；记录位置权重及全 vocab alignment。",
+      "status": "docstring_only",
+      "sha256": "9a4ca1fc1d13fee9b9ac1e9a84cbbc5cc8f8de67118f26e6959521113addf281"
+    },
+    {
+      "path": "litespec/core/composable/objectives/tv.py",
+      "role": "标准 TV = 0.5 * L1。旧算法的 L1 路径保持原尺度；新 tv 名称使用标准定义。",
+      "status": "docstring_only",
+      "sha256": "5de7bd3d160d0fc30f7a332d6a0d8889ced8d9bd6cbbb6024bfd5fd883841227"
+    },
+    {
+      "path": "litespec/core/composable/objectives/nla.py",
+      "role": "固定 Speculators NLA+wrapper recipe：原 softmax dtype、overlap epsilon、per-sample denominator 与 batch averaging，见 refrence/objectives。",
+      "status": "docstring_only",
+      "sha256": "725f4519049aec1d35a07fa2207fb1587b4407a2bbea4ee9f8785d0f9a6e206e"
+    },
+    {
+      "path": "litespec/core/composable/objectives/dpace.py",
+      "role": "固定官方 D-PACE 分支。sum over all samples/anchors/predictions 的 numerator，runner denominator=原始 batch_size；禁止 double normalization。",
+      "status": "docstring_only",
+      "sha256": "3d7774f0643bbdd5cd6089d4a36208072e5af27d99add251af87fe85c07d42b0"
+    },
+    {
+      "path": "litespec/core/composable/objectives/bv.py",
+      "role": "原文主实验 vocabulary-integrated annealed block-log recipe；保留数值 profile 与 prefix gradient；作者源码缺失状态显式保存；BV+selector 配置报错。",
+      "status": "docstring_only",
+      "sha256": "cd06d19ba074fc3db9255fa83ad49e791b91ed7f99a3af790a3699c43be6cf29"
+    },
+    {
+      "path": "litespec/core/composable/objectives/ce_l1.py",
+      "role": "仅预留 legacy composite 占位；第一条闭环不注册额外混合目标。不同分母项不能直接相加再套一个 token denominator。",
+      "status": "docstring_only",
+      "sha256": "4c77f405ddf16604b0ac922aad615627df9acbe0d3a47eaee20a9460259b8422"
+    },
+    {
+      "path": "litespec/training/recipes/composable.py",
+      "role": "ComposableTrainingAdapter：框架适配、输入/监督准备、wrapper 构造和元数据；调用既有 runner，不放模型数学或 loss 公式。当前不改 get_training_adapter 白名单。",
+      "status": "docstring_only",
+      "sha256": "8ee7c962b8e13f807dd58d85298de4196011002c30490e7c1a2b099587f8e6b2"
+    },
+    {
+      "path": "scripts/composable/train.py",
+      "role": "未来新训练入口；后续调用现有 run_training。当前无导入、无 CLI、无训练副作用。",
+      "status": "docstring_only",
+      "sha256": "98e36a9efdb71b567b96988d88ac094bc03fb5fd33862b6c5cdcb6f93828b58f"
+    },
+    {
+      "path": "scripts/config/launch_composable.py",
+      "role": "未来复用公共 launcher；通过 --draft-config 指向 JSON 配方。嵌套配方不直接交给现有 arguments_to_cli。当前没有进程启动逻辑。",
+      "status": "docstring_only",
+      "sha256": "fbd613c9f596ef25e1da74fb2f25b626f7cdeaaa72ca16f8c870279f325b5d77"
+    },
+    {
+      "path": "tests/test_composable_contracts.py",
+      "role": "未来检查形状、位置、mask、prediction mode、DraftState 生命周期。",
+      "status": "docstring_only",
+      "sha256": "ea64cba7bee99c3e65eda1aad5b017ec81c11fccdeed57af6aa66792878a705a"
+    },
+    {
+      "path": "tests/test_composable_reference_parity.py",
+      "role": "未来按相同输入/权重对照源前向、loss、梯度、一步更新。当前未写任何通过型测试。",
+      "status": "docstring_only",
+      "sha256": "cec0092fc0b0d1809021872dccb226c63a6cd7e8a3ebb5089313fb74bd730d46"
+    },
+    {
+      "path": "tests/test_composable_framework_reuse.py",
+      "role": "未来验证 anchor eligibility+既有 sampler、gather、padding与逻辑N/A不被物理布局改变。",
+      "status": "docstring_only",
+      "sha256": "e48d680961dafe117d3801e41ec066adbe43b35b021e63d53cd460d288bf3237"
+    },
+    {
+      "path": "tests/test_composable_reductions.py",
+      "role": "未来验证 single native recipe 的 RatioTerms、DDP/accumulation、不等batch与D-PACE原始N。",
+      "status": "docstring_only",
+      "sha256": "46922ce8c0b7a6609b203675d7cb7638e7237fc59499784325ec53adee424f44"
+    },
+    {
+      "path": "tests/test_composable_access.py",
+      "role": "未来验证 full/sliding窗口、block双向、文档隔离、cache回滚与绝对位置。",
+      "status": "docstring_only",
+      "sha256": "7d8a39a5ec75c74c838d4ed0ae81ba41e7d73629a7cae4795243ea4d6669f0ce"
+    },
+    {
+      "path": "tests/test_composable_checkpoint_export.py",
+      "role": "未来验证 draft_model 前缀、参数归属、包导出、无训练依赖的AutoConfig/AutoModel冷重载。",
+      "status": "docstring_only",
+      "sha256": "9d62ae1dfe8c3c65598f2072455827dec0bfb295e613d6281e6a69fef270753e"
+    },
+    {
+      "path": "tests/test_composable_registry.py",
+      "role": "未来验证显式组件注册、旧算法路径不变、unsupported组合拒绝。",
+      "status": "docstring_only",
+      "sha256": "a3e69f156587310bd857f4a95a28d23012a4b8da07159227303da26dac8ba82f"
+    },
+    {
+      "path": "scripts/composable/__init__.py",
+      "role": "parent package",
+      "status": "docstring_only",
+      "sha256": "29cfef4b5d3d9265c5ec8761ab8553beb4737b0016bb876faf64b2109b2054eb"
+    },
+    {
+      "path": "configs/composable_draft.json",
+      "role": "model recipe design",
+      "status": "design_only",
+      "sha256": "1c4a9ee6558c863cda5bfd60cd3a9898b9f9bc60556f04e5f94fe1afa77da811"
+    },
+    {
+      "path": "scripts/config/composable.yaml",
+      "role": "runtime design",
+      "status": "design_only",
+      "sha256": "a99803517c380f9baaf4d7cb0e0a8b31e3554c92948773920fcf4a3c0d1c5a9b"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/attention/gated_deltanet.py",
+      "role": "Qwen3.5 GatedDeltaNet 占位，未来放入 backbone 的序列混合子层；暂不注册。\n接收 draft_hidden_states；上下文注入方式仍须显式设计，输出维度恢复 hidden_size。\n保留官方 in_proj_qkv / in_proj_z / in_proj_b / in_proj_a 的独立参数与 Q/K/V 顺序。\nQKV 内部 causal depthwise conv、QK L2 norm、beta/g、gated RMSNorm 和 out_proj 是本组件数学；\n不能替换为 operators/dflash2_conv，也不能当作 MHA/MLA 的 KV representation 或 access policy。\n原生是因果递推，不能直接套用当前并行 block 的任意二维访问关系；多 anchor 隔离待设计。\n实现前须核对 chunk/recurrent 前后向及 FLA 路径，当前无类、函数、导入或工厂。",
+      "status": "docstring_only",
+      "sha256": "c841785ea649e98c5a61d734df8c49667dbf1dea7f8ea731c6e000824f11c755"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/qwen35_hybrid.py",
+      "role": "Qwen3.5 hybrid backbone 文档占位；保持四个顶层模块，不注册新组件。\n未来按 layer_types 编排 linear_attention / full_attention，3:1 只是官方默认模式。\nfull_attention 使用官方 gated attention；不能默认复用现有 MHA 就等价。\n保留 pre-norm -> mixer -> residual -> post-norm -> FFN -> residual。\n纯 GatedDeltaNet 子层和整套 Qwen3.5 hybrid 是不同可选范围；层数和 hidden_size 由 draft 配方决定。\ncontext/proposal/objective 仍由原有边界负责；兼容性未证明前不能宣称任意 Lego 组合可用。",
+      "status": "docstring_only",
+      "sha256": "319bc07592e2582426868d1f96850eee6e8fc4314ca9fe33117325bc7fba943f"
+    },
+    {
+      "path": "litespec/modeling/draft/composable/backbone/gated_delta_state.py",
+      "role": "GatedDeltaNet 状态契约文档占位；未来作为 DraftState.backbone_state 子状态。\n每层独立保存 conv_states [N, 2*Hk*Dk+Hv*Dv, Kconv] 和 recurrent_states [N,Hv,Dk,Dv]；\n多 anchor 的 N 展开须明确且状态隔离，不能把不同 anchor 当作同一序列直接串联。\n混合 full-attention 层另存普通 KV；state orientation、dtype、已确认位置需显式记录。\n投机拒绝时须同时恢复卷积和递推状态；普通 KV crop 不适用，待选快照/重放等策略。\n固定 v5.3.0 参考在 cached seq_len>1 时会走 initial_state=None 的 chunk 分支；\n不能据此宣称已经支持从已有 state 续算整个 draft block。本文件不实现缓存或回滚。",
+      "status": "docstring_only",
+      "sha256": "80caafce7e473aac47139b8e7f1e3982ba263b700627a70f55dd550a313b40b4"
+    }
+  ],
+  "remote_workspace": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp"
+}

@@ -1,7 +1,10 @@
 """Explicit axes: N samples, A anchors, Q=1+B query slots, S context."""
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from .backbone.gated_delta_state import GDNBackboneState
 
 import torch
 
@@ -18,8 +21,11 @@ class LayerState:
 @dataclass
 class DraftState:
     layers: dict[int, LayerState] = field(default_factory=dict)
+    backbone_state: Optional["GDNBackboneState"] = None
 
     def rollback(self, next_position: int | torch.Tensor):
+        if self.backbone_state is not None:
+            self.backbone_state.validate_rollback(next_position)
         for index, draft_state in list(self.layers.items()):
             limits = torch.as_tensor(next_position, device=draft_state.positions.device)
             if limits.ndim == 1:

@@ -1,0 +1,343 @@
+{
+  "state": "passed",
+  "checkpoint_20": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017/epoch_0_step_20",
+  "checkpoint_22": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017_1/epoch_0_step_22",
+  "scheduler_total_steps": 59724,
+  "scheduler_20": {
+    "adamw": {
+      "warmup_epochs": 2388,
+      "finished": false,
+      "base_lrs": [
+        0.0006
+      ],
+      "last_epoch": 20,
+      "_step_count": 21,
+      "_is_initial": false,
+      "_get_lr_called_within_step": false,
+      "_last_lr": [
+        5.2763819095477384e-06
+      ],
+      "after_scheduler_type": "CosineAnnealingLR",
+      "after_scheduler_dict": {
+        "T_max": 57336,
+        "eta_min": 0.0,
+        "base_lrs": [
+          0.0006
+        ],
+        "last_epoch": 0,
+        "_step_count": 1,
+        "_is_initial": false,
+        "_get_lr_called_within_step": false,
+        "_last_lr": [
+          0.0006
+        ]
+      }
+    },
+    "muon": {
+      "warmup_epochs": 2388,
+      "finished": false,
+      "base_lrs": [
+        0.02
+      ],
+      "last_epoch": 20,
+      "_step_count": 21,
+      "_is_initial": false,
+      "_get_lr_called_within_step": false,
+      "_last_lr": [
+        0.00017587939698492463
+      ],
+      "after_scheduler_type": "CosineAnnealingLR",
+      "after_scheduler_dict": {
+        "T_max": 57336,
+        "eta_min": 0.0,
+        "base_lrs": [
+          0.02
+        ],
+        "last_epoch": 0,
+        "_step_count": 1,
+        "_is_initial": false,
+        "_get_lr_called_within_step": false,
+        "_last_lr": [
+          0.02
+        ]
+      }
+    }
+  },
+  "scheduler_22": {
+    "adamw": {
+      "warmup_epochs": 2388,
+      "finished": false,
+      "base_lrs": [
+        0.0006
+      ],
+      "last_epoch": 22,
+      "_step_count": 23,
+      "_is_initial": false,
+      "_get_lr_called_within_step": false,
+      "_last_lr": [
+        5.7788944723618086e-06
+      ],
+      "after_scheduler_type": "CosineAnnealingLR",
+      "after_scheduler_dict": {
+        "T_max": 57336,
+        "eta_min": 0.0,
+        "base_lrs": [
+          0.0006
+        ],
+        "last_epoch": 0,
+        "_step_count": 1,
+        "_is_initial": false,
+        "_get_lr_called_within_step": false,
+        "_last_lr": [
+          0.0006
+        ]
+      }
+    },
+    "muon": {
+      "warmup_epochs": 2388,
+      "finished": false,
+      "base_lrs": [
+        0.02
+      ],
+      "last_epoch": 22,
+      "_step_count": 23,
+      "_is_initial": false,
+      "_get_lr_called_within_step": false,
+      "_last_lr": [
+        0.00019262981574539364
+      ],
+      "after_scheduler_type": "CosineAnnealingLR",
+      "after_scheduler_dict": {
+        "T_max": 57336,
+        "eta_min": 0.0,
+        "base_lrs": [
+          0.02
+        ],
+        "last_epoch": 0,
+        "_step_count": 1,
+        "_is_initial": false,
+        "_get_lr_called_within_step": false,
+        "_last_lr": [
+          0.02
+        ]
+      }
+    }
+  },
+  "optimizer_shards": [
+    {
+      "rank": 0,
+      "all_optimizer_tensors_finite": true,
+      "fp32_master_update_l1": 101.54467479139566
+    },
+    {
+      "rank": 1,
+      "all_optimizer_tensors_finite": true,
+      "fp32_master_update_l1": 185.14557391405106
+    },
+    {
+      "rank": 2,
+      "all_optimizer_tensors_finite": true,
+      "fp32_master_update_l1": 270.54931984096766
+    },
+    {
+      "rank": 3,
+      "all_optimizer_tensors_finite": true,
+      "fp32_master_update_l1": 321.6568211875856
+    },
+    {
+      "rank": 4,
+      "all_optimizer_tensors_finite": true,
+      "fp32_master_update_l1": 268.50260677188635
+    },
+    {
+      "rank": 5,
+      "all_optimizer_tensors_finite": true,
+      "fp32_master_update_l1": 266.87882369570434
+    },
+    {
+      "rank": 6,
+      "all_optimizer_tensors_finite": true,
+      "fp32_master_update_l1": 274.2214504693534
+    },
+    {
+      "rank": 7,
+      "all_optimizer_tensors_finite": true,
+      "fp32_master_update_l1": 0.0658552594527464
+    }
+  ],
+  "position_embedding_fp32_master_update_l1_during_resume": {
+    "backbone.layers.0.position_embedding.weight": 0.1687149703502655,
+    "backbone.layers.1.position_embedding.weight": 0.1874784380197525,
+    "backbone.layers.2.position_embedding.weight": 0.19400452077388763,
+    "backbone.layers.3.position_embedding.weight": 0.19658179581165314,
+    "backbone.layers.4.position_embedding.weight": 0.19817255437374115
+  },
+  "steps": [
+    {
+      "optimizer_step": 1,
+      "micro_step": 1,
+      "loss": 12.5089
+    },
+    {
+      "optimizer_step": 2,
+      "micro_step": 2,
+      "loss": 12.4945
+    },
+    {
+      "optimizer_step": 3,
+      "micro_step": 3,
+      "loss": 12.4754
+    },
+    {
+      "optimizer_step": 4,
+      "micro_step": 4,
+      "loss": 12.4869
+    },
+    {
+      "optimizer_step": 5,
+      "micro_step": 5,
+      "loss": 12.4739
+    },
+    {
+      "optimizer_step": 6,
+      "micro_step": 6,
+      "loss": 12.4958
+    },
+    {
+      "optimizer_step": 7,
+      "micro_step": 7,
+      "loss": 12.5138
+    },
+    {
+      "optimizer_step": 8,
+      "micro_step": 8,
+      "loss": 12.4988
+    },
+    {
+      "optimizer_step": 9,
+      "micro_step": 9,
+      "loss": 12.5104
+    },
+    {
+      "optimizer_step": 10,
+      "micro_step": 10,
+      "loss": 12.4495
+    },
+    {
+      "optimizer_step": 11,
+      "micro_step": 11,
+      "loss": 12.4531
+    },
+    {
+      "optimizer_step": 12,
+      "micro_step": 12,
+      "loss": 12.4435
+    },
+    {
+      "optimizer_step": 13,
+      "micro_step": 13,
+      "loss": 12.4644
+    },
+    {
+      "optimizer_step": 14,
+      "micro_step": 14,
+      "loss": 12.4106
+    },
+    {
+      "optimizer_step": 15,
+      "micro_step": 15,
+      "loss": 12.3866
+    },
+    {
+      "optimizer_step": 16,
+      "micro_step": 16,
+      "loss": 12.3288
+    },
+    {
+      "optimizer_step": 17,
+      "micro_step": 17,
+      "loss": 12.3397
+    },
+    {
+      "optimizer_step": 18,
+      "micro_step": 18,
+      "loss": 12.3017
+    },
+    {
+      "optimizer_step": 19,
+      "micro_step": 19,
+      "loss": 12.1925
+    },
+    {
+      "optimizer_step": 20,
+      "micro_step": 20,
+      "loss": 12.1624
+    },
+    {
+      "optimizer_step": 21,
+      "micro_step": 21,
+      "loss": 12.1647
+    },
+    {
+      "optimizer_step": 22,
+      "micro_step": 22,
+      "loss": 12.0231
+    }
+  ],
+  "resources": {
+    "state": "complete",
+    "first": {
+      "stage": "train_20",
+      "state": "complete",
+      "pid": 1303307,
+      "command": [
+        "bash",
+        "scripts/composable/run_training_composable.sh",
+        "scripts/config/composable_gdn.yaml"
+      ],
+      "started_at_utc": "2026-10-17T04:11:24.491949+00:00",
+      "elapsed_seconds": 234.95,
+      "peak_gpu_memory_used_mib": [
+        29863,
+        29843,
+        29757,
+        31285,
+        31373,
+        31343,
+        29989,
+        31043
+      ],
+      "returncode": 0
+    },
+    "resume": {
+      "stage": "resume_2",
+      "state": "complete",
+      "pid": 1322693,
+      "command": [
+        "bash",
+        "scripts/composable/run_training_composable.sh",
+        "scripts/config/composable_gdn.yaml",
+        "--resume-from",
+        "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017/epoch_0_step_20",
+        "--max-steps",
+        "22",
+        "--save-interval",
+        "22"
+      ],
+      "started_at_utc": "2026-10-17T04:15:19.444992+00:00",
+      "elapsed_seconds": 54.98,
+      "peak_gpu_memory_used_mib": [
+        30159,
+        30561,
+        30283,
+        30021,
+        30293,
+        30555,
+        29601,
+        30081
+      ],
+      "returncode": 0
+    },
+    "resume_checkpoint": "/data/wanghanzhen/projects/SpecDecoding/LiteSpec_exp/output/composable_gdn_smoke_20261017/epoch_0_step_20"
+  }
+}
