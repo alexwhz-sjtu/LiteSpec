@@ -134,7 +134,10 @@ See [docs/TRAINING.md](docs/TRAINING.md) for configuration details.
 With a Qwen3-8B target model, LiteSpec achieves higher iteration throughput
 than baseline in both online and offline training:
 
-![LiteSpec and SpecForge training accuracy comparison](assets/training_acc_comparison.svg)![Qwen3-8B target training throughput comparison](assets/training-throughput-comparison.svg)
+<p align="center">
+  <img src="assets/training_acc_comparison.svg" alt="LiteSpec and SpecForge training accuracy comparison" width="49%">
+  <img src="assets/training-throughput-comparison.svg" alt="Qwen3-8B target training throughput comparison" width="49%">
+</p>
 
 ## Benchmark
 
