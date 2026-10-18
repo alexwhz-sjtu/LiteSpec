@@ -131,8 +131,7 @@ See [docs/TRAINING.md](docs/TRAINING.md) for configuration details.
 
 ## Training Results
 
-With a Qwen3-8B target model, LiteSpec achieves higher iteration throughput
-than baseline in both online and offline training:
+With a Qwen3-8B target model, LiteSpec achieves higher iteration throughput than SpecForge baseline in both online and offline training. With on-policy sampling and the integration of Muon optimizer, LiteSpec also achieves better training accuracy than baseline:
 
 <p align="center">
   <img src="assets/training_acc_comparison.svg" alt="LiteSpec and SpecForge training accuracy comparison" width="49%">
@@ -160,7 +159,12 @@ sequential-head type is `rnn`.
   - Attention: MLA, DSA, KDA, ...
   - Modules: convolution, selector, sequential head, ...
 
+## Acknowledgements
 
+We thank **SpecForge** for providing an excellent framework for rapidly
+validating new ideas and for its foundational training implementation. We also
+thank **Hugging Face** for the open-source Transformers, Datasets, and Hub
+ecosystem that supports LiteSpec's model and data workflows.
 
 ## License
 
