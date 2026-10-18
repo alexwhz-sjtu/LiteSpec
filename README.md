@@ -161,11 +161,7 @@ sequential-head type is `rnn`.
 
 ## Acknowledgements
 
-We thank [**SpecForge**](https://github.com/sgl-project/SpecForge) for providing
-an excellent framework for rapidly validating new ideas and for its foundational
-training implementation. We also thank
-[**Hugging Face Transformers**](https://github.com/huggingface/transformers) for
-the open-source model ecosystem that supports LiteSpec's model workflows.
+We thank [**SpecForge**](https://github.com/sgl-project/SpecForge) for providing an excellent framework for rapidly validating new ideas and for its foundational training implementation. We also thank [**Hugging Face Transformers**](https://github.com/huggingface/transformers) for the open-source model ecosystem that supports LiteSpec's model workflows.
 
 ## License
 
