@@ -1,4 +1,6 @@
-![LiteSpec logo](assets/logo.svg)
+<p align="center">
+  <img src="assets/logo.svg" alt="LiteSpec logo" width="80%">
+</p>
 
 # LiteSpec
 
