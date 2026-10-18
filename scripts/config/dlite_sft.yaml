@@ -1,10 +1,10 @@
 mode: sft
 
 launcher:
-  target_model: /data/wanghanzhen/models/Qwen3-4B
-  # Online mode. Comment this and enable train_hidden_states for offline mode.
-  # train_data: /path/to/train.jsonl
-  train_hidden_states: /data/wanghanzhen/projects/SpecDecoding/LiteSpec/cache/data/regen_full/wildchat_chinese_qwen3_4b
+  target_model: Qwen/Qwen3-4B
+  # Offline mode. Set this to your hidden-state cache; for online mode, disable it and enable train_data.
+  # train_data: ./datasets/train.jsonl
+  train_hidden_states: ./cache/data/regen_full_cache
   output_dir: ./outputs/dlite_sft_qwen3_4b
   nnodes: 1
   node_rank: 0
@@ -30,7 +30,8 @@ arguments:
   block_size: 8
   num_draft_layers: 5
   chs_num_layers: 12
-  target_layer_ids: 0,8,16,24,31
+  # target_layer_ids overwrites the automatic layer selection.
+  # target_layer_ids: 0,1,3,7,11,15,19,23,27,29,30,31
   sequential_head: rnn
   sequential_rank: 320
   num_anchors: 512
@@ -63,7 +64,7 @@ arguments:
   report_to: wandb
   wandb_project: spec-decoding
   wandb_name: dlite_sft_qwen3_4b
-  # D-Train disaggregate settings
+  # D-T disaggregate settings
   # false: every rank runs target + draft; true: split target and draft ranks.
   disaggregate: false
   target_ranks_per_node: 4

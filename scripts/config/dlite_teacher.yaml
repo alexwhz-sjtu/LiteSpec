@@ -30,7 +30,7 @@ arguments:
   num_draft_layers: 5
   swa_window_size: 512
   chs_num_layers: 12
-  target_layer_ids: 0,1,3,7,11,15,19,23,27,29,30,31
+  # target_layer_ids: 0,1,3,7,11,15,19,23,27,29,30,31
   sequential_head: rnn
   sequential_rank: 512
   num_anchors: 512
@@ -63,7 +63,7 @@ arguments:
   report_to: wandb
   wandb_project: dlite-training
   wandb_name: dlite_teacher_qwen3_4b
-  # D-Train disaggregate settings
+  # D-T disaggregate settings
   # false: every rank runs target + draft; true: split target and draft ranks.
   disaggregate: false
   target_ranks_per_node: 4

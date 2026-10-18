@@ -60,7 +60,7 @@ arguments:
   report_to: wandb
   wandb_project: dlite-training
   wandb_name: dlite_two_stage_qwen3_4b
-  # D-Train disaggregate settings
+  # D-T disaggregate settings
   # false: every rank runs target + draft; true: split target and draft ranks.
   disaggregate: false
   target_ranks_per_node: 4

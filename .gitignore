@@ -205,15 +205,8 @@ wandb/
 log.txt
 
 # Local scratch notebook (repo: scripts/train.ipynb)
-scripts/train.ipynb
-evaluation/run_cmd.ipynb
-wandb_sync_daemon.py
 
 log/
-/log_1.6M
-/log_2.3M
-/log_aug
-/benchmark_results
 training_runs/
 
 # Local datasets and generated training caches
@@ -241,8 +234,9 @@ credentials*.json
 slurm-*.out
 
 /scripts/train_self.md
+/scripts/train.md
 
-# Local project notes
-/Flow.md
-/Archetecture.md
-whz_mtp_logs/
+inductor-cache/
+triton-cache/
+*.nsys-rep
+*.ncu-rep

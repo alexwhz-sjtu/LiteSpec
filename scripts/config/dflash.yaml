@@ -55,7 +55,7 @@ arguments:
   report_to: wandb
   wandb_project: spec-decoding
   wandb_name: dflash_lite_spec
-  # D-Train disaggregate settings
+  # D-T disaggregate settings
   # false: every rank runs target + draft; true: split target and draft ranks.
   disaggregate: false
   target_ranks_per_node: 4

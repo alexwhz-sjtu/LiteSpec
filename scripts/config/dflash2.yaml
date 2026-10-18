@@ -1,10 +1,10 @@
 algorithm: dflash2
 
 launcher:
-  target_model: /data/wanghanzhen/models/Qwen3-4B
-  # Online mode. Comment this and enable train_hidden_states for offline mode.
-  # train_data: /data/wanghanzhen/projects/SpecDecoding/LiteSpec/cache/data/regen_token_only/wildchat_chinese_turns_le2_qwen3_4b_temp0.7_topk15_max4096.jsonl
-  train_hidden_states: /data/wanghanzhen/projects/SpecDecoding/LiteSpec/cache/data/regen_full/wildchat_chinese_qwen3_4b
+  target_model: Qwen/Qwen3-4B
+  # Offline mode. Set this to your hidden-state cache; for online mode, disable it and enable train_data.
+  # train_data: ./datasets/train.jsonl
+  train_hidden_states: ./cache/data/regen_full_cache
   output_dir: ./outputs/dflash2_qwen3_4b
   nnodes: 1
   node_rank: 0
@@ -61,7 +61,7 @@ arguments:
   report_to: wandb
   wandb_project: spec-decoding
   wandb_name: dflash2_lite_spec_3
-  # D-Train disaggregate settings
+  # D-T disaggregate settings
   # false: every rank runs target + draft; true: split target and draft ranks.
   disaggregate: false
   target_ranks_per_node: 4

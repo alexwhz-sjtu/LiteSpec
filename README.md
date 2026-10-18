@@ -20,7 +20,6 @@ repository is the smaller inference-only release.
 ```bash
 uv sync --frozen --extra cu128  # Use --extra cu130 for CUDA 13.0
 source .venv/bin/activate
-python -m pytest -q tests
 ```
 
 
@@ -32,7 +31,6 @@ The supported environment is Linux with:
 - CPython 3.11 (the repository pins it in `.python-version`);
 - an NVIDIA GPU with BF16 support and a driver compatible with the selected CUDA runtime (12.8 or 13.0);
 - a CUDA 12.x or 13.x toolkit matching the selected PyTorch CUDA major version when extensions must be built from source;
-- a C/C++ compiler and Git;
 - [uv](https://docs.astral.sh/uv/) 0.11 or newer.
 
 PyTorch 2.9.1 supports both CUDA 12.8 (`cu128`) and CUDA 13.0 (`cu130`).
@@ -57,14 +55,9 @@ uv sync --frozen --extra cu128
 # Or, for CUDA 13.0:
 # uv sync --frozen --extra cu130
 source .venv/bin/activate
-python -m pytest -q tests
 ```
 
-Select exactly one CUDA extra. For CUDA 13.0, set `CUDA_HOME` to your
-CUDA 13.0 toolkit (for example `/usr/local/cuda-13.0`) and add its `bin`
-directory to `PATH` before syncing. The CUDA extras are mutually exclusive.
-When using `uv run`, pass the same extra, such as `uv run --extra cu130 ...`,
-to preserve the selected build.
+Select exactly one CUDA extra.
 
 `uv` builds `causal-conv1d` against the lockfile's exact PyTorch ABI, which is
 required by Qwen3.5's hybrid linear-attention layers. Activate `.venv` before
@@ -134,6 +127,13 @@ bash scripts/dlite/run_training_dlite_teacher.sh --disaggregate
 
 See [docs/TRAINING.md](docs/TRAINING.md) for configuration details.
 
+## Training Results
+
+With a Qwen3-8B target model, LiteSpec achieves higher iteration throughput
+than baseline in both online and offline training:
+
+![LiteSpec and SpecForge training accuracy comparison](assets/training_acc_comparison.svg)![Qwen3-8B target training throughput comparison](assets/training-throughput-comparison.svg)
+
 ## Benchmark
 
 ```bash
@@ -145,7 +145,7 @@ bash evaluation/run_benchmark_dlite.sh
 
 Checkpoint model settings live under `dlite_config`. The public architecture is
 `DLiteDraftModel`; the only supported architecture is `dlite_v1` and the only
-sequential-head type is `rnn`. `dlite_v2` checkpoints are rejected explicitly.
+sequential-head type is `rnn`. 
 
 ## Roadmap
 

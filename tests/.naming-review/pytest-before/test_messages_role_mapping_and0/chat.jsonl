@@ -1,1 +1,0 @@
-{"payload": {"dialog": [{"from": "system", "value": "Be useful"}, {"from": "human", "value": "One"}, {"from": "gpt", "value": "Old answer"}, {"from": "tool", "value": "Old tool output"}, {"from": "human", "value": "Two"}]}, "origin": "chat-source"}
