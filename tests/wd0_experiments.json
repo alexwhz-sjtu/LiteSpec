@@ -1,0 +1,52 @@
+{
+  "group": "realsemi-qwen3-4b-wd0-20261020-v1",
+  "project": "spec-decoding",
+  "data_path": "/data/temp/artifacts/training_data/open_perfectblend_80k_qwen3_4b.jsonl",
+  "target_source": {
+    "model_id": "Qwen/Qwen3-4B",
+    "snapshot_revision": "Revision:master,CreatedAt:1753546370",
+    "file_sha256": {
+      "model-00001-of-00003.safetensors": "328a91d3122359d5547f9d79521205bc0a46e1f79a792dfe650e99fc2d651223",
+      "model-00002-of-00003.safetensors": "6cd087b316306a68c562436b5492edbcf6e16c6dba3a1308279caa5a58e21ca5",
+      "model-00003-of-00003.safetensors": "e4bf436957184f4eeb86a80e9db394503f1f56446b2e6b7edeac5b81470f4ca1"
+    }
+  },
+  "data_sha256": "b8fb09cec39962888b08d457836bcb2bfff0bd988df51ce4910a065e24edc168",
+  "created_at": "2026-10-20T14:58:10.969840+00:00",
+  "weight_decay": 0.0,
+  "entity": "alex-wang_sjtu-sjtu",
+  "experiments": [
+    {
+      "name": "dflash-5l-wd0",
+      "algorithm": "dflash",
+      "config": "/data/temp/LiteSpec_semi_ar/scripts/config/dflash-5l-wd0.yaml",
+      "config_sha256": "2110fec71b5c20f7aef3fbbfc57a4564f9f2de4ca96c6610514d2ef4abec97d4",
+      "output_dir": "/data/temp/LiteSpec_semi_ar/outputs/realsemi-qwen3-4b-wd0-20261020-v1/dflash-5l-wd0",
+      "wandb_run_id": "d8b58021"
+    },
+    {
+      "name": "dflash2-5l-wd0",
+      "algorithm": "dflash2",
+      "config": "/data/temp/LiteSpec_semi_ar/scripts/config/dflash2-5l-wd0.yaml",
+      "config_sha256": "8acc1526a1c7068815d3e53724ea8c37cb1ed1a981b536ecbb33fdde7962d98e",
+      "output_dir": "/data/temp/LiteSpec_semi_ar/outputs/realsemi-qwen3-4b-wd0-20261020-v1/dflash2-5l-wd0",
+      "wandb_run_id": "5423db81"
+    },
+    {
+      "name": "realsemi-4p1s-full-wd0",
+      "algorithm": "realsemi",
+      "config": "/data/temp/LiteSpec_semi_ar/scripts/config/realsemi-4p1s-full-wd0.yaml",
+      "config_sha256": "af871de8ede47282e46dbe75c586bd049e4694654a6eaf970e3bdd581cfbdd95",
+      "output_dir": "/data/temp/LiteSpec_semi_ar/outputs/realsemi-qwen3-4b-wd0-20261020-v1/realsemi-4p1s-full-wd0",
+      "wandb_run_id": "b363b5ad"
+    },
+    {
+      "name": "realsemi-4p1s-last-wd0",
+      "algorithm": "realsemi",
+      "config": "/data/temp/LiteSpec_semi_ar/scripts/config/realsemi-4p1s-last-wd0.yaml",
+      "config_sha256": "8e436e8f017d01ba60b1013aff8d2f919f36009b0ac9b40e61f07478d537a959",
+      "output_dir": "/data/temp/LiteSpec_semi_ar/outputs/realsemi-qwen3-4b-wd0-20261020-v1/realsemi-4p1s-last-wd0",
+      "wandb_run_id": "6680c2dd"
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "python": "3.11.17",
+  "torch": "2.9.1+cu128",
+  "cuda": "12.8",
+  "gpus": [
+    {
+      "index": 0,
+      "name": "NVIDIA H20-3e",
+      "capability": [
+        9,
+        0
+      ],
+      "bf16_matmul": "passed"
+    },
+    {
+      "index": 1,
+      "name": "NVIDIA H20-3e",
+      "capability": [
+        9,
+        0
+      ],
+      "bf16_matmul": "passed"
+    },
+    {
+      "index": 2,
+      "name": "NVIDIA H20-3e",
+      "capability": [
+        9,
+        0
+      ],
+      "bf16_matmul": "passed"
+    },
+    {
+      "index": 3,
+      "name": "NVIDIA H20-3e",
+      "capability": [
+        9,
+        0
+      ],
+      "bf16_matmul": "passed"
+    },
+    {
+      "index": 4,
+      "name": "NVIDIA H20-3e",
+      "capability": [
+        9,
+        0
+      ],
+      "bf16_matmul": "passed"
+    },
+    {
+      "index": 5,
+      "name": "NVIDIA H20-3e",
+      "capability": [
+        9,
+        0
+      ],
+      "bf16_matmul": "passed"
+    },
+    {
+      "index": 6,
+      "name": "NVIDIA H20-3e",
+      "capability": [
+        9,
+        0
+      ],
+      "bf16_matmul": "passed"
+    },
+    {
+      "index": 7,
+      "name": "NVIDIA H20-3e",
+      "capability": [
+        9,
+        0
+      ],
+      "bf16_matmul": "passed"
+    }
+  ],
+  "imports": {
+    "torchvision": "passed",
+    "torchaudio": "passed",
+    "transformers": "passed",
+    "sglang": "passed",
+    "sgl_kernel": "passed",
+    "flashinfer": "passed",
+    "fla": "passed",
+    "causal_conv1d": "passed",
+    "litespec.core.dlite": "passed",
+    "scripts.dlite.train_sft": "passed",
+    "scripts.dlite.train_teacher": "passed",
+    "scripts.dlite.train_two_stage": "passed"
+  },
+  "packages": {
+    "litespec": "0.2.0",
+    "torch": "2.9.1+cu128",
+    "torchvision": "0.24.1+cu128",
+    "torchaudio": "2.9.1+cu128",
+    "transformers": "4.57.1",
+    "sglang": "0.5.9",
+    "sgl-kernel": "0.3.21",
+    "causal-conv1d": "1.7.0",
+    "flash-linear-attention": "0.5.2"
+  },
+  "causal_conv1d_gpu": "forward_backward_passed"
+}

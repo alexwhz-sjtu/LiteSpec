@@ -1,0 +1,12 @@
+{
+  "url": "https://wandb.ai/alex-wang_sjtu-sjtu/spec-decoding/runs/d208b560",
+  "state": "running",
+  "step": 200,
+  "metrics": {
+    "train/walk_accepted_length": 1.1643646955490112,
+    "train/expected_accept_len": 1.1131373643875122,
+    "train/loss": 2.2571799755096436,
+    "detail/realsemi/tf/block_accepted_length": 0.16436463594436646,
+    "detail/realsemi/tf/overlap_chain_length": 0.1131374016404152
+  }
+}

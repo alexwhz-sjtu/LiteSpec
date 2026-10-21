@@ -19,7 +19,7 @@ from litespec.modeling.kv_cache import make_target_cache
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--algorithm", choices=("dflash", "dflash2", "dspark"), required=True)
+    parser.add_argument("--algorithm", choices=("dflash", "dflash2", "dspark", "realsemi"), required=True)
     parser.add_argument("--model-name-or-path", required=True)
     parser.add_argument("--draft-name-or-path", required=True)
     parser.add_argument("--dataset", required=True)

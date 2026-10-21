@@ -1,0 +1,22 @@
+{
+  "entity": "alex-wang_sjtu-sjtu",
+  "url": "https://wandb.ai/alex-wang_sjtu-sjtu/spec-decoding/runs/cbbee9ed",
+  "group": "realsemi-qwen3-4b-20261020-v1",
+  "state": "running",
+  "history_rows": 73,
+  "last_rows": [
+    {
+      "_step": 2400,
+      "train/loss": 3.4405581951141357
+    },
+    {
+      "_step": 2400,
+      "train/loss": 3.4405581951141357
+    },
+    {
+      "_step": 2450,
+      "train/loss": 3.7057788372039795
+    }
+  ],
+  "credential_fields_absent": true
+}

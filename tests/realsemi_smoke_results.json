@@ -1,0 +1,32 @@
+[
+  {
+    "name": "dflash2-5l-1gpu",
+    "exit_code": 0,
+    "log": "/data/temp/LiteSpec_semi_ar/tests/smoke-dflash2-5l-1gpu.log"
+  },
+  {
+    "name": "realsemi-4p1s-full-1gpu",
+    "exit_code": 0,
+    "log": "/data/temp/LiteSpec_semi_ar/tests/smoke-realsemi-4p1s-full-1gpu.log"
+  },
+  {
+    "name": "realsemi-4p1s-last-1gpu",
+    "exit_code": 0,
+    "log": "/data/temp/LiteSpec_semi_ar/tests/smoke-realsemi-4p1s-last-1gpu.log"
+  },
+  {
+    "name": "dflash2-5l-8gpu",
+    "exit_code": 0,
+    "log": "/data/temp/LiteSpec_semi_ar/tests/smoke-dflash2-5l-8gpu.log"
+  },
+  {
+    "name": "realsemi-4p1s-full-8gpu",
+    "exit_code": 0,
+    "log": "/data/temp/LiteSpec_semi_ar/tests/smoke-realsemi-4p1s-full-8gpu.log"
+  },
+  {
+    "name": "realsemi-4p1s-last-8gpu",
+    "exit_code": 0,
+    "log": "/data/temp/LiteSpec_semi_ar/tests/smoke-realsemi-4p1s-last-8gpu.log"
+  }
+]

@@ -23,7 +23,7 @@ from litespec.training.setup import (
     required_hidden_layer_ids,
 )
 
-DFLASH_FAMILY_ALGORITHMS = ("dflash", "dflash2", "dspark")
+DFLASH_FAMILY_ALGORITHMS = ("dflash", "dflash2", "dspark", "realsemi")
 
 
 class DFlashFamilyTrainingAdapter(TrainingAdapter):
@@ -193,10 +193,13 @@ def add_dflash_family_args(parser: argparse.ArgumentParser, algorithm: str) -> N
     if algorithm not in DFLASH_FAMILY_ALGORITHMS:
         raise ValueError(f"Unsupported DFlash-family algorithm: {algorithm}")
     add_common_args(parser)
-    defaults = {"dflash": 16, "dflash2": 16, "dspark": 7}
+    defaults = {"dflash": 16, "dflash2": 16, "dspark": 7, "realsemi": 8}
     parser.set_defaults(block_size=defaults[algorithm], num_draft_layers=5)
     model = parser.add_argument_group(f"{algorithm} architecture")
     model.add_argument("--attention-mode", choices=("gqa", "mha"), default="gqa")
+    if algorithm == "realsemi":
+        model.add_argument("--num-parallel-layers", type=int, default=4)
+        model.add_argument("--serial-context-mode", choices=("full", "last"), default="full")
     model.add_argument("--conv-kernel-size", type=int, default=2)
     model.add_argument("--conv-group-size", type=int, default=16)
     model.add_argument("--selector-rank", type=int, default=256)
@@ -268,6 +271,12 @@ def validate_dflash_family_args(parser: argparse.ArgumentParser, args, algorithm
                 parser.error("--conv-kernel-size must be in [1, block-size]")
             if args.conv_group_size < 1:
                 parser.error("--conv-group-size must be positive")
+    if algorithm == "realsemi":
+        if not 1 <= args.num_parallel_layers < args.num_draft_layers:
+            parser.error("RealSemi requires 1 <= num-parallel-layers < num-draft-layers")
+        import math
+        if not all(math.isfinite(x) and x >= 0 for x in (args.ce_loss_alpha, args.l1_loss_alpha)) or args.ce_loss_alpha + args.l1_loss_alpha <= 0:
+            parser.error("RealSemi CE/L1 weights must be finite, nonnegative, and have a positive sum")
     # Every family records expected_accept_len from the target distribution and
     # the algorithm's final proposal distribution.
     args.require_target_last_hidden = True
@@ -350,6 +359,13 @@ def build_dflash_family_config(args, algorithm: str, source_config=None):
                     "conv_group_size": int(args.conv_group_size),
                 }
             )
+    if algorithm == "realsemi":
+        method.update({
+            "num_parallel_layers": int(args.num_parallel_layers),
+            "serial_context_mode": args.serial_context_mode,
+            "ce_loss_alpha": float(args.ce_loss_alpha),
+            "l1_loss_alpha": float(args.l1_loss_alpha),
+        })
     setattr(config, f"{algorithm}_config", method)
     return config
 
@@ -370,6 +386,12 @@ def sync_args_from_draft(args, draft) -> None:
     args.num_draft_layers = int(draft.config.num_hidden_layers)
     args.target_layer_ids = ",".join(str(value) for value in draft.target_layer_ids)
     args.attention_mode = str(method.get("attention_mode", "gqa"))
+    if draft.method_config_key == "realsemi_config":
+        for field in ("num_parallel_layers", "serial_context_mode", "ce_loss_alpha", "l1_loss_alpha"):
+            requested = getattr(args, field)
+            if (args.resume_from or args.init_from) and requested != method[field]:
+                raise ValueError(f"RealSemi checkpoint mismatch for {field}")
+            setattr(args, field, method[field])
     draft.config._attn_implementation = args.attention_backend
 
 
@@ -426,6 +448,12 @@ def build_online_model(args, algorithm: str, draft, components, process_group=No
         objective_chunk_blocks=int(args.objective_chunk_blocks),
         process_group=process_group,
     )
+    if algorithm == "realsemi":
+        from litespec.core.realsemi import OnlineRealSemiModel
+        return OnlineRealSemiModel(
+            **common, ce_loss_alpha=float(args.ce_loss_alpha),
+            l1_loss_alpha=float(args.l1_loss_alpha),
+        )
     if algorithm == "dspark":
         return OnlineDSparkModel(
             **common,

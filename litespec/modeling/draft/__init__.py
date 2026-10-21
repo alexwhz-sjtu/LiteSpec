@@ -1,3 +1,4 @@
+from .realsemi import RealSemiDraftModel
 from .dflash import DFlashDraftModel
 from .dflash2 import DFlash2DraftModel
 from .dlite import (
@@ -18,6 +19,7 @@ __all__ = [
     "DLiteSequentialHead",
     "build_dlite_target_layer_ids",
     "gather_pivot_multilayer_inference",
+    "RealSemiDraftModel",
     "DFlashDraftModel",
     "DFlash2DraftModel",
     "DSparkDraftModel",

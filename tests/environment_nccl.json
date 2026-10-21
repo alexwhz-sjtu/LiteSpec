@@ -1,0 +1,5 @@
+{
+  "nccl": "passed",
+  "ranks": 8,
+  "sum": 28.0
+}

@@ -32,6 +32,7 @@ def method_config(config) -> dict:
     if not isinstance(value, dict):
         raise ValueError(f"{architecture} requires {key}")
     other_keys = {
+        "realsemi_config",
         "dflash_config",
         "dflash2_config",
         "dspark_config",

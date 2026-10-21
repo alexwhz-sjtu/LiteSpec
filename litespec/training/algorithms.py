@@ -14,12 +14,14 @@ if TYPE_CHECKING:
     from torch.distributed.fsdp import FullyShardedDataParallel
     from torch.utils.data import DataLoader
 
+    from litespec.core.realsemi import OnlineRealSemiModel
     from litespec.core.dflash import OnlineDFlashModel
     from litespec.core.dflash2 import OnlineDFlash2Model
     from litespec.core.dlite import OnlineDLiteModel
     from litespec.core.dspark import OnlineDSparkModel
     from litespec.distributed.groups import DisaggregatedTopology
     from litespec.distributed.transport import RouteFragment
+    from litespec.modeling.draft.realsemi import RealSemiDraftModel
     from litespec.modeling.draft.dflash import DFlashDraftModel
     from litespec.modeling.draft.dflash2 import DFlash2DraftModel
     from litespec.modeling.draft.dlite import DLiteDraftModel
@@ -77,11 +79,11 @@ class TrainingSession:
     phases: list[Phase]
     state: RunState = field(default_factory=RunState)
     draft: (
-        DFlashDraftModel | DFlash2DraftModel | DSparkDraftModel | DLiteDraftModel | None
+        DFlashDraftModel | DFlash2DraftModel | DSparkDraftModel | DLiteDraftModel | RealSemiDraftModel | None
     ) = None
     teacher: DLiteDraftModel | None = None
     draft_online: (
-        OnlineDFlashModel | OnlineDFlash2Model | OnlineDSparkModel | OnlineDLiteModel | None
+        OnlineDFlashModel | OnlineDFlash2Model | OnlineDSparkModel | OnlineDLiteModel | OnlineRealSemiModel | None
     ) = None
     teacher_online: OnlineDLiteModel | None = None
     fsdp_model: FullyShardedDataParallel | None = None
@@ -195,6 +197,6 @@ class TrainingAdapter:
 
 
 def get_training_adapter(algorithm):
-    if algorithm not in ("dflash", "dflash2", "dspark", "dlite"):
+    if algorithm not in ("dflash", "dflash2", "dspark", "dlite", "realsemi"):
         raise ValueError(f"Unknown training algorithm {algorithm!r}")
     return import_module(f"litespec.training.recipes.{algorithm}").ADAPTER

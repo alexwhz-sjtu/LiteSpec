@@ -1,0 +1,80 @@
+{
+  "url": "https://wandb.ai/alex-wang_sjtu-sjtu/spec-decoding/runs/d8b58021",
+  "state": "running",
+  "group": "realsemi-qwen3-4b-wd0-20261020-v1",
+  "step": 100,
+  "weight_decay": {
+    "weight_decay": 0,
+    "muon_weight_decay": 0,
+    "muon_adamw_weight_decay": 0
+  },
+  "metrics": {
+    "train/loss": 7.820926666259766,
+    "train/walk_accepted_length": 1.044452428817749,
+    "train/expected_accept_len": 1.0140289068222046
+  },
+  "summary_keys": [
+    "_runtime",
+    "_step",
+    "_timestamp",
+    "_wandb.runtime",
+    "detail/dflash/expected_accept_len",
+    "detail/dflash/grad_norm",
+    "detail/dflash/hard_label/block_accepted_length",
+    "detail/dflash/hard_label/block_count",
+    "detail/dflash/hard_label/gold_probability",
+    "detail/dflash/hard_label/supervised_prefix_length",
+    "detail/dflash/hard_label/token_accuracy",
+    "detail/dflash/hard_label/unary_gold_probability_chain_length",
+    "detail/dflash/hard_label/unary_greedy_accepted_length",
+    "detail/dflash/hard_label/unary_greedy_prefix_acceptance",
+    "detail/dflash/hard_label/unary_probability",
+    "detail/dflash/hard_label/unary_top16_mass",
+    "detail/dflash/hard_label/unary_top16_oracle_accepted_length",
+    "detail/dflash/hard_label/unary_top16_oracle_prefix_acceptance",
+    "detail/dflash/hard_label/unary_top16_recall",
+    "detail/dflash/hard_label/unary_top1_accuracy",
+    "detail/dflash/micro_step",
+    "detail/dflash/objective/ce",
+    "detail/dflash/objective/loss",
+    "detail/dflash/position_1/hard_label/unary_top16_recall",
+    "detail/dflash/position_2/hard_label/unary_top16_recall",
+    "detail/dflash/position_3/hard_label/unary_top16_recall",
+    "detail/dflash/position_4/hard_label/unary_top16_recall",
+    "detail/dflash/position_5/hard_label/unary_top16_recall",
+    "detail/dflash/position_6/hard_label/unary_top16_recall",
+    "detail/dflash/position_7/hard_label/unary_top16_recall",
+    "detail/dflash/teacher/unary_distribution_overlap",
+    "detail/dflash/teacher/unary_overlap_chain_length",
+    "detail/dflash/teacher/unary_top16_mass",
+    "detail/dflash/teacher/unary_top1_agreement",
+    "train/adamw_learning_rate",
+    "train/expected_accept_len",
+    "train/learning_rate",
+    "train/loss",
+    "train/muon_learning_rate",
+    "train/walk_accepted_length"
+  ],
+  "queue": [
+    {
+      "name": "dflash-5l-wd0",
+      "status": "running",
+      "wandb_run_id": "d8b58021"
+    },
+    {
+      "name": "dflash2-5l-wd0",
+      "status": "queued",
+      "wandb_run_id": "5423db81"
+    },
+    {
+      "name": "realsemi-4p1s-full-wd0",
+      "status": "queued",
+      "wandb_run_id": "b363b5ad"
+    },
+    {
+      "name": "realsemi-4p1s-last-wd0",
+      "status": "queued",
+      "wandb_run_id": "6680c2dd"
+    }
+  ]
+}

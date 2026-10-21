@@ -255,7 +255,8 @@ class WandbTracker(Tracker):
             init_kwargs = {
                 "project": args.wandb_project,
                 "name": _clip_wandb_identifier(args.wandb_name, "name"),
-                "config": vars(args),
+                "config": {name: value for name, value in vars(args).items()
+                           if not name.lower().endswith(("_key", "_token", "_password", "_secret"))},
             }
             if hasattr(args, "wandb_run_id") and args.wandb_run_id:
                 init_kwargs["id"] = _clip_wandb_identifier(args.wandb_run_id, "id")

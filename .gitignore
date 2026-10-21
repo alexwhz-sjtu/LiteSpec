@@ -240,3 +240,15 @@ inductor-cache/
 triton-cache/
 *.nsys-rep
 *.ncu-rep
+
+# Local experiment runtime state and generated checkpoint exports
+/tests/checkpoint_integration/
+/tests/smoke_outputs/
+/tests/realsemi_before_wd0_*/
+/tests/*_queue_status.json
+/tests/*_queue_before*.json
+/tests/*_before_metrics_restart*.json
+/tests/*_full_stopped*.json
+/tests/*.lock
+/tests/*.pid
+*.bundle

@@ -166,3 +166,38 @@ We thank [**SpecForge**](https://github.com/sgl-project/SpecForge) for providing
 ## License
 
 See [LICENSE](LICENSE).
+
+## RealSemi experimental drafter
+
+RealSemi is registered independently as `RealSemiDraftModel` / `realsemi`.
+It executes `num_parallel_layers` original DFlash layers once per block, then
+concatenates each position's feature with the previous token embedding and
+runs the remaining layers causally. Total depth is `num_draft_layers` (default
+5); the default split is 4 parallel layers and 1 serial layer.
+
+`serial_context_mode: full` exposes all verified target states before the
+anchor to serial layers; `last` physically retains only the immediately
+preceding target state during inference. Both retain every serial draft KV
+within the current block, and reset that draft cache at the next block. The
+parallel layers always retain the original DFlash context visibility.
+
+Training uses teacher forcing and supervises only the final serial outputs:
+`0.1 * CE + 0.9 * L1(target_probs, draft_probs)`. L1 follows the existing
+repository convention and is **twice standard TV**. Frozen target predictions
+at position `k-1` supervise draft token `k`; future target features are used
+only as labels. The target embedding and output projection remain frozen.
+
+```bash
+bash scripts/realsemi/run_training_realsemi.sh scripts/config/realsemi.yaml
+TARGET_MODEL=/path/to/Qwen3-4B DRAFT_NAME_OR_PATH=/path/to/realsemi/final \
+  bash evaluation/run_benchmark_realsemi.sh
+```
+
+The `dflash2-5l.yaml`, `realsemi-4p1s-full.yaml`, and
+`realsemi-4p1s-last.yaml` experiment configurations use the same common
+DFlash2 training settings. `tests/realsemi_queue.py` runs them sequentially,
+reports online to W&B, and stops if any job fails. Queue state is saved in
+`tests/realsemi_queue_status.json`; full and last use identical initial weights
+and sample order. Numerical/causal/cache/export tests live in
+`tests/test_realsemi.py`; production-dimension smoke checks use
+`tests/run_realsemi_smokes.py`.

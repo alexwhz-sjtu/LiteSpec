@@ -2,7 +2,7 @@
 set -euo pipefail
 ALGORITHM="${1:?usage: run_benchmark_dflash_family.sh ALGORITHM}"
 shift
-case "${ALGORITHM}" in dflash|dflash2|dspark) ;; *) exit 2 ;; esac
+case "${ALGORITHM}" in dflash|dflash2|dspark|realsemi) ;; *) exit 2 ;; esac
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "${SCRIPT_DIR}")"
 cd "${PROJECT_DIR}"

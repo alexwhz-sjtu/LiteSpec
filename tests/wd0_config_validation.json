@@ -1,0 +1,34 @@
+[
+  {
+    "name": "dflash-5l-wd0",
+    "weight_decay": 0.0,
+    "muon_weight_decay": 0.0,
+    "muon_adamw_weight_decay": 0.0,
+    "resume_from": null,
+    "init_from": null
+  },
+  {
+    "name": "dflash2-5l-wd0",
+    "weight_decay": 0.0,
+    "muon_weight_decay": 0.0,
+    "muon_adamw_weight_decay": 0.0,
+    "resume_from": null,
+    "init_from": null
+  },
+  {
+    "name": "realsemi-4p1s-full-wd0",
+    "weight_decay": 0.0,
+    "muon_weight_decay": 0.0,
+    "muon_adamw_weight_decay": 0.0,
+    "resume_from": null,
+    "init_from": null
+  },
+  {
+    "name": "realsemi-4p1s-last-wd0",
+    "weight_decay": 0.0,
+    "muon_weight_decay": 0.0,
+    "muon_adamw_weight_decay": 0.0,
+    "resume_from": null,
+    "init_from": null
+  }
+]

@@ -24,7 +24,7 @@ except ModuleNotFoundError:  # Direct execution adds scripts/config to sys.path.
     )
 
 
-ALGORITHMS = {"dflash", "dflash2", "dspark"}
+ALGORITHMS = {"dflash", "dflash2", "dspark", "realsemi"}
 
 
 def load_config(path: Path, algorithm: str) -> tuple[dict[str, str], list[str]]:
